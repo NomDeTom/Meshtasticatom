@@ -122,11 +122,11 @@ class MeshNode:
         self.channelUtilizationIndex = 0  # which "bucket" is current
         self.prevTxAirUtilization = 0.0   # how much total tx air-time had been used at last sample
 
-        env.process(self.track_channel_utilization(env))
+        self.env.process(self.track_channel_utilization())
         if not self.is_repeater:  # repeaters don't generate messages themselves
-            env.process(self.generate_message())
-        env.process(self.receive(self.bc_pipe.get_output_conn()))
-        self.transmitter = simpy.Resource(env, 1)
+            self.env.process(self.generate_message())
+        self.env.process(self.receive(self.bc_pipe.get_output_conn()))
+        self.transmitter = simpy.Resource(self.env, 1)
 
         # start mobility if enabled
         if self.conf.MOVEMENT_ENABLED and self.moveRng.random() <= self.conf.APPROX_RATIO_NODES_MOVING:
@@ -142,7 +142,7 @@ class MeshNode:
             ]
             self.movementStepSize = self.moveRng.choice(possibleSpeeds)
 
-            env.process(self.move_node(env))
+            self.env.process(self.move_node())
 
     @property
     def is_router(self):
@@ -156,14 +156,14 @@ class MeshNode:
     def is_client_mute(self):
         return self.role == MESHTASTIC_ROLE.CLIENT_MUTE
 
-    def track_channel_utilization(self, env):
+    def track_channel_utilization(self):
         """
         Periodically compute how many seconds of airtime this node consumed
         over the last 10-second block and store it in the ring buffer.
         """
         while True:
             # Wait 10 seconds of simulated time
-            yield env.timeout(self.conf.TEN_SECONDS_INTERVAL)
+            yield self.env.timeout(self.conf.TEN_SECONDS_INTERVAL)
 
             curTotalAirtime = self.txAirUtilization  # total so far, in *milliseconds*
             blockAirtimeMs = curTotalAirtime - self.prevTxAirUtilization
@@ -182,7 +182,7 @@ class MeshNode:
         # fraction = sum_ms / 60000, then multiply by 100 for percent
         return (sumMs / (self.conf.CHANNEL_UTILIZATION_PERIODS * self.conf.TEN_SECONDS_INTERVAL)) * 100.0
 
-    def move_node(self, env):
+    def move_node(self):
         while True:
 
             # Pick a random direction and distance
@@ -208,20 +208,20 @@ class MeshNode:
             if self.gpsEnabled:
                 distanceTraveled = self.position.euclidean_distance(self.lastBroadcastPosition)
                 logger.debug(f"{self.env.now:.3f} node {self.nodeid} checks last broadcast position distance: {distanceTraveled} from {self.lastBroadcastPosition} to {self.position}")
-                timeElapsed = env.now - self.lastBroadcastTime
+                timeElapsed = self.env.now - self.lastBroadcastTime
                 if distanceTraveled >= self.conf.SMART_POSITION_DISTANCE_THRESHOLD and timeElapsed >= self.conf.SMART_POSITION_DISTANCE_MIN_TIME:
                     currentUtil = self.channel_utilization_percent()
                     if currentUtil < 25.0:
                         self.send_packet(NODENUM_BROADCAST, "POSITION")
                         self.lastBroadcastPosition.update_xy(self.position.x, self.position.y)
-                        self.lastBroadcastTime = env.now
+                        self.lastBroadcastTime = self.env.now
                     else:
                         logger.debug(f"{self.env.now:.3f} node {self.nodeid} SKIPS POSITION broadcast (util={currentUtil:.1f}% > 25%)")
 
             # Wait until next move
             nextMove = self.get_next_time(self.conf.ONE_MIN_INTERVAL)
             if nextMove >= 0:
-                yield env.timeout(nextMove)
+                yield self.env.timeout(nextMove)
             else:
                 break
 
