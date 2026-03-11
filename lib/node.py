@@ -226,6 +226,8 @@ class MeshNode:
                 break
 
     def send_packet(self, destId, type=""):
+        """We have created a new message and wish to send it to the network
+        """
         # increment the shared counter
         self.messageSeq["val"] += 1
         messageSeq = self.messageSeq["val"]
