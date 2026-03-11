@@ -10,7 +10,7 @@ import numpy as np
 
 from lib.config import CONFIG
 from lib.discrete_event_sim import DiscreteEventSim
-from lib.gui import Graph, plot_schedule, gen_scenario, run_graph_updates
+from lib.gui import Graph, plot_schedule, gen_scenario
 
 conf = CONFIG
 random.seed(conf.SEED)
