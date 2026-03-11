@@ -171,7 +171,6 @@ class DiscreteEventSim:
                 self.env,
                 self.mutated_state.bc_pipe,
                 self.conf.PERIOD,
-                self.data_tracking.messages,
                 self.mutated_state.packetsAtN,
                 self.mutated_state.packets,
                 self.data_tracking.delays,
@@ -209,11 +208,22 @@ class DiscreteEventSim:
     def get_results(self) -> SimulationResults:
         # TODO: is it possible to add a check that the sim has finished running?
         # first-order stats/data collection
+
+        # collect messages from each node, put into single sorted list.
+        # This saves a parameter from MeshNode, but arguably adds complexity when
+        # before, each node just appended to the list and it was naturally sorted.
+        # May decide to undo this refactor later.
+        messages = []
+        node_stats = [n.get_stats() for n in self.nodes]
+        for stats in node_stats:
+            messages.extend(stats.messages)
+        messages.sort(key=lambda m: m.genTime)
+
         first_order_results = {
             "packets": self.mutated_state.packets,
             "packetsAtN": self.mutated_state.packetsAtN,
             "messageSeq": self.mutated_state.messageSeq,
-            "messages": self.data_tracking.messages,
+            "messages": messages,
             "delays": self.data_tracking.delays,
             "totalPairs": self.data_tracking.totalPairs,
             "symmetricLinks": self.data_tracking.symmetricLinks,

@@ -32,6 +32,31 @@ class MESHTASTIC_ROLE(Enum):
     ROUTER_LATE = 'ROUTER_LATE'
     CLIENT_BASE = 'CLIENT_BASE'
 
+class MeshNodeStats:
+    """Statistics, monitoring, and data tracking only relevant to and entirely
+    internal to a single particular node
+    """
+
+    def __init__(self, nodeid: int):
+        self.nodeid = nodeid
+        self.messages = []
+
+    def add_message(self, m: MeshMessage):
+        """We have created a new message in the sim, either original or ack.
+        Add it to list of messages we've created
+        """
+        self.messages.append(m)
+
+    def get_stats_dictionary(self) -> dict:
+        """Return dictionary holding all internal data
+        (may not need this)
+        """
+        data = {
+            "nodeid": self.nodeid,
+            "messages": self.messages,
+        }
+        return data
+
 class NodeConfig:
     """Specific configuration for a node
     """
@@ -81,7 +106,7 @@ class MeshNode:
     """Class containing all the particular state of a MeshNode, references to necessary
     external resources like the simpy env, and process functions for simulation
     """
-    def __init__(self, conf, nodes, env, bc_pipe, period, messages, packetsAtN, packets, delays, nodeConfig: NodeConfig, messageSeq):
+    def __init__(self, conf, nodes, env, bc_pipe, period, packetsAtN, packets, delays, nodeConfig: NodeConfig, messageSeq):
         self.conf = conf
         self.nodeid = nodeConfig.node_id
         self.moveRng = random.Random(self.nodeid)
@@ -94,12 +119,13 @@ class MeshNode:
         self.hopLimit = nodeConfig.hop_limit
         self.antennaGain = nodeConfig.antenna_gain
 
+        self.my_stats = MeshNodeStats(self.nodeid)
+
         self.messageSeq = messageSeq
         self.env = env
         self.period = period
         self.bc_pipe = bc_pipe
         self.nodes = nodes
-        self.messages = messages
         self.packetsAtN = packetsAtN
         self.nrPacketsSent = 0
         self.packets = packets
@@ -231,7 +257,7 @@ class MeshNode:
         # increment the shared counter
         self.messageSeq["val"] += 1
         messageSeq = self.messageSeq["val"]
-        self.messages.append(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
+        self.my_stats.add_message(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
         p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now)
         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} generated {type} message {p.seq} to {destId}")
         self.packets.append(p)
@@ -399,7 +425,7 @@ class MeshNode:
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} sends a flooding ACK.")
                     self.messageSeq["val"] += 1
                     messageSeq = self.messageSeq["val"]
-                    self.messages.append(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
+                    self.my_stats.add_message(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
                     pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now)
                     self.packets.append(pAck)
                     self.env.process(self.transmit(pAck))
@@ -415,6 +441,11 @@ class MeshNode:
                             self.env.process(self.transmit(pNew))
                 else:
                     self.droppedByDelay += 1
+
+    def get_stats(self) -> MeshNodeStats:
+        """Get internally-tracked statistics/data. Only valid after the sim ends.
+        """
+        return self.my_stats
 
 def default_generate_node_list(conf: Config) -> [NodeConfig]:
     """Default function for randomly choosing node configurations for a simulation
