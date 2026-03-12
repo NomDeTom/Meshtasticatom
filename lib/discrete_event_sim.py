@@ -95,11 +95,33 @@ class DiscreteEventSim:
         if self.node_configs == [] or self.node_configs[0] is None:
             # default case: no nodes, or default unspecified nodes.
             # generate a default scenario
-            self.nodes = generate_node_list(self.conf, self.node_configs, self.env, self.mutated_state.bc_pipe, self.conf.PERIOD, self.messages, self.mutated_state.packetsAtN, self.mutated_state.packets, self.delays, self.mutated_state.messageSeq)
+            self.nodes = generate_node_list(
+                self.conf,
+                self.node_configs,
+                self.env,
+                self.mutated_state.bc_pipe,
+                self.conf.PERIOD,
+                self.messages,
+                self.mutated_state.packetsAtN,
+                self.mutated_state.packets,
+                self.delays,
+                self.mutated_state.messageSeq
+            )
         else:
             # node configs provided, create nodes with them
             for cfg in self.node_configs:
-                n = MeshNode(self.conf, self.nodes, self.env, self.mutated_state.bc_pipe, self.conf.PERIOD, self.messages, self.mutated_state.packetsAtN, self.mutated_state.packets, self.delays, cfg, self.mutated_state.messageSeq)
+                n = MeshNode(self.conf,
+                    self.nodes,
+                    self.env,
+                    self.mutated_state.bc_pipe,
+                    self.conf.PERIOD,
+                    self.messages,
+                    self.mutated_state.packetsAtN,
+                    self.mutated_state.packets,
+                    self.delays,
+                    cfg,
+                    self.mutated_state.messageSeq
+                )
                 self.nodes.append(n)
 
         if self.graph is not None:
