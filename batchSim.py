@@ -17,8 +17,9 @@ import matplotlib.pyplot as plt
 from lib.config import Config
 from lib.common import find_random_position, setup_asymmetric_links
 from lib.discrete_event import BroadcastPipe, sim_report
+from lib.discrete_event_sim import DiscreteEventSim
 from lib.gui import Graph, run_graph_updates
-from lib.node import MeshNode, NodeConfig
+from lib.node import NodeConfig
 from lib.point import Point
 
 # TODO - There should really be two separate concepts here, a STATE and a CONFIG
@@ -229,46 +230,45 @@ for rt_i, routerType in enumerate(routerTypes):
             effectiveSeed = rt_i * 10000 + rep
             routerTypeConf.SEED = effectiveSeed
             random.seed(effectiveSeed)
-            env = simpy.Environment()
-            bc_pipe = BroadcastPipe(env)
-
-            # Start the progress-logging process
-            env.process(simulation_progress(env, rep, repetitions, routerTypeConf.SIMTIME))
 
             # Retrieve the pre-generated positions for this (nrNodes, rep)
             coords = positions_cache[(nrNodes, rep)]
 
-            nodes = []
-            messages = []
-            packets = []
-            delays = []
-            packetsAtN = [[] for _ in range(routerTypeConf.NR_NODES)]
-            messageSeq = {"val": 0}
+            node_configs = []
 
-            if SHOW_GRAPH:
-                graph = Graph(routerTypeConf)
             for nodeId in range(routerTypeConf.NR_NODES):
                 x, y = coords[nodeId]
 
                 # We create a NodeConfig object so that MeshNode will use that
                 nodeConfig = NodeConfig(nodeId, Point(x, y, routerTypeConf.HM), antenna_gain=routerTypeConf.GL, hop_limit=routerTypeConf.hopLimit)
+                node_configs.append(nodeConfig)
 
-                node = MeshNode(
-                    routerTypeConf, nodes, env, bc_pipe, routerTypeConf.PERIOD,
-                    messages, packetsAtN, packets, delays, nodeConfig,
-                    messageSeq
-                )
-                nodes.append(node)
-                if SHOW_GRAPH:
-                    graph.add_node(node)
+            if SHOW_GRAPH:
+                graph = Graph(routerTypeConf)
+                sim = DiscreteEventSim(routerTypeConf, node_configs, graph)
+            else:
+                sim = DiscreteEventSim(routerTypeConf, node_configs)
 
-            if routerTypeConf.MOVEMENT_ENABLED and SHOW_GRAPH:
-                env.process(run_graph_updates(env, graph, nodes))
-
-            totalPairs, symmetricLinks, asymmetricLinks, noLinks = setup_asymmetric_links(routerTypeConf, nodes)
+            # Start the progress-logging process
+            env = sim.get_env()
+            env.process(simulation_progress(env, rep, repetitions, routerTypeConf.SIMTIME))
 
             # Start simulation
-            env.run(until=routerTypeConf.SIMTIME)
+            sim.run_simulation()
+
+            results = sim.get_results()
+
+            # TODO: some of these probably unused
+            packets = results["packets"]
+            packetsAtN = results["packetsAtN"]
+            messageSeq = results["messageSeq"]
+            messages = results["messages"]
+            delays = results["delays"]
+            totalPairs = results["totalPairs"]
+            symmetricLinks = results["symmetricLinks"]
+            asymmetricLinks = results["asymmetricLinks"]
+            noLinks = results["noLinks"]
+            nodes = results["nodes"]
 
             # Calculate stats
             nrCollisions = sum([1 for pkt in packets for n in nodes if pkt.collidedAtN[n.nodeid]])
