@@ -1,5 +1,6 @@
 import logging
 
+# probably not necessary, but "Environment" seemed too generic to me
 from simpy import Environment as SimpyEnvironment
 
 from lib.common import setup_asymmetric_links
@@ -9,6 +10,29 @@ from lib.gui import Graph, run_graph_updates
 from lib.node import MeshNode, NodeConfig, generate_node_list
 
 logger = logging.getLogger(__name__)
+
+class SimulationState:
+    """Class to hold all global mutated state of a simulation, not including
+    node-specific state such as the position of a moving node.
+    """
+    def __init__(self, config: Config, env: SimpyEnvironment):
+        """Constructor
+
+        Arguments:
+        config -- Config object of global sim constants. Only used for NR_NODES.
+        env -- SimPy Environment for simulation. Required for internal BroadcastPipe.
+        """
+        self.env = env
+        self.bc_pipe = BroadcastPipe(self.env)
+        self.packets = [] # used mostly for data tracking, but also for state
+        self.packetsAtN = [[] for _ in range(config.NR_NODES)]
+        self.messageSeq = {"val": 0} # TODO: turn this into a locked counter
+
+class SimulationDataTracking:
+    """Class to hold data used to monitor a simulation which has no
+    impact on the state or progress of the simulation
+    """
+    pass
 
 class SimulationResults:
     """Class to hold simulation result data. Any interesting or relevant
@@ -20,6 +44,12 @@ class SimulationResults:
     """
     def __init__(self, results: dict):
         self.results = results.copy() # only a shallow copy
+
+    def finalize(self):
+        """Once simulation is finished, calculate any second-order
+        data that is generally useful, such as averages.
+        """
+        pass
 
 class DiscreteEventSim:
     """Class for a full Discrete Event Simulation. Contains
@@ -39,17 +69,16 @@ class DiscreteEventSim:
         # coupling first, so that parameters can be translated/normalized first,
         # and then only relevant ones passed to the constructor.
 
-        # set state from parameters
+        # set constant state/initial state from parameters
         self.env = SimpyEnvironment()
         self.conf = config
         self.node_configs = node_configs
-        self.nodes = []
 
-        # internal state
-        self.bc_pipe = BroadcastPipe(self.env)
-        self.packets = []
-        self.packetsAtN = [[] for _ in range(self.conf.NR_NODES)]
-        self.messageSeq = {"val": 0}
+        # internal global state which changes
+        self.mutated_state = SimulationState(self.conf, self.env)
+
+        # nodes are our actors, so should be separate from our global mutating sim state.
+        self.nodes = []
 
         # stats & data tracking
         self.messages = []
@@ -66,11 +95,11 @@ class DiscreteEventSim:
         if self.node_configs == [] or self.node_configs[0] is None:
             # default case: no nodes, or default unspecified nodes.
             # generate a default scenario
-            self.nodes = generate_node_list(self.conf, self.node_configs, self.env, self.bc_pipe, self.conf.PERIOD, self.messages, self.packetsAtN, self.packets, self.delays, self.messageSeq)
+            self.nodes = generate_node_list(self.conf, self.node_configs, self.env, self.mutated_state.bc_pipe, self.conf.PERIOD, self.messages, self.mutated_state.packetsAtN, self.mutated_state.packets, self.delays, self.mutated_state.messageSeq)
         else:
             # node configs provided, create nodes with them
             for cfg in self.node_configs:
-                n = MeshNode(self.conf, self.nodes, self.env, self.bc_pipe, self.conf.PERIOD, self.messages, self.packetsAtN, self.packets, self.delays, cfg, self.messageSeq)
+                n = MeshNode(self.conf, self.nodes, self.env, self.mutated_state.bc_pipe, self.conf.PERIOD, self.messages, self.mutated_state.packetsAtN, self.mutated_state.packets, self.delays, cfg, self.mutated_state.messageSeq)
                 self.nodes.append(n)
 
         if self.graph is not None:
@@ -99,10 +128,11 @@ class DiscreteEventSim:
 
     # just return a dictionary for now, refactor into an object later
     def get_results(self) -> {}:
+        # first-order stats/data collection
         results = {
-            "packets": self.packets,
-            "packetsAtN": self.packetsAtN,
-            "messageSeq": self.messageSeq,
+            "packets": self.mutated_state.packets,
+            "packetsAtN": self.mutated_state.packetsAtN,
+            "messageSeq": self.mutated_state.messageSeq,
             "messages": self.messages,
             "delays": self.delays,
             "totalPairs": self.totalPairs,
@@ -111,5 +141,7 @@ class DiscreteEventSim:
             "noLinks": self.noLinks,
             "nodes": self.nodes,
         }
+        # TODO: add some universally useful result calculations, like the
+        # ones common between loraMesh.py and batchSim.py
         return results
 
