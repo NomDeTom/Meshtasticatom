@@ -15,7 +15,7 @@ from lib.point import Point
 logger = logging.getLogger(__name__)
 
 # TODO: convert this to returning a list of NodeConfig objects, greatly simplify
-def generate_node_list(conf, node_configs, env, bc_pipe, period, messages, packetsAtN, packets, delays, messageSeq):
+def default_generate_node_list(conf, node_configs, env, bc_pipe, period, messages, packetsAtN, packets, delays, messageSeq):
     """default function for randomly choosing node configurations for a simulation
     run, based on the provided config and desired number of nodes.
 

@@ -8,7 +8,7 @@ from lib.common import setup_asymmetric_links
 from lib.config import Config
 from lib.discrete_event import BroadcastPipe
 from lib.gui import Graph, run_graph_updates
-from lib.node import MeshNode, NodeConfig, generate_node_list
+from lib.node import MeshNode, NodeConfig, default_generate_node_list
 from lib.packet import MeshPacket
 
 logger = logging.getLogger(__name__)
@@ -162,11 +162,12 @@ class DiscreteEventSim:
         # note: we allow user to specify if graphing will happen or not
         self.graph = graph
 
+        # TODO: only use provided node configurations, don't generate our own.
         # create nodes once we have the various things they have to be wired into
         if self.node_configs == [] or self.node_configs[0] is None:
             # default case: no nodes, or default unspecified nodes.
             # generate a default scenario
-            self.nodes = generate_node_list(
+            self.nodes = default_generate_node_list(
                 self.conf,
                 self.node_configs,
                 self.env,
