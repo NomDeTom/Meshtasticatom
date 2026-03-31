@@ -121,6 +121,40 @@ class NodeConfig:
         self.hop_limit = hop_limit
         self.neighbor_info = neighbor_info
 
+    @classmethod
+    def from_gen_scenario_output(cls, node_id: int, node_dict: {}):
+        """create NodeConfig from a node dict as returned from gen_scenario.
+        You probably want to iterate over the keys that function gives you
+        and pass individual values indexed by them to this method.
+
+        Arguments:
+        node_dict -- dictionary defining a single node. From gen_scenario.
+        """
+        nd = node_dict
+        position = Point(nd['x'], nd['y'], nd['z'])
+
+        # roles
+        isRouter = nd['isRouter']
+        isRepeater = nd['isRepeater']
+        isClientMute = nd['isClientMute']
+
+        # sanity check that only one role is set
+        if (isRouter and isRepeater) or \
+           (isRepeater and isClientMute) or \
+           (isClientMute and isRouter):
+           raise Exception(f"invalid combination of roles: {nd}")
+
+        if isRouter:
+            role = MESHTASTIC_ROLE.ROUTER
+        elif isRepeater:
+            role = MESHTASTIC_ROLE.REPEATER
+        elif isClientMute:
+            role = MESHTASTIC_ROLE.CLIENT_MUTE
+        else:
+            role = MESHTASTIC_ROLE.CLIENT
+
+        return NodeConfig(node_id, position, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
+
 class MeshNode:
     """Class containing all the particular state of a MeshNode, references to necessary
     external resources like the simpy env, and process functions for simulation
