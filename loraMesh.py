@@ -10,6 +10,7 @@ import numpy as np
 
 from lib.config import CONFIG
 from lib.discrete_event_sim import DiscreteEventSim
+from lib.node import NodeConfig, default_generate_node_list
 from lib.gui import Graph, plot_schedule, gen_scenario
 
 conf = CONFIG
@@ -19,7 +20,7 @@ logging.basicConfig(level=logging.INFO) # default log level
 
 log_level = logging.INFO
 
-def parse_params(conf, args):
+def parse_params(conf, args) -> [NodeConfig]:
     """parses command-line arguments, alters global simulation config, and returns
     a list of node configurations, or a list of None.
     """
@@ -60,19 +61,19 @@ def parse_params(conf, args):
     if parsed_arguments.from_file is not None:
         with open(os.path.join("out", parsed_arguments.from_file), 'r') as file:
             config = yaml.load(file, Loader=yaml.FullLoader)
+        conf.NR_NODES = len(config.keys())
     elif parsed_arguments.nr_nodes is not None:
         conf.NR_NODES = parsed_arguments.nr_nodes
-        config = [None for _ in range(conf.NR_NODES)]
         if parsed_arguments.router_type is not None:
             routerType = parsed_arguments.router_type
             conf.SELECTED_ROUTER_TYPE = routerType
             conf.update_router_dependencies()
+        # put after router type selection, in case that affects placement, etc.
+        config = default_generate_node_list(conf)
     else:
-        config = gen_scenario(conf)
-
-    if config[0] is not None:
-        # yaml file or unspecified nr_nodes
-        conf.NR_NODES = len(config.keys())
+        config_dict = gen_scenario(conf)
+        config = [NodeConfig.from_gen_scenario_output(node_id, cfg) for node_id, cfg in config_dict.items()]
+        conf.NR_NODES = len(config)
 
     if conf.NR_NODES < 2:
         parser.error(f"Need at least two nodes. You specified {conf.NR_NODES}")

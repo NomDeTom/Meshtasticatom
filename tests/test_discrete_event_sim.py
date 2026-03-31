@@ -19,6 +19,8 @@ class TestDiscreteEventSim(unittest.TestCase):
     def test_discrete_sim_ten_nodes(self):
         import numpy as np
 
+        from lib.node import default_generate_node_list
+
         from lib.config import CONFIG
         conf = CONFIG
 
@@ -29,8 +31,8 @@ class TestDiscreteEventSim(unittest.TestCase):
 
         # imitate parse_params
         conf.NR_NODES = 10
-        nodeConfig = [None for _ in range(conf.NR_NODES)]
         conf.update_router_dependencies()
+        nodeConfig = default_generate_node_list(conf)
         # skipping GUI graphing to speed things up
 
         # set up sim

@@ -40,6 +40,44 @@ def find_random_position(conf, nodes):
             break
     return max(-conf.XSIZE/2, position.x), max(-conf.YSIZE/2, position.y)
 
+def find_random_position_nodeconf(conf, node_configs):
+    """Ugly hack to have a version of find_random_position that only
+    requires node configs and NOT full node objects, so we can get new
+    functionality working and save some refactoring for later.
+    """
+    foundMin = True
+    foundMax = False
+    tries = 0
+    position = None
+    while not (foundMin and foundMax):
+        a = random.random()
+        b = random.random()
+        posx = a*conf.XSIZE+conf.OX-conf.XSIZE/2
+        posy = b*conf.YSIZE+conf.OY-conf.YSIZE/2
+        pos_candidate = Point(posx, posy, conf.HM)
+        if len(node_configs) > 0:
+            for n in node_configs:
+                dist = n.position.euclidean_distance(pos_candidate)
+                if dist < conf.MINDIST:
+                    foundMin = False
+                    break
+                pathLoss = phy.estimate_path_loss(conf, dist, conf.FREQ)
+                rssi = conf.PTX + 2*conf.GL - pathLoss
+                # At least one node should be able to reach it
+                if rssi >= conf.current_preset["sensitivity"]:
+                    foundMax = True
+            if foundMin and foundMax:
+                position = pos_candidate
+        else:
+            position = pos_candidate
+            foundMin = True
+            foundMax = True
+        tries += 1
+        if tries > 1000:
+            print('Could not find a location to place the node. Try increasing XSIZE/YSIZE or decreasing MINDIST.')
+            break
+    return max(-conf.XSIZE/2, position.x), max(-conf.YSIZE/2, position.y)
+
 # TODO: once lib/interactive no longer uses this, we can remove this and put all distance calculation in Point
 def calc_dist(x0, x1, y0, y1, z0=0, z1=0):
     return np.sqrt(((abs(x0-x1))**2)+((abs(y0-y1))**2)+((abs(z0-z1)**2)))

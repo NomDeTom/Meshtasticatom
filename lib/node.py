@@ -6,7 +6,7 @@ import random
 
 import simpy
 
-from lib.common import find_random_position
+from lib.common import find_random_position_nodeconf
 from lib.mac import set_transmit_delay, get_retransmission_msec
 from lib.phy import check_collision, is_channel_active, airtime
 from lib.packet import NODENUM_BROADCAST, MeshPacket, MeshMessage
@@ -15,7 +15,7 @@ from lib.point import Point
 logger = logging.getLogger(__name__)
 
 # TODO: convert this to returning a list of NodeConfig objects, greatly simplify
-def default_generate_node_list(conf, node_configs, env, bc_pipe, period, messages, packetsAtN, packets, delays, messageSeq):
+def default_generate_node_list(conf):
     """default function for randomly choosing node configurations for a simulation
     run, based on the provided config and desired number of nodes.
 
@@ -25,73 +25,35 @@ def default_generate_node_list(conf, node_configs, env, bc_pipe, period, message
     # need to identically match RNG usage right now to pass the discrete sim
     # test. If we want to change the reference test, do that in a smaller change.
 
-    nodes = []
+    node_configs = []
 
     # replicate default 'no prior config' setup:
-    i = 0
-    for n in node_configs:
-        if n is None:
-            # no specified node config, randomly generate one
-            # get node's position
-            x, y = find_random_position(conf, nodes)
-            z = conf.HM
-            position = Point(x, y, z)
+    for i in range(conf.NR_NODES):
+        # no specified node config, randomly generate one
+        # get node's position
+        x, y = find_random_position_nodeconf(conf, node_configs)
+        z = conf.HM
+        position = Point(x, y, z)
 
-            # role
-            isRouter = conf.router
-            isRepeater = False
-            isClientMute = False
+        # role
+        isRouter = conf.router
+        isRepeater = False
+        isClientMute = False
 
-            # other default values
-            hopLimit = conf.hopLimit
-            antennaGain = conf.GL
+        # other default values
+        hopLimit = conf.hopLimit
+        antennaGain = conf.GL
 
-            # map misc. booleans into single role
-            if isRouter:
-                role = MESHTASTIC_ROLE.ROUTER
-            else:
-                role = MESHTASTIC_ROLE.CLIENT
-
-            # make NodeConfig object to pass to MeshNode constructor
-            node_config = NodeConfig(i, position, role)
-            i += 1
-
-            # have node config, need to create node, add to list of nodes
-            node = MeshNode(conf, nodes, env, bc_pipe, period, messages, packetsAtN, packets, delays, node_config, messageSeq)
-            nodes.append(node)
+        # map misc. booleans into single role
+        if isRouter:
+            role = MESHTASTIC_ROLE.ROUTER
         else:
-            # convert dict from interactive GUI gen_scenario to NodeConfig objects, create nodes.
-            node_config_dict = node_configs[n]
-            position = Point(node_config_dict['x'], node_config_dict['y'], node_config_dict['z'])
+            role = MESHTASTIC_ROLE.CLIENT
 
-            # roles
-            isRouter = node_config_dict['isRouter']
-            isRepeater = node_config_dict['isRepeater']
-            isClientMute = node_config_dict['isClientMute']
+        # make NodeConfig object to pass to MeshNode constructor
+        node_configs.append(NodeConfig(i, position, role))
 
-            # sanity check that only one role is set
-            if (isRouter and isRepeater) or \
-               (isRepeater and isClientMute) or \
-               (isClientMute and isRouter):
-               raise Exception(f"invalid combination of roles: {node_config_dict}")
-
-            if isRouter:
-                role = MESHTASTIC_ROLE.ROUTER
-            elif isRepeater:
-                role = MESHTASTIC_ROLE.REPEATER
-            elif isClientMute:
-                role = MESHTASTIC_ROLE.CLIENT_MUTE
-            else:
-                role = MESHTASTIC_ROLE.CLIENT
-
-            # make node config
-            node_config = NodeConfig(i, position, role, node_config_dict['antennaGain'], node_config_dict['hopLimit'], node_config_dict['neighborInfo'])
-            i += 1
-
-            node = MeshNode(conf, nodes, env, bc_pipe, period, messages, packetsAtN, packets, delays, node_config, messageSeq)
-            nodes.append(node)
-
-    return nodes
+    return node_configs
 
 # roles taken from the protobuf config meshtastic/config.proto in https://github.com/meshtastic/protobufs
 # deprecated roles are included for simulation utility

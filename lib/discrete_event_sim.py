@@ -136,7 +136,7 @@ class DiscreteEventSim:
     simulation config, all necessary state, and sim plumbing.
     """
 
-    def __init__(self, conf: Config, node_configs: [NodeConfig] = [], graph: Graph | None = None):
+    def __init__(self, conf: Config, node_configs: [NodeConfig], graph: Graph | None = None):
         """Constructor.
 
         Arguments:
@@ -162,14 +162,10 @@ class DiscreteEventSim:
         # note: we allow user to specify if graphing will happen or not
         self.graph = graph
 
-        # TODO: only use provided node configurations, don't generate our own.
-        # create nodes once we have the various things they have to be wired into
-        if self.node_configs == [] or self.node_configs[0] is None:
-            # default case: no nodes, or default unspecified nodes.
-            # generate a default scenario
-            self.nodes = default_generate_node_list(
-                self.conf,
-                self.node_configs,
+        # node configs provided, create nodes with them
+        for cfg in self.node_configs:
+            n = MeshNode(self.conf,
+                self.nodes,
                 self.env,
                 self.mutated_state.bc_pipe,
                 self.conf.PERIOD,
@@ -177,24 +173,10 @@ class DiscreteEventSim:
                 self.mutated_state.packetsAtN,
                 self.mutated_state.packets,
                 self.data_tracking.delays,
+                cfg,
                 self.mutated_state.messageSeq
             )
-        else:
-            # node configs provided, create nodes with them
-            for cfg in self.node_configs:
-                n = MeshNode(self.conf,
-                    self.nodes,
-                    self.env,
-                    self.mutated_state.bc_pipe,
-                    self.conf.PERIOD,
-                    self.data_tracking.messages,
-                    self.mutated_state.packetsAtN,
-                    self.mutated_state.packets,
-                    self.data_tracking.delays,
-                    cfg,
-                    self.mutated_state.messageSeq
-                )
-                self.nodes.append(n)
+            self.nodes.append(n)
 
         if self.graph is not None:
             for n in self.nodes:
