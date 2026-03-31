@@ -7,53 +7,13 @@ import random
 import simpy
 
 from lib.common import find_random_position
+from lib.config import Config
 from lib.mac import set_transmit_delay, get_retransmission_msec
 from lib.phy import check_collision, is_channel_active, airtime
 from lib.packet import NODENUM_BROADCAST, MeshPacket, MeshMessage
 from lib.point import Point
 
 logger = logging.getLogger(__name__)
-
-# TODO: convert this to returning a list of NodeConfig objects, greatly simplify
-def default_generate_node_list(conf):
-    """default function for randomly choosing node configurations for a simulation
-    run, based on the provided config and desired number of nodes.
-
-    We have lots of extra parameters that are only really necessary for MeshNode
-    constructor, for tying it in to simulation state stuff. Needs refactoring
-    """
-    # need to identically match RNG usage right now to pass the discrete sim
-    # test. If we want to change the reference test, do that in a smaller change.
-
-    node_configs = []
-
-    # replicate default 'no prior config' setup:
-    for i in range(conf.NR_NODES):
-        # no specified node config, randomly generate one
-        # get node's position
-        x, y = find_random_position(conf, node_configs)
-        z = conf.HM
-        position = Point(x, y, z)
-
-        # role
-        isRouter = conf.router
-        isRepeater = False
-        isClientMute = False
-
-        # other default values
-        hopLimit = conf.hopLimit
-        antennaGain = conf.GL
-
-        # map misc. booleans into single role
-        if isRouter:
-            role = MESHTASTIC_ROLE.ROUTER
-        else:
-            role = MESHTASTIC_ROLE.CLIENT
-
-        # make NodeConfig object to pass to MeshNode constructor
-        node_configs.append(NodeConfig(i, position, role))
-
-    return node_configs
 
 # roles taken from the protobuf config meshtastic/config.proto in https://github.com/meshtastic/protobufs
 # deprecated roles are included for simulation utility
@@ -453,3 +413,41 @@ class MeshNode:
                             self.env.process(self.transmit(pNew))
                 else:
                     self.droppedByDelay += 1
+
+def default_generate_node_list(conf: Config) -> [NodeConfig]:
+    """Default function for randomly choosing node configurations for a simulation
+    run, based on the provided config and desired number of nodes specified in
+    the config.
+    """
+    # need to identically match RNG usage right now to pass the discrete sim
+    # test. If we want to change the reference test, do that in a smaller change.
+
+    node_configs = []
+
+    # replicate default 'no prior config' setup:
+    for i in range(conf.NR_NODES):
+        # no specified node config, randomly generate one
+        # get node's position
+        x, y = find_random_position(conf, node_configs)
+        z = conf.HM
+        position = Point(x, y, z)
+
+        # role
+        isRouter = conf.router
+        isRepeater = False
+        isClientMute = False
+
+        # other default values
+        hopLimit = conf.hopLimit
+        antennaGain = conf.GL
+
+        # map misc. booleans into single role
+        if isRouter:
+            role = MESHTASTIC_ROLE.ROUTER
+        else:
+            role = MESHTASTIC_ROLE.CLIENT
+
+        # make NodeConfig object to pass to MeshNode constructor
+        node_configs.append(NodeConfig(i, position, role))
+
+    return node_configs
