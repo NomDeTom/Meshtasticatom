@@ -65,7 +65,7 @@ class SimulationResults:
         """
         return self.results[subscript]
 
-    def finalize(self, conf: Config, nodes: [MeshNode], packets: [MeshPacket]):
+    def finalize(self, conf: Config):
         """Once simulation is finished, calculate any second-order
         data that is generally useful, such as averages. This requires some extra
         state-related info.
@@ -80,7 +80,9 @@ class SimulationResults:
         packets -- list of packets sent during simulation.
         """
         # replicate result enrichment/calculation from loraMesh.py and batchSim.py
-        sent = len(self.results["packets"])
+        nodes = self.results["nodes"]
+        packets = self.results["packets"]
+        sent = len(packets)
         if conf.DMs:
             self.results["potentialReceivers"] = sent
         else:
@@ -220,7 +222,7 @@ class DiscreteEventSim:
             "nodes": self.nodes,
         }
         results = SimulationResults(first_order_results)
-        results.finalize(self.conf, self.nodes, self.mutated_state.packets)
+        results.finalize(self.conf)
 
         return results
 
