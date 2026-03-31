@@ -15,6 +15,144 @@ class TestDiscreteEventSim(unittest.TestCase):
     '''
     # TODO: add many more tests for SimulationResults, especially finalize method
 
+    def test_simulation_results_finalization(self):
+        """SimulationResults is a glorified dictionary, but the finalize
+        method does a notable number of simple calculations and makes a
+        notable number of assumptions on keys that exist. Do some
+        rudimentary testing with mock types, since it expects lists of
+        MeshNode and MeshPacket objects.
+        """
+        from lib.config import CONFIG
+        conf = CONFIG
+
+        # nodes must have attributes:
+        # - nodeid (int)
+        # - usefulPackets (int)
+        # - txAirUtilization (float?)
+        # - droppedByDelay (int)
+        # - isMoving (boolean)
+        # - gpsEnabled (boolean)
+
+        # packets must have attributes:
+        # (lists which are as long as there are nodes)
+        # - collidedAtN list (boolean)
+        # - sensedByN list (boolean)
+        # - receivedAtN list (boolean)
+
+        # first-order results must have keys:
+        # - nodes (list of nodes)
+        # - packets (list of packets)
+        # - delays (list of ...floats?)
+        # - messageSeq["val"] - total # of messages
+        # - totalPairs (int)
+        # - asymmetricLinks (int)
+        # - symmetricLinks (int)
+        # - noLinks (int)
+
+        # Things which are computed (keys in results):
+        # *: conditional on a config setting
+        # +: gated by division-by-zero check of some value (may be nan)
+        # - potentialReceivers *
+        # - sent
+        # - nrCollisions
+        # - nrSensed
+        # - nrReceived
+        # - nrUseful
+        # - meanDelay
+        # - txAirUtilizationRate *+
+        # - collisionRate +
+        # - nodereach *+
+        # - usefulness +
+        # - delayDropped
+        # - symmetricLinkRate *+
+        # - asymmetricLinkRate *+
+        # - noLinkRate *+
+        # - movingNodes *
+        # - gpsEnabled *
+
+        class MockNode:
+            def __init__(self, nodeid: int):
+                self.nodeid = nodeid
+                self.usefulPackets = 0
+                self.txAirUtilization = 0.0
+                self.droppedByDelay = 0
+                self.isMoving = False
+                self.gpsEnabled = False
+
+        class MockPacket:
+            def __init__(self, num_nodes: int):
+                self.collidedAtN = [False for _ in range(num_nodes)]
+                self.sensedByN = [False for _ in range(num_nodes)]
+                self.receivedAtN = [False for _ in range(num_nodes)]
+
+        # mock situation: 3 nodes who can all mutually see each other, no DMs,
+        # moving nodes, asymmetric links (default config)
+        # (complete graph. Triangle)
+        # 10 messages and 10 packets
+        # I probably won't make this perfect, but want some basic numbers
+        conf.NR_NODES = 3
+        mock_nodes = [MockNode(i) for i in range(3)]
+        mock_nodes[0].isMoving = True
+        mock_nodes[0].gpsEnabled = True
+        for n in mock_nodes:
+            # just put some non-zero values in there
+            n.usefulPackets = 10
+            n.txAirUtilization = 1.0
+
+        mock_packets = [MockPacket(3) for i in range(10)]
+        # all packets were sensed by all nodes, no collisions (fudging it)
+        for p in mock_packets:
+            for i in range(3):
+                p.sensedByN[i] = True
+                p.receivedAtN[i] = True
+
+        r = {}
+        r['nodes'] = mock_nodes
+        r['packets'] = mock_packets
+        r['delays'] = [1.0 for _ in range(10)]
+        r['messageSeq'] = {'val': 10} # total # of messages (not packets)
+
+        # as set up, totalPairs = symmetricLinks + asymmetricLinks + noLinks
+        r['totalPairs'] = 3
+        r['asymmetricLinks'] = 0
+        r['symmetricLinks'] = 0
+        r['noLinks'] = 0
+
+        sim_results = lib.discrete_event_sim.SimulationResults(r)
+        sim_results.finalize(conf)
+
+        # test computations done by finalize, sanity checks
+
+        # keys exist AND are specific good values
+        self.assertEqual(sim_results['potentialReceivers'], len(mock_packets) * (conf.NR_NODES - 1), "expected calculation of potential receivers (no DMs)")
+        self.assertEqual(sim_results['sent'], len(mock_packets), 'expected calculation of sent packets')
+        self.assertEqual(sim_results['nrCollisions'], 0, 'expected nr of collisions')
+        self.assertEqual(sim_results['nrSensed'], 30, 'expected nr of sensed packets')
+        self.assertEqual(sim_results['nrReceived'], 30, 'expected nr of received packets')
+        self.assertEqual(sim_results['nrUseful'], 30, 'expected nr of useful packets')
+        self.assertEqual(sim_results['meanDelay'], 1.0, 'expected mean delay')
+        self.assertEqual(sim_results['collisionRate'], 0, 'expected calculated collisionRate')
+        self.assertEqual(sim_results['usefulness'], 1, 'usefulness is created')
+        self.assertEqual(sim_results['delayDropped'], 0, 'expected number of delayDropped')
+
+        # keys exist, not currently checking values
+        self.assertIsNotNone(sim_results['txAirUtilizationRate'], 'txAirUtilizationRate is created')
+        self.assertIsNotNone(sim_results['nodeReach'], 'nodeReach is created')
+        #self.assertIsNotNone(sim_results['x'], 'x is created')
+
+        # check rate calculations in [0, 1] (assuming we mocked sane values)
+        self.assertLessEqual(0.0, sim_results['asymmetricLinkRate'], 'calculated asymmetricLinkRate is above or equal to 0')
+        self.assertLessEqual(sim_results['asymmetricLinkRate'], 1.0, 'calculated asymmetricLinkRate is below or equal to 1')
+        self.assertLessEqual(0.0, sim_results['symmetricLinkRate'], 'calculated symmetricLinkRate is above or equal to 0')
+        self.assertLessEqual(sim_results['symmetricLinkRate'], 1.0, 'calculated symmetricLinkRate is below or equal to 1')
+        self.assertLessEqual(0.0, sim_results['noLinkRate'], 'calculated noLinkRate is above or equal to 0')
+        self.assertLessEqual(sim_results['noLinkRate'], 1.0, 'calculated noLinkRate is below or equal to 1')
+
+        # expect only 1 moving node with gps enabled
+        self.assertEqual(sim_results['movingNodes'], 1, 'expected number of moving nodes')
+        self.assertEqual(sim_results['gpsEnabled'], 1, 'expected number of gps enabled nodes')
+
+
     # TODO: add default-skip GUI test?
     def test_discrete_sim_ten_nodes(self):
         import numpy as np
