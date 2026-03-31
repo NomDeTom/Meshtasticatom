@@ -6,7 +6,7 @@ import random
 
 import simpy
 
-from lib.common import find_random_position_nodeconf
+from lib.common import find_random_position
 from lib.mac import set_transmit_delay, get_retransmission_msec
 from lib.phy import check_collision, is_channel_active, airtime
 from lib.packet import NODENUM_BROADCAST, MeshPacket, MeshMessage
@@ -31,7 +31,7 @@ def default_generate_node_list(conf):
     for i in range(conf.NR_NODES):
         # no specified node config, randomly generate one
         # get node's position
-        x, y = find_random_position_nodeconf(conf, node_configs)
+        x, y = find_random_position(conf, node_configs)
         z = conf.HM
         position = Point(x, y, z)
 

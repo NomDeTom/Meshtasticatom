@@ -6,44 +6,18 @@ import numpy as np
 from lib import phy
 from lib.point import Point
 
-def find_random_position(conf, nodes):
-    foundMin = True
-    foundMax = False
-    tries = 0
-    position = None
-    while not (foundMin and foundMax):
-        a = random.random()
-        b = random.random()
-        posx = a*conf.XSIZE+conf.OX-conf.XSIZE/2
-        posy = b*conf.YSIZE+conf.OY-conf.YSIZE/2
-        pos_candidate = Point(posx, posy, conf.HM)
-        if len(nodes) > 0:
-            for n in nodes:
-                dist = n.position.euclidean_distance(pos_candidate)
-                if dist < conf.MINDIST:
-                    foundMin = False
-                    break
-                pathLoss = phy.estimate_path_loss(conf, dist, conf.FREQ)
-                rssi = conf.PTX + 2*conf.GL - pathLoss
-                # At least one node should be able to reach it
-                if rssi >= conf.current_preset["sensitivity"]:
-                    foundMax = True
-            if foundMin and foundMax:
-                position = pos_candidate
-        else:
-            position = pos_candidate
-            foundMin = True
-            foundMax = True
-        tries += 1
-        if tries > 1000:
-            print('Could not find a location to place the node. Try increasing XSIZE/YSIZE or decreasing MINDIST.')
-            break
-    return max(-conf.XSIZE/2, position.x), max(-conf.YSIZE/2, position.y)
+def find_random_position(conf, node_configs) -> (float, float):
+    """Given a simulation config and list of existing node configs/nodes, find a
+    randomly chosen position for the next node such that it is within the
+    simulation bounds, within radio range of at least one existing node, and
+    not within the minimum distance of any existing node.
 
-def find_random_position_nodeconf(conf, node_configs):
-    """Ugly hack to have a version of find_random_position that only
-    requires node configs and NOT full node objects, so we can get new
-    functionality working and save some refactoring for later.
+    Arguments:
+    conf -- Config object defining simulation
+    node_configs -- list of NodeConfig objects, or node objects, defining pre-existing nodes
+
+    Returns:
+    (x, y) - x and y coordinates of location for next node
     """
     foundMin = True
     foundMax = False
