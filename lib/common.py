@@ -6,7 +6,19 @@ import numpy as np
 from lib import phy
 from lib.point import Point
 
-def find_random_position(conf, nodes):
+def find_random_position(conf, node_configs) -> (float, float):
+    """Given a simulation config and list of existing node configs/nodes, find a
+    randomly chosen position for the next node such that it is within the
+    simulation bounds, within radio range of at least one existing node, and
+    not within the minimum distance of any existing node.
+
+    Arguments:
+    conf -- Config object defining simulation
+    node_configs -- list of NodeConfig objects, or node objects, defining pre-existing nodes
+
+    Returns:
+    (x, y) - x and y coordinates of location for next node
+    """
     foundMin = True
     foundMax = False
     tries = 0
@@ -17,8 +29,8 @@ def find_random_position(conf, nodes):
         posx = a*conf.XSIZE+conf.OX-conf.XSIZE/2
         posy = b*conf.YSIZE+conf.OY-conf.YSIZE/2
         pos_candidate = Point(posx, posy, conf.HM)
-        if len(nodes) > 0:
-            for n in nodes:
+        if len(node_configs) > 0:
+            for n in node_configs:
                 dist = n.position.euclidean_distance(pos_candidate)
                 if dist < conf.MINDIST:
                     foundMin = False
