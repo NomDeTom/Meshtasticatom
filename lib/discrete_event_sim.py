@@ -170,7 +170,6 @@ class DiscreteEventSim:
                 self.nodes,
                 self.env,
                 self.mutated_state.bc_pipe,
-                self.conf.PERIOD,
                 self.mutated_state.packetsAtN,
                 self.mutated_state.packets,
                 self.data_tracking.delays,

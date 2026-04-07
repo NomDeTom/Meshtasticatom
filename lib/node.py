@@ -60,16 +60,17 @@ class MeshNodeStats:
 class NodeConfig:
     """Specific configuration for a node
     """
-    def __init__(self, node_id: int, position: Point, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False):
+    def __init__(self, node_id: int, position: Point, period: int, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False):
         self.node_id = node_id
         self.position = position.copy() # make sure we keep our own point
+        self.period = period
         self.role = role
         self.antenna_gain = antenna_gain
         self.hop_limit = hop_limit
         self.neighbor_info = neighbor_info
 
     @classmethod
-    def from_gen_scenario_output(cls, node_id: int, node_dict: {}):
+    def from_gen_scenario_output(cls, node_id: int, node_dict: {}, period: int):
         """create NodeConfig from a node dict as returned from gen_scenario.
         You probably want to iterate over the keys that function gives you
         and pass individual values indexed by them to this method.
@@ -100,13 +101,13 @@ class NodeConfig:
         else:
             role = MESHTASTIC_ROLE.CLIENT
 
-        return NodeConfig(node_id, position, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
+        return NodeConfig(node_id, position, period, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
 
 class MeshNode:
     """Class containing all the particular state of a MeshNode, references to necessary
     external resources like the simpy env, and process functions for simulation
     """
-    def __init__(self, conf, nodes, env, bc_pipe, period, packetsAtN, packets, delays, nodeConfig: NodeConfig, messageSeq):
+    def __init__(self, conf, nodes, env, bc_pipe, packetsAtN, packets, delays, nodeConfig: NodeConfig, messageSeq):
         self.conf = conf
         self.nodeid = nodeConfig.node_id
         self.moveRng = random.Random(self.nodeid)
@@ -123,7 +124,7 @@ class MeshNode:
 
         self.messageSeq = messageSeq
         self.env = env
-        self.period = period
+        self.period = nodeConfig.period
         self.bc_pipe = bc_pipe
         self.nodes = nodes
         self.packetsAtN = packetsAtN
@@ -481,6 +482,6 @@ def default_generate_node_list(conf: Config) -> [NodeConfig]:
             role = MESHTASTIC_ROLE.CLIENT
 
         # make NodeConfig object to pass to MeshNode constructor
-        node_configs.append(NodeConfig(i, position, role))
+        node_configs.append(NodeConfig(i, position, conf.PERIOD, role))
 
     return node_configs

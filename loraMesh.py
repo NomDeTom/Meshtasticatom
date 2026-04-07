@@ -72,7 +72,7 @@ def parse_params(conf, args) -> [NodeConfig]:
         config = default_generate_node_list(conf)
     else:
         config_dict = gen_scenario(conf)
-        config = [NodeConfig.from_gen_scenario_output(node_id, cfg) for node_id, cfg in config_dict.items()]
+        config = [NodeConfig.from_gen_scenario_output(node_id, cfg, conf.PERIOD) for node_id, cfg in config_dict.items()]
         conf.NR_NODES = len(config)
 
     if conf.NR_NODES < 2:
