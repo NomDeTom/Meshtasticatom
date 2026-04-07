@@ -7,40 +7,12 @@ import numpy as np
 from lib.common import setup_asymmetric_links
 from lib.config import Config
 from lib.discrete_event import BroadcastPipe
+from lib.discrete_event_sim_components import SimulationState, SimulationDataTracking
 from lib.gui import Graph, run_graph_updates
 from lib.node import MeshNode, NodeConfig, default_generate_node_list
 from lib.packet import MeshPacket
 
 logger = logging.getLogger(__name__)
-
-class SimulationState:
-    """Class to hold all global mutated state of a simulation, not including
-    node-specific state such as the position of a moving node.
-    """
-    def __init__(self, conf: Config, env: SimpyEnvironment):
-        """Constructor
-
-        Arguments:
-        conf -- Config object of global sim constants. Only used for NR_NODES.
-        env -- SimPy Environment for simulation. Required for internal BroadcastPipe.
-        """
-        self.env = env
-        self.bc_pipe = BroadcastPipe(self.env)
-        self.packets = [] # used mostly for data tracking, but also for state
-        self.packetsAtN = [[] for _ in range(conf.NR_NODES)]
-        self.messageSeq = {"val": 0} # TODO: turn this into a locked counter
-
-class SimulationDataTracking:
-    """Class to hold data used to monitor a simulation which has no
-    impact on the state or progress of the simulation
-    """
-    def __init__(self):
-        self.messages = []
-        self.delays = []
-        self.totalPairs = 0
-        self.symmetricLinks = 0
-        self.asymmetricLinks = 0
-        self.noLinks = 0
 
 class SimulationResults:
     """Class to hold simulation result data. Any interesting or relevant
@@ -168,13 +140,9 @@ class DiscreteEventSim:
         for cfg in self.node_configs:
             n = MeshNode(self.conf,
                 self.nodes,
-                self.env,
-                self.mutated_state.bc_pipe,
-                self.mutated_state.packetsAtN,
-                self.mutated_state.packets,
-                self.data_tracking.delays,
+                self.mutated_state,
+                self.data_tracking,
                 cfg,
-                self.mutated_state.messageSeq
             )
             self.nodes.append(n)
 

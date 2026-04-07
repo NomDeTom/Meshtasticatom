@@ -8,6 +8,7 @@ import simpy
 
 from lib.common import find_random_position
 from lib.config import Config
+from lib.discrete_event_sim_components import SimulationState, SimulationDataTracking
 from lib.mac import set_transmit_delay, get_retransmission_msec
 from lib.phy import check_collision, is_channel_active, airtime
 from lib.packet import NODENUM_BROADCAST, MeshPacket, MeshMessage
@@ -107,7 +108,7 @@ class MeshNode:
     """Class containing all the particular state of a MeshNode, references to necessary
     external resources like the simpy env, and process functions for simulation
     """
-    def __init__(self, conf, nodes, env, bc_pipe, packetsAtN, packets, delays, nodeConfig: NodeConfig, messageSeq):
+    def __init__(self, conf, nodes, sim_state: SimulationState, data_tracking: SimulationDataTracking, nodeConfig: NodeConfig):
         self.conf = conf
         self.nodeid = nodeConfig.node_id
         self.moveRng = random.Random(self.nodeid)
@@ -122,15 +123,15 @@ class MeshNode:
 
         self.my_stats = MeshNodeStats(self.nodeid)
 
-        self.messageSeq = messageSeq
-        self.env = env
+        self.messageSeq = sim_state.messageSeq
+        self.env = sim_state.env
         self.period = nodeConfig.period
-        self.bc_pipe = bc_pipe
+        self.bc_pipe = sim_state.bc_pipe
         self.nodes = nodes
-        self.packetsAtN = packetsAtN
+        self.packetsAtN = sim_state.packetsAtN
         self.nrPacketsSent = 0
-        self.packets = packets
-        self.delays = delays
+        self.packets = sim_state.packets
+        self.delays = data_tracking.delays
         self.timesReceived = {}
         self.isReceiving = []
         self.isTransmitting = False
