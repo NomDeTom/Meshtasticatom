@@ -80,8 +80,8 @@ class SimulationResults:
         else:
             self.results["collisionRate"] = np.nan
 
-        if self.results["messageSeq"]["val"] != 0 and conf.NR_NODES - 1 != 0:
-            self.results["nodeReach"] = self.results["nrUseful"]/(self.results["messageSeq"]["val"]*(conf.NR_NODES-1))
+        if self.results["messageSeq"] != 0 and conf.NR_NODES - 1 != 0:
+            self.results["nodeReach"] = self.results["nrUseful"]/(self.results["messageSeq"]*(conf.NR_NODES-1))
         else:
             self.results["nodeReach"] = np.nan
 
@@ -189,7 +189,7 @@ class DiscreteEventSim:
         first_order_results = {
             "packets": self.mutated_state.packets,
             "packetsAtN": self.mutated_state.packetsAtN,
-            "messageSeq": self.mutated_state.messageSeq,
+            "messageSeq": self.mutated_state.messageSeq.peek(),
             "messages": messages,
             "delays": self.data_tracking.delays,
             "totalPairs": self.data_tracking.totalPairs,

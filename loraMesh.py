@@ -127,7 +127,7 @@ delayDropped = results['delayDropped']
 
 print("*******************************")
 print(f"\nRouter Type: {conf.SELECTED_ROUTER_TYPE}")
-print('Number of messages created:', messageSeq["val"])
+print('Number of messages created:', messageSeq)
 print('Number of packets sent:', sent, 'to', potentialReceivers, 'potential receivers')
 print("Number of collisions:", nrCollisions)
 print("Number of packets sensed:", nrSensed)

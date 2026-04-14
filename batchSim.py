@@ -326,7 +326,7 @@ for rt_i, routerType in enumerate(routerTypes):
                 "SIMTIME": routerTypeConf.SIMTIME,
                 "PERIOD": routerTypeConf.PERIOD,
                 "PACKETLENGTH": routerTypeConf.PACKETLENGTH,
-                "nrMessages": messageSeq["val"],
+                "nrMessages": messageSeq,
                 "SELECTED_ROUTER_TYPE": routerTypeLabel
             }
             subdir = "hopLimit3"

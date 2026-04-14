@@ -43,7 +43,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         # - nodes (list of nodes)
         # - packets (list of packets)
         # - delays (list of ...floats?)
-        # - messageSeq["val"] - total # of messages
+        # - messageSeq - total # of messages
         # - totalPairs (int)
         # - asymmetricLinks (int)
         # - symmetricLinks (int)
@@ -110,7 +110,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         r['nodes'] = mock_nodes
         r['packets'] = mock_packets
         r['delays'] = [1.0 for _ in range(10)]
-        r['messageSeq'] = {'val': 10} # total # of messages (not packets)
+        r['messageSeq'] = 10 # total # of messages (not packets)
 
         # as set up, totalPairs = symmetricLinks + asymmetricLinks + noLinks
         r['totalPairs'] = 3
@@ -201,7 +201,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         # and modify your changes, or to update the hardcoded "known good"
         # simulation results is up to your judgement for which is
         # appropriate. Be cautious!
-        self.assertEqual(messageSeq["val"], 180, "expected number of messages created")
+        self.assertEqual(messageSeq, 180, "expected number of messages created")
         sent = results['sent']
         potentialReceivers = results['potentialReceivers']
         self.assertEqual(sent, 875, "expected number of packets sent")

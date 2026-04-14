@@ -257,8 +257,7 @@ class MeshNode:
         """We have created a new message and wish to send it to the network
         """
         # increment the shared counter
-        self.messageSeq["val"] += 1
-        messageSeq = self.messageSeq["val"]
+        messageSeq = self.messageSeq.get()
         self.my_stats.add_message(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
         p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now)
         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} generated {type} message {p.seq} to {destId}")
@@ -425,8 +424,7 @@ class MeshNode:
                 # send real ACK if you are the destination and you did not yet send the ACK
                 if p.wantAck and p.destId == self.nodeid and not any(pA.requestId == p.seq for pA in self.packets):
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} sends a flooding ACK.")
-                    self.messageSeq["val"] += 1
-                    messageSeq = self.messageSeq["val"]
+                    messageSeq = self.messageSeq.get()
                     self.my_stats.add_message(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
                     pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now)
                     self.packets.append(pAck)

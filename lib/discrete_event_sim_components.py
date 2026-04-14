@@ -6,6 +6,30 @@ from lib.discrete_event import BroadcastPipe
 # This is where we put components of DiscreteEventSim that need to be referenced
 # by other classes, to avoid circular imports
 
+class Counter:
+    """simple shared counter, so we have a more ergonomic way to get
+    a strictly increasing integer for message IDs than manually handling an
+    integer. Can add locking later if necessary (very likely won't be).
+    """
+    def __init__(self, start: int=0):
+        """Create a counter
+
+        Arguments:
+        start -- integer to start counter at. First value from 'get' is start+1. Default 0.
+        """
+        self.counter = start
+
+    def get(self):
+        """increment the counter, returning its current value after the increment.
+        """
+        self.counter += 1
+        return self.counter
+
+    def peek(self):
+        """return the current value of the counter. Do not modify the counter
+        """
+        return self.counter
+
 class SimulationState:
     """Class to hold all global mutated state of a simulation, not including
     node-specific state such as the position of a moving node.
@@ -21,7 +45,7 @@ class SimulationState:
         self.bc_pipe = BroadcastPipe(self.env)
         self.packets = [] # used mostly for data tracking, but also for state
         self.packetsAtN = [[] for _ in range(conf.NR_NODES)]
-        self.messageSeq = {"val": 0} # TODO: turn this into a locked counter
+        self.messageSeq = Counter()
 
 class SimulationDataTracking:
     """Class to hold data used to monitor a simulation which has no
