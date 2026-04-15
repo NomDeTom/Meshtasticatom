@@ -40,13 +40,6 @@ class MeshNodeStats:
 
     def __init__(self, nodeid: int):
         self.nodeid = nodeid
-        self.messages = []
-
-    def add_message(self, m: MeshMessage):
-        """We have created a new message in the sim, either original or ack.
-        Add it to list of messages we've created
-        """
-        self.messages.append(m)
 
     def get_stats_dictionary(self) -> dict:
         """Return dictionary holding all internal data
@@ -54,7 +47,6 @@ class MeshNodeStats:
         """
         data = {
             "nodeid": self.nodeid,
-            "messages": self.messages,
         }
         return data
 
@@ -111,6 +103,8 @@ class MeshNode:
     def __init__(self, conf, sim_state: SimulationState, data_tracking: SimulationDataTracking, nodeConfig: NodeConfig):
         self.conf = conf
         self.nodeid = nodeConfig.node_id
+
+        # set up internal RNGs
         self.moveRng = random.Random(self.nodeid)
         self.nodeRng = random.Random(self.nodeid)
         self.rebroadcastRng = random.Random()
@@ -120,18 +114,21 @@ class MeshNode:
         self.role = nodeConfig.role
         self.hopLimit = nodeConfig.hop_limit
         self.antennaGain = nodeConfig.antenna_gain
+        self.period = nodeConfig.period
 
         self.my_stats = MeshNodeStats(self.nodeid)
 
         self.messageSeq = sim_state.messageSeq
         self.env = sim_state.env
-        self.period = nodeConfig.period
         self.bc_pipe = sim_state.bc_pipe
         self.nodes = sim_state.nodes
         self.packetsAtN = sim_state.packetsAtN
-        self.nrPacketsSent = 0
         self.packets = sim_state.packets
+
         self.delays = data_tracking.delays
+        self.messages = data_tracking.messages
+
+        self.nrPacketsSent = 0
         self.timesReceived = {}
         self.isReceiving = []
         self.isTransmitting = False
@@ -142,9 +139,11 @@ class MeshNode:
         self.rebroadcastPackets = 0
         self.isMoving = False
         self.gpsEnabled = False
+
         # Track last broadcast position/time
         self.lastBroadcastPosition = self.position.copy()
         self.lastBroadcastTime = 0
+
         # track total transmit time for the last 6 buckets (each is 10s in firmware logic)
         self.channelUtilization = [0] * self.conf.CHANNEL_UTILIZATION_PERIODS  # each entry is ms spent on air in that interval
         self.channelUtilizationIndex = 0  # which "bucket" is current
@@ -258,7 +257,7 @@ class MeshNode:
         """
         # increment the shared counter
         messageSeq = self.messageSeq.get()
-        self.my_stats.add_message(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
+        self.messages.append(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
         p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now)
         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} generated {type} message {p.seq} to {destId}")
         self.packets.append(p)
@@ -425,7 +424,7 @@ class MeshNode:
                 if p.wantAck and p.destId == self.nodeid and not any(pA.requestId == p.seq for pA in self.packets):
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} sends a flooding ACK.")
                     messageSeq = self.messageSeq.get()
-                    self.my_stats.add_message(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
+                    self.messages.append(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
                     pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now)
                     self.packets.append(pAck)
                     self.env.process(self.transmit(pAck))
