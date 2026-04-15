@@ -127,9 +127,6 @@ class DiscreteEventSim:
         # internal global state which changes
         self.mutated_state = SimulationState(self.conf, self.env)
 
-        # nodes are our actors, so should be separate from our global mutating sim state.
-        self.nodes = []
-
         # stats & data tracking
         self.data_tracking = SimulationDataTracking()
 
@@ -139,26 +136,25 @@ class DiscreteEventSim:
         # node configs provided, create nodes with them
         for cfg in self.node_configs:
             n = MeshNode(self.conf,
-                self.nodes,
                 self.mutated_state,
                 self.data_tracking,
                 cfg,
             )
-            self.nodes.append(n)
+            self.mutated_state.nodes.append(n)
 
         if self.graph is not None:
-            for n in self.nodes:
+            for n in self.mutated_state.nodes:
                 self.graph.add_node(n)
 
         # setup that requires having nodes
-        self.data_tracking.totalPairs, self.data_tracking.symmetricLinks, self.data_tracking.asymmetricLinks, self.data_tracking.noLinks = setup_asymmetric_links(self.conf, self.nodes)
+        self.data_tracking.totalPairs, self.data_tracking.symmetricLinks, self.data_tracking.asymmetricLinks, self.data_tracking.noLinks = setup_asymmetric_links(self.conf, self.mutated_state.nodes)
 
         if self.graph is not None and self.conf.MOVEMENT_ENABLED:
             # NOTE: this does not run under test, since we skip creating a GUI
             # TODO: revisit this design decision sometime. Do we want graphing/GUI to be handled in this object,
             # or by some external object the user wires in, like how batchSim.py adds in the simulation_progress process?
             # TODO: batchSim does this, but without the 4th parameter
-            self.env.process(run_graph_updates(self.env, self.graph, self.nodes, self.conf.ONE_MIN_INTERVAL))
+            self.env.process(run_graph_updates(self.env, self.graph, self.mutated_state.nodes, self.conf.ONE_MIN_INTERVAL))
         self.conf.update_router_dependencies()
 
     def run_simulation(self):
@@ -181,7 +177,7 @@ class DiscreteEventSim:
         # before, each node just appended to the list and it was naturally sorted.
         # May decide to undo this refactor later.
         messages = []
-        node_stats = [n.get_stats() for n in self.nodes]
+        node_stats = [n.get_stats() for n in self.mutated_state.nodes]
         for stats in node_stats:
             messages.extend(stats.messages)
         messages.sort(key=lambda m: m.genTime)
@@ -196,7 +192,7 @@ class DiscreteEventSim:
             "symmetricLinks": self.data_tracking.symmetricLinks,
             "asymmetricLinks": self.data_tracking.asymmetricLinks,
             "noLinks": self.data_tracking.noLinks,
-            "nodes": self.nodes,
+            "nodes": self.mutated_state.nodes,
         }
         results = SimulationResults(first_order_results)
         results.finalize(self.conf)

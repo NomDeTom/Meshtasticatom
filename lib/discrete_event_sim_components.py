@@ -46,6 +46,7 @@ class SimulationState:
         self.packets = [] # used mostly for data tracking, but also for state
         self.packetsAtN = [[] for _ in range(conf.NR_NODES)]
         self.messageSeq = Counter()
+        self.nodes = []
 
 class SimulationDataTracking:
     """Class to hold data used to monitor a simulation which has no

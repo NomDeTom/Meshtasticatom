@@ -108,7 +108,7 @@ class MeshNode:
     """Class containing all the particular state of a MeshNode, references to necessary
     external resources like the simpy env, and process functions for simulation
     """
-    def __init__(self, conf, nodes, sim_state: SimulationState, data_tracking: SimulationDataTracking, nodeConfig: NodeConfig):
+    def __init__(self, conf, sim_state: SimulationState, data_tracking: SimulationDataTracking, nodeConfig: NodeConfig):
         self.conf = conf
         self.nodeid = nodeConfig.node_id
         self.moveRng = random.Random(self.nodeid)
@@ -127,7 +127,7 @@ class MeshNode:
         self.env = sim_state.env
         self.period = nodeConfig.period
         self.bc_pipe = sim_state.bc_pipe
-        self.nodes = nodes
+        self.nodes = sim_state.nodes
         self.packetsAtN = sim_state.packetsAtN
         self.nrPacketsSent = 0
         self.packets = sim_state.packets
