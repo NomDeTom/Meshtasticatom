@@ -5,6 +5,22 @@ NODENUM_BROADCAST = 0xFFFFFFFF
 
 class MeshPacket:
     def __init__(self, conf, nodes, origTxNodeId, destId, txNodeId, plen, seq, genTime, wantAck, isAck, requestId, now):
+        """Create a new packet and calculate which nodes sense and receive it
+
+        Arguments:
+        conf -- simulation Config
+        nodes -- set of all nodes in the simulation. For calculating which nodes receive the packet
+        origTxNodeId -- ID of originating node
+        destId -- ID of destination node (specific node or broadcast)
+        txNodeId -- ID of currently transmitting node
+        plen -- packet length
+        seq -- message sequence number
+        genTime -- sim time of original packet generation (different from acks/rebroadcasts)
+        wantAck -- this packet wants an ACK
+        isAck -- this packet is an ACK packet
+        requestId -- ID of packet requesting ACK (only valid for ACK packets)
+        now -- current sim time when called, always `env.now`
+        """
         self.conf = conf
         self.origTxNodeId = origTxNodeId
         self.destId = destId
@@ -30,6 +46,7 @@ class MeshPacket:
         self.bw = self.conf.current_preset["bw"]
         self.freq = self.conf.FREQ
         self.tx_node = next(n for n in nodes if n.nodeid == self.txNodeId)
+        # calculate reception at all other nodes
         for rx_node in nodes:
             if rx_node.nodeid == self.txNodeId:
                 continue
