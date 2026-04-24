@@ -57,6 +57,8 @@ def calc_dist(x0, x1, y0, y1, z0=0, z1=0):
     return np.sqrt(((abs(x0-x1))**2)+((abs(y0-y1))**2)+((abs(z0-z1)**2)))
 
 def setup_asymmetric_links(conf, nodes):
+    """updates conf to populate LINK_OFFSET member to simulate asymmetric links
+    """
     asymLinkRng = random.Random(conf.SEED)
     totalPairs = 0
     symmetricLinks = 0

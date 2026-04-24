@@ -241,5 +241,36 @@ class TestDiscreteEventSim(unittest.TestCase):
         gpsEnabled = results['gpsEnabled']
         self.assertEqual(gpsEnabled, 1, "expected number of nodes with GPS")
 
+    def test_sim_does_not_change_config(self):
+        import copy
+
+        from lib.node import default_generate_node_list
+
+        # get default config, set node number
+        from lib.config import CONFIG
+        conf = CONFIG
+
+        # copied from the 10-node test just because, but not necessary
+        random.seed(conf.SEED)
+
+        conf.NR_NODES = 3 # smaller number for speed.
+        conf.update_router_dependencies()
+        nodeConfig = default_generate_node_list(conf)
+        # skipping GUI graphing to speed things up
+
+        # get copy of the config pre-run
+        old_conf = copy.deepcopy(conf)
+
+        # set up and run sim
+        sim = lib.discrete_event_sim.DiscreteEventSim(conf, nodeConfig)
+        sim.run_simulation()
+
+        # go through the full sim lifecycle, to cover everywhere that may touch config
+        results = sim.get_results()
+
+        # set difference trick to compare configs
+        conf_diff = conf.__dict__.items() ^ old_conf.__dict__.items()
+        self.assertEqual(len(conf_diff), 0, "config has not been changed by running a simulation")
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,3 +1,4 @@
+import copy
 import logging
 from typing import TYPE_CHECKING
 
@@ -122,7 +123,7 @@ class DiscreteEventSim:
 
         # set constant state/initial state from parameters
         self.env = SimpyEnvironment()
-        self.conf = conf
+        self.conf = copy.deepcopy(conf) # have our own copy so our setup_asymmetric_links doesn't change whatever config we've been passed.
         self.node_configs = node_configs
 
         # internal global state which changes
