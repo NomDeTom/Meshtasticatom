@@ -13,6 +13,8 @@ from lib.node import MeshNode, NodeConfig
 
 if TYPE_CHECKING:
     from lib.gui import Graph
+from lib.packet import MeshPacket
+from lib.phy import estimate_path_loss
 
 logger = logging.getLogger(__name__)
 
@@ -135,12 +137,15 @@ class DiscreteEventSim:
         # note: we allow user to specify if graphing will happen or not
         self.graph = graph
 
+        # use node configs to populate the connectivity matrix
+        self.initialize_connectivity_map()
+
         # node configs provided, create nodes with them
         for cfg in self.node_configs:
             n = MeshNode(self.conf,
                 self.mutated_state,
                 self.data_tracking,
-                cfg,
+                cfg
             )
             self.mutated_state.nodes.append(n)
 
@@ -150,6 +155,9 @@ class DiscreteEventSim:
 
         # setup that requires having nodes
         self.data_tracking.totalPairs, self.data_tracking.symmetricLinks, self.data_tracking.asymmetricLinks, self.data_tracking.noLinks = setup_asymmetric_links(self.conf, self.mutated_state.nodes)
+
+        logger.debug(f"link offsets: {self.conf.LINK_OFFSET}")
+        logger.debug(f"connectivity map: {self.mutated_state.connectivity_map}")
 
         if self.graph is not None and self.conf.MOVEMENT_ENABLED:
             # NOTE: this does not run under test, since we skip creating a GUI
@@ -194,3 +202,25 @@ class DiscreteEventSim:
         results.finalize(self.conf)
 
         return results
+
+    def initialize_connectivity_map(self):
+        '''use node configs to compute the initial connectivity map for later
+        lookups
+        '''
+        for tx_node in self.node_configs:
+            # compute the set of all nodes our signal is detectable at
+            reachable_node_set = set()
+            for rx_node in self.node_configs:
+                if tx_node.node_id == rx_node.node_id:
+                    continue # skip self
+
+                # compute path loss
+                tx_power = self.conf.PTX # can move this into NodeConfig w/ default
+                dist = tx_node.position.euclidean_distance(rx_node.position)
+                pl = estimate_path_loss(self.conf, dist, self.conf.FREQ, tx_node.position.z, rx_node.position.z)
+                rssi = tx_power + tx_node.antenna_gain + rx_node.antenna_gain - pl
+                rssi += 8 # some extra margin (tested against 10-node standard)
+                if rssi > self.conf.current_preset['sensitivity']:
+                    reachable_node_set.add(rx_node.node_id)
+
+            self.mutated_state.connectivity_map[tx_node.node_id] = reachable_node_set

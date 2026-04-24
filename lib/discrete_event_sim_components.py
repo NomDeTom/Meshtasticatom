@@ -47,6 +47,7 @@ class SimulationState:
         self.packetsAtN = [[] for _ in range(conf.NR_NODES)]
         self.messageSeq = Counter()
         self.nodes = []
+        self.connectivity_map = {} # node_id -> set of nodes which can hear it. (list would be faster for lookup)
 
 class SimulationDataTracking:
     """Class to hold data used to monitor a simulation which has no

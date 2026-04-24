@@ -12,6 +12,7 @@ from lib.discrete_event_sim_components import SimulationState, SimulationDataTra
 from lib.mac import set_transmit_delay, get_retransmission_msec
 from lib.phy import check_collision, is_channel_active, airtime
 from lib.packet import NODENUM_BROADCAST, MeshPacket, MeshMessage
+from lib.phy import estimate_path_loss
 from lib.point import Point
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ class MeshNode:
         self.my_stats = MeshNodeStats(self.nodeid)
 
         self.messageSeq = sim_state.messageSeq
+        self.connectivity_map = sim_state.connectivity_map
         self.env = sim_state.env
         self.bc_pipe = sim_state.bc_pipe
         self.nodes = sim_state.nodes
@@ -232,6 +234,41 @@ class MeshNode:
             # Update node’s position
             self.position.update_xy(new_x, new_y)
 
+            # update connectivity map:
+            # - update for this node: we may have gained and lost reachable nodes
+            # - new reachable nodes: add ourselves to their connectivity map entry
+            # - lost reachable nodes: remove ourselves from their connectivity map entry
+            # may need to deepcopy if we put more complex things in here
+            old_reachable_set = self.connectivity_map[self.nodeid].copy()
+            new_reachable_set = set()
+            for rx_node in self.nodes:
+                if rx_node.nodeid == self.nodeid:
+                    continue # skip self
+                tx_power = self.conf.PTX # can move this into NodeConfig w/ default
+                dist = self.position.euclidean_distance(rx_node.position)
+                pl = estimate_path_loss(self.conf, dist, self.conf.FREQ, self.position.z, rx_node.position.z)
+                rssi = tx_power + self.antennaGain + rx_node.antennaGain - pl
+                rssi += 8 # some extra margin (tested against 10-node standard)
+                if rssi > self.conf.current_preset['sensitivity']:
+                    new_reachable_set.add(rx_node.nodeid)
+
+            # calculate set differences to detect added and removed nodes
+            lost_nodes = old_reachable_set.difference(new_reachable_set)
+            gained_nodes = new_reachable_set.difference(old_reachable_set)
+
+            logger.debug(f"node {self.nodeid} moved. Connectivity change: -{len(lost_nodes)}, +{len(gained_nodes)}.")
+            # TODO: -0, +0 case is very common. Skip what we can in this case.
+            # update this node's connectivity map
+            self.connectivity_map[self.nodeid] = new_reachable_set
+            # add ourself to the connectivity map of every node we gained
+            for node_id in gained_nodes:
+                self.connectivity_map[node_id].add(self.nodeid)
+            # remove ourself from the connectivity map of every node we lost
+            for node_id in lost_nodes:
+                self.connectivity_map[node_id].discard(self.nodeid)
+
+            # connectivity map updated!
+
             if self.gpsEnabled:
                 distanceTraveled = self.position.euclidean_distance(self.lastBroadcastPosition)
                 logger.debug(f"{self.env.now:.3f} node {self.nodeid} checks last broadcast position distance: {distanceTraveled} from {self.lastBroadcastPosition} to {self.position}")
@@ -258,7 +295,7 @@ class MeshNode:
         # increment the shared counter
         messageSeq = self.messageSeq.get()
         self.messages.append(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
-        p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now)
+        p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now, self.connectivity_map)
         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} generated {type} message {p.seq} to {destId}")
         self.packets.append(p)
         self.env.process(self.transmit(p))
@@ -321,7 +358,7 @@ class MeshNode:
                         break
                     else:
                         if minRetransmissions > 0:  # generate new packet with same sequence number
-                            pNew = MeshPacket(self.conf, self.nodes, self.nodeid, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now)
+                            pNew = MeshPacket(self.conf, self.nodes, self.nodeid, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now, self.connectivity_map)
                             pNew.retransmissions = minRetransmissions - 1
                             logger.debug(f"{self.env.now:.3f} Node {self.nodeid} wants to retransmit its generated packet to {destId} with seq.nr. {p.seq} minRetransmissions {minRetransmissions}")
                             self.packets.append(pNew)
@@ -431,7 +468,7 @@ class MeshNode:
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} sends a flooding ACK.")
                     messageSeq = self.messageSeq.get()
                     self.messages.append(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
-                    pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now)
+                    pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now, self.connectivity_map)
                     self.packets.append(pAck)
                     self.env.process(self.transmit(pAck))
                 # Rebroadcasting Logic for received message. This is a broadcast or a DM not meant for us.
@@ -440,7 +477,7 @@ class MeshNode:
                     if self.conf.SELECTED_ROUTER_TYPE == self.conf.ROUTER_TYPE.MANAGED_FLOOD:
                         if not self.is_client_mute:
                             logger.debug(f"{self.env.now:.3f} Node {self.nodeid} rebroadcasts received packet {p.seq}")
-                            pNew = MeshPacket(self.conf, self.nodes, p.origTxNodeId, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now)
+                            pNew = MeshPacket(self.conf, self.nodes, p.origTxNodeId, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now, self.connectivity_map)
                             pNew.hopLimit = p.hopLimit - 1
                             self.packets.append(pNew)
                             self.env.process(self.transmit(pNew))

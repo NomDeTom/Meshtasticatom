@@ -1,10 +1,13 @@
+import logging
+
 from lib.phy import airtime, estimate_path_loss
 
 NODENUM_BROADCAST = 0xFFFFFFFF
 
+logger = logging.getLogger(__name__)
 
 class MeshPacket:
-    def __init__(self, conf, nodes, origTxNodeId, destId, txNodeId, plen, seq, genTime, wantAck, isAck, requestId, now):
+    def __init__(self, conf, nodes, origTxNodeId, destId, txNodeId, plen, seq, genTime, wantAck, isAck, requestId, now, connectivity_map):
         """Create a new packet and calculate which nodes sense and receive it
 
         Arguments:
@@ -20,6 +23,7 @@ class MeshPacket:
         isAck -- this packet is an ACK packet
         requestId -- ID of packet requesting ACK (only valid for ACK packets)
         now -- current sim time when called, always `env.now`
+        connectivity_map -- map of nodeid -> set of reachable nodeids
         """
         self.conf = conf
         self.origTxNodeId = origTxNodeId
@@ -50,6 +54,16 @@ class MeshPacket:
         for rx_node in nodes:
             if rx_node.nodeid == self.txNodeId:
                 continue
+
+            # reduce calculations just to plausibly reachable nodes. This is initialized
+            # before sim start, and updated whenever a moving node's position is updated,
+            # so is always an accurate map of what nodes could (with extra margin) even
+            # sense each other.
+            if not connectivity_map[self.txNodeId].__contains__(rx_node.nodeid):
+                logger.debug(f"skipping {self.txNodeId} -> {rx_node.nodeid} computation. connectivity map: {connectivity_map[self.txNodeId]}")
+                continue
+                #pass # swap the comments on the pass/continue to skip the optimization, accepting a bit of overhead.
+
             dist_3d = self.tx_node.position.euclidean_distance(rx_node.position)
             offset = self.conf.LINK_OFFSET[(self.txNodeId, rx_node.nodeid)]
             self.LplAtN[rx_node.nodeid] = estimate_path_loss(self.conf, dist_3d, self.freq, self.tx_node.position.z, rx_node.position.z) + offset
