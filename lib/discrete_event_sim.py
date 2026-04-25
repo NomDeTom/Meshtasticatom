@@ -138,7 +138,8 @@ class DiscreteEventSim:
         self.graph = graph
 
         # use node configs to populate the connectivity matrix
-        self.initialize_connectivity_map()
+        if self.conf.ENABLE_CONNECTIVITY_MAP:
+            self.initialize_connectivity_map()
 
         # node configs provided, create nodes with them
         for cfg in self.node_configs:

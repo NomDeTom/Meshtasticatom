@@ -60,13 +60,16 @@ class MeshPacket:
             # before sim start, and updated whenever a moving node's position is updated,
             # so is always an accurate map of what nodes could (with extra margin) even
             # sense each other.
-            if not connectivity_map[self.txNodeId].__contains__(rx_node.nodeid):
+            if self.conf.ENABLE_CONNECTIVITY_MAP and not connectivity_map[self.txNodeId].__contains__(rx_node.nodeid):
                 logger.debug(f"skipping {self.txNodeId} -> {rx_node.nodeid} computation. connectivity map: {connectivity_map[self.txNodeId]}")
                 continue
-                #pass # swap the comments on the pass/continue to skip the optimization, accepting a bit of overhead.
 
-            # look up baseline path loss from matrix, since we've already computed it.
-            baseline_pathloss = baseline_pathloss_matrix[self.txNodeId][rx_node.nodeid]
+            if self.conf.ENABLE_CONNECTIVITY_MAP:
+                # look up baseline path loss from matrix, since we've already computed it.
+                baseline_pathloss = baseline_pathloss_matrix[self.txNodeId][rx_node.nodeid]
+            else:
+                dist_3d = self.tx_node.position.euclidean_distance(rx_node.position)
+                baseline_pathloss = estimate_path_loss(self.conf, dist_3d, self.freq, self.tx_node.position.z, rx_node.position.z)
 
             offset = self.conf.LINK_OFFSET[(self.txNodeId, rx_node.nodeid)]
             self.LplAtN[rx_node.nodeid] = baseline_pathloss + offset

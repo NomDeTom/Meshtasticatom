@@ -29,6 +29,7 @@ class Config:
         self.ONE_HR_INTERVAL = self.ONE_MIN_INTERVAL * 60
 
         ### Discrete-event specific ###
+        self.ENABLE_CONNECTIVITY_MAP = True # use the connectivity map optimization
         self.MODEM_PRESET = "LONG_FAST"  # LoRa modem preset to use (default LONG_FAST matches firmware)
         self.PERIOD = 100 * self.ONE_SECOND_INTERVAL  # mean period of generating a new message with exponential distribution in ms
         self.PACKETLENGTH = 40  # payload in bytes

@@ -239,41 +239,42 @@ class MeshNode:
             # - update for this node: we may have gained and lost reachable nodes
             # - new reachable nodes: add ourselves to their connectivity map entry
             # - lost reachable nodes: remove ourselves from their connectivity map entry
-            # may need to deepcopy if we put more complex things in here
-            old_reachable_set = self.connectivity_map[self.nodeid].copy()
-            new_reachable_set = set()
-            for rx_node in self.nodes:
-                if rx_node.nodeid == self.nodeid:
-                    continue # skip self
-                tx_power = self.conf.PTX # can move this into NodeConfig w/ default
-                dist = self.position.euclidean_distance(rx_node.position)
-                pl = estimate_path_loss(self.conf, dist, self.conf.FREQ, self.position.z, rx_node.position.z)
-                rssi = tx_power + self.antennaGain + rx_node.antennaGain - pl
+            if self.conf.ENABLE_CONNECTIVITY_MAP:
+                # may need to deepcopy if we put more complex things in here
+                old_reachable_set = self.connectivity_map[self.nodeid].copy()
+                new_reachable_set = set()
+                for rx_node in self.nodes:
+                    if rx_node.nodeid == self.nodeid:
+                        continue # skip self
+                    tx_power = self.conf.PTX # can move this into NodeConfig w/ default
+                    dist = self.position.euclidean_distance(rx_node.position)
+                    pl = estimate_path_loss(self.conf, dist, self.conf.FREQ, self.position.z, rx_node.position.z)
+                    rssi = tx_power + self.antennaGain + rx_node.antennaGain - pl
 
-                # compare with extra margin (set based on 10-node standard test)
-                if rssi + 8 > self.conf.current_preset['sensitivity']:
-                    new_reachable_set.add(rx_node.nodeid)
+                    # compare with extra margin (set based on 10-node standard test)
+                    if rssi + 8 > self.conf.current_preset['sensitivity']:
+                        new_reachable_set.add(rx_node.nodeid)
 
-                # cache path loss (it is symmetric, and static until one of the nodes moves)
-                self.baseline_pathloss_matrix[self.nodeid][rx_node.nodeid] = pl
-                self.baseline_pathloss_matrix[rx_node.nodeid][self.nodeid] = pl
+                    # cache path loss (it is symmetric, and static until one of the nodes moves)
+                    self.baseline_pathloss_matrix[self.nodeid][rx_node.nodeid] = pl
+                    self.baseline_pathloss_matrix[rx_node.nodeid][self.nodeid] = pl
 
-            # calculate set differences to detect added and removed nodes
-            lost_nodes = old_reachable_set.difference(new_reachable_set)
-            gained_nodes = new_reachable_set.difference(old_reachable_set)
+                # calculate set differences to detect added and removed nodes
+                lost_nodes = old_reachable_set.difference(new_reachable_set)
+                gained_nodes = new_reachable_set.difference(old_reachable_set)
 
-            logger.debug(f"node {self.nodeid} moved. Connectivity change: -{len(lost_nodes)}, +{len(gained_nodes)}.")
-            # TODO: -0, +0 case is very common. Skip what we can in this case.
-            # update this node's connectivity map
-            self.connectivity_map[self.nodeid] = new_reachable_set
-            # add ourself to the connectivity map of every node we gained
-            for node_id in gained_nodes:
-                self.connectivity_map[node_id].add(self.nodeid)
-            # remove ourself from the connectivity map of every node we lost
-            for node_id in lost_nodes:
-                self.connectivity_map[node_id].discard(self.nodeid)
+                logger.debug(f"node {self.nodeid} moved. Connectivity change: -{len(lost_nodes)}, +{len(gained_nodes)}.")
+                # TODO: -0, +0 case is very common. Skip what we can in this case.
+                # update this node's connectivity map
+                self.connectivity_map[self.nodeid] = new_reachable_set
+                # add ourself to the connectivity map of every node we gained
+                for node_id in gained_nodes:
+                    self.connectivity_map[node_id].add(self.nodeid)
+                # remove ourself from the connectivity map of every node we lost
+                for node_id in lost_nodes:
+                    self.connectivity_map[node_id].discard(self.nodeid)
 
-            # connectivity map updated!
+                # connectivity map updated!
 
             if self.gpsEnabled:
                 distanceTraveled = self.position.euclidean_distance(self.lastBroadcastPosition)
