@@ -61,6 +61,7 @@ def parse_params(conf, args=None) -> [NodeConfig]:
     parser.add_argument('--simtime-seconds', type=float, help='Override simulation duration in seconds')
     parser.add_argument('--period-seconds', type=float, help='Override mean message-generation period in seconds')
     parser.add_argument('--no-gui', action='store_true', help='Run without Tk/Matplotlib graphing or schedule plotting')
+    parser.add_argument('--disable-connectivity-map', action='store_true', help='disable the connectivity map optimization. May be faster for some scenarios with many moving nodes and/or a densely connected network.')
     parser.add_argument('-v', '--verbose', action='store_true', help='enable verbose/debug output')
 
     parsed_arguments = parser.parse_args(args)
@@ -87,6 +88,12 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         # explicit flag so historical visual CLI behavior remains unchanged.
         gui_enabled = False
         plot_enabled = False
+
+    # enforce defaulting to True
+    if parsed_arguments.disable_connectivity_map:
+        conf.ENABLE_CONNECTIVITY_MAP = False
+    else:
+        conf.ENABLE_CONNECTIVITY_MAP = True
 
     if parsed_arguments.from_file is not None and parsed_arguments.router_type is not None:
         parser.error("Incompatible argument selection. --from-file and --router-type can not be used together")

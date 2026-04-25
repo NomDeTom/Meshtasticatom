@@ -11,9 +11,10 @@ from lib.node import NodeConfig, default_generate_node_list
 
 conf = CONFIG
 
-def run_discrete_sim_timeit(nr_nodes: int, n_times: int):
+def run_discrete_sim_timeit(nr_nodes: int, n_times: int, enable_connectivity_map: bool):
     def init_and_run_discrete_sim():
         random.seed(conf.SEED) # arbitrary seed rng for consistency between runs
+        conf.ENABLE_CONNECTIVITY_MAP = enable_connectivity_map
         sim = DiscreteEventSim(conf, node_configs)
         sim.run_simulation()
         # include getting results, since a sim isn't useful unless we have results.
@@ -49,13 +50,14 @@ parser = argparse.ArgumentParser(
     )
 parser.add_argument('nr_nodes', type=int, help='number of nodes to generate')
 parser.add_argument('n_times', nargs='?', type=int, default=25, help='number of times to run a discrete sim to gather timing data')
+parser.add_argument('--enable-connectivity-map', action='store_true', help='enable the connectivity map optimization. Default false')
 
 parsed_arguments = parser.parse_args()
 
 # do timing run using timeit. More involved profiling should use cProfile
-print(f"running default configuration discrete sim of {parsed_arguments.nr_nodes} nodes, {parsed_arguments.n_times} times")
+print(f"running default configuration discrete sim of {parsed_arguments.nr_nodes} nodes, {parsed_arguments.n_times} times. connectivity map enabled: {parsed_arguments.enable_connectivity_map}")
 
-results = run_discrete_sim_timeit(parsed_arguments.nr_nodes, parsed_arguments.n_times)
+results = run_discrete_sim_timeit(parsed_arguments.nr_nodes, parsed_arguments.n_times, parsed_arguments.enable_connectivity_map)
 
 print(f"fastest time (in seconds): {results['fastest']}")
 print(f"average time (in seconds), ignoring slowest outliers: {results['modified_average']}")
