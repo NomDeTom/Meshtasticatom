@@ -8,6 +8,7 @@ import simpy
 
 from lib.common import find_random_position
 from lib.config import Config
+from lib.discrete_event_sim_components import SimulationState, SimulationDataTracking
 from lib.mac import set_transmit_delay, get_retransmission_msec
 from lib.phy import check_collision, is_channel_active, airtime
 from lib.packet import NODENUM_BROADCAST, MeshPacket, MeshMessage
@@ -32,19 +33,37 @@ class MESHTASTIC_ROLE(Enum):
     ROUTER_LATE = 'ROUTER_LATE'
     CLIENT_BASE = 'CLIENT_BASE'
 
+class MeshNodeStats:
+    """Statistics, monitoring, and data tracking only relevant to and entirely
+    internal to a single particular node
+    """
+
+    def __init__(self, nodeid: int):
+        self.nodeid = nodeid
+
+    def get_stats_dictionary(self) -> dict:
+        """Return dictionary holding all internal data
+        (may not need this)
+        """
+        data = {
+            "nodeid": self.nodeid,
+        }
+        return data
+
 class NodeConfig:
     """Specific configuration for a node
     """
-    def __init__(self, node_id: int, position: Point, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False):
+    def __init__(self, node_id: int, position: Point, period: int, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False):
         self.node_id = node_id
         self.position = position.copy() # make sure we keep our own point
+        self.period = period
         self.role = role
         self.antenna_gain = antenna_gain
         self.hop_limit = hop_limit
         self.neighbor_info = neighbor_info
 
     @classmethod
-    def from_gen_scenario_output(cls, node_id: int, node_dict: {}):
+    def from_gen_scenario_output(cls, node_id: int, node_dict: {}, period: int):
         """create NodeConfig from a node dict as returned from gen_scenario.
         You probably want to iterate over the keys that function gives you
         and pass individual values indexed by them to this method.
@@ -75,15 +94,17 @@ class NodeConfig:
         else:
             role = MESHTASTIC_ROLE.CLIENT
 
-        return NodeConfig(node_id, position, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
+        return NodeConfig(node_id, position, period, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
 
 class MeshNode:
     """Class containing all the particular state of a MeshNode, references to necessary
     external resources like the simpy env, and process functions for simulation
     """
-    def __init__(self, conf, nodes, env, bc_pipe, period, messages, packetsAtN, packets, delays, nodeConfig: NodeConfig, messageSeq):
+    def __init__(self, conf, sim_state: SimulationState, data_tracking: SimulationDataTracking, nodeConfig: NodeConfig):
         self.conf = conf
         self.nodeid = nodeConfig.node_id
+
+        # set up internal RNGs
         self.moveRng = random.Random(self.nodeid)
         self.nodeRng = random.Random(self.nodeid)
         self.rebroadcastRng = random.Random()
@@ -93,17 +114,21 @@ class MeshNode:
         self.role = nodeConfig.role
         self.hopLimit = nodeConfig.hop_limit
         self.antennaGain = nodeConfig.antenna_gain
+        self.period = nodeConfig.period
 
-        self.messageSeq = messageSeq
-        self.env = env
-        self.period = period
-        self.bc_pipe = bc_pipe
-        self.nodes = nodes
-        self.messages = messages
-        self.packetsAtN = packetsAtN
+        self.my_stats = MeshNodeStats(self.nodeid)
+
+        self.messageSeq = sim_state.messageSeq
+        self.env = sim_state.env
+        self.bc_pipe = sim_state.bc_pipe
+        self.nodes = sim_state.nodes
+        self.packetsAtN = sim_state.packetsAtN
+        self.packets = sim_state.packets
+
+        self.delays = data_tracking.delays
+        self.messages = data_tracking.messages
+
         self.nrPacketsSent = 0
-        self.packets = packets
-        self.delays = delays
         self.timesReceived = {}
         self.isReceiving = []
         self.isTransmitting = False
@@ -114,19 +139,21 @@ class MeshNode:
         self.rebroadcastPackets = 0
         self.isMoving = False
         self.gpsEnabled = False
+
         # Track last broadcast position/time
         self.lastBroadcastPosition = self.position.copy()
         self.lastBroadcastTime = 0
+
         # track total transmit time for the last 6 buckets (each is 10s in firmware logic)
         self.channelUtilization = [0] * self.conf.CHANNEL_UTILIZATION_PERIODS  # each entry is ms spent on air in that interval
         self.channelUtilizationIndex = 0  # which "bucket" is current
         self.prevTxAirUtilization = 0.0   # how much total tx air-time had been used at last sample
 
-        env.process(self.track_channel_utilization(env))
+        self.env.process(self.track_channel_utilization())
         if not self.is_repeater:  # repeaters don't generate messages themselves
-            env.process(self.generate_message())
-        env.process(self.receive(self.bc_pipe.get_output_conn()))
-        self.transmitter = simpy.Resource(env, 1)
+            self.env.process(self.generate_message())
+        self.env.process(self.receive(self.bc_pipe.get_output_conn()))
+        self.transmitter = simpy.Resource(self.env, 1)
 
         # start mobility if enabled
         if self.conf.MOVEMENT_ENABLED and self.moveRng.random() <= self.conf.APPROX_RATIO_NODES_MOVING:
@@ -142,7 +169,7 @@ class MeshNode:
             ]
             self.movementStepSize = self.moveRng.choice(possibleSpeeds)
 
-            env.process(self.move_node(env))
+            self.env.process(self.move_node())
 
     @property
     def is_router(self):
@@ -156,14 +183,14 @@ class MeshNode:
     def is_client_mute(self):
         return self.role == MESHTASTIC_ROLE.CLIENT_MUTE
 
-    def track_channel_utilization(self, env):
+    def track_channel_utilization(self):
         """
         Periodically compute how many seconds of airtime this node consumed
         over the last 10-second block and store it in the ring buffer.
         """
         while True:
             # Wait 10 seconds of simulated time
-            yield env.timeout(self.conf.TEN_SECONDS_INTERVAL)
+            yield self.env.timeout(self.conf.TEN_SECONDS_INTERVAL)
 
             curTotalAirtime = self.txAirUtilization  # total so far, in *milliseconds*
             blockAirtimeMs = curTotalAirtime - self.prevTxAirUtilization
@@ -182,7 +209,7 @@ class MeshNode:
         # fraction = sum_ms / 60000, then multiply by 100 for percent
         return (sumMs / (self.conf.CHANNEL_UTILIZATION_PERIODS * self.conf.TEN_SECONDS_INTERVAL)) * 100.0
 
-    def move_node(self, env):
+    def move_node(self):
         while True:
 
             # Pick a random direction and distance
@@ -208,27 +235,28 @@ class MeshNode:
             if self.gpsEnabled:
                 distanceTraveled = self.position.euclidean_distance(self.lastBroadcastPosition)
                 logger.debug(f"{self.env.now:.3f} node {self.nodeid} checks last broadcast position distance: {distanceTraveled} from {self.lastBroadcastPosition} to {self.position}")
-                timeElapsed = env.now - self.lastBroadcastTime
+                timeElapsed = self.env.now - self.lastBroadcastTime
                 if distanceTraveled >= self.conf.SMART_POSITION_DISTANCE_THRESHOLD and timeElapsed >= self.conf.SMART_POSITION_DISTANCE_MIN_TIME:
                     currentUtil = self.channel_utilization_percent()
                     if currentUtil < 25.0:
                         self.send_packet(NODENUM_BROADCAST, "POSITION")
                         self.lastBroadcastPosition.update_xy(self.position.x, self.position.y)
-                        self.lastBroadcastTime = env.now
+                        self.lastBroadcastTime = self.env.now
                     else:
                         logger.debug(f"{self.env.now:.3f} node {self.nodeid} SKIPS POSITION broadcast (util={currentUtil:.1f}% > 25%)")
 
             # Wait until next move
             nextMove = self.get_next_time(self.conf.ONE_MIN_INTERVAL)
             if nextMove >= 0:
-                yield env.timeout(nextMove)
+                yield self.env.timeout(nextMove)
             else:
                 break
 
     def send_packet(self, destId, type=""):
+        """We have created a new message and wish to send it to the network
+        """
         # increment the shared counter
-        self.messageSeq["val"] += 1
-        messageSeq = self.messageSeq["val"]
+        messageSeq = self.messageSeq.get()
         self.messages.append(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
         p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now)
         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} generated {type} message {p.seq} to {destId}")
@@ -395,8 +423,7 @@ class MeshNode:
                 # send real ACK if you are the destination and you did not yet send the ACK
                 if p.wantAck and p.destId == self.nodeid and not any(pA.requestId == p.seq for pA in self.packets):
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} sends a flooding ACK.")
-                    self.messageSeq["val"] += 1
-                    messageSeq = self.messageSeq["val"]
+                    messageSeq = self.messageSeq.get()
                     self.messages.append(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
                     pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now)
                     self.packets.append(pAck)
@@ -413,6 +440,11 @@ class MeshNode:
                             self.env.process(self.transmit(pNew))
                 else:
                     self.droppedByDelay += 1
+
+    def get_stats(self) -> MeshNodeStats:
+        """Get internally-tracked statistics/data. Only valid after the sim ends.
+        """
+        return self.my_stats
 
 def default_generate_node_list(conf: Config) -> [NodeConfig]:
     """Default function for randomly choosing node configurations for a simulation
@@ -448,6 +480,6 @@ def default_generate_node_list(conf: Config) -> [NodeConfig]:
             role = MESHTASTIC_ROLE.CLIENT
 
         # make NodeConfig object to pass to MeshNode constructor
-        node_configs.append(NodeConfig(i, position, role))
+        node_configs.append(NodeConfig(i, position, conf.PERIOD, role))
 
     return node_configs

@@ -7,40 +7,12 @@ import numpy as np
 from lib.common import setup_asymmetric_links
 from lib.config import Config
 from lib.discrete_event import BroadcastPipe
+from lib.discrete_event_sim_components import SimulationState, SimulationDataTracking
 from lib.gui import Graph, run_graph_updates
 from lib.node import MeshNode, NodeConfig, default_generate_node_list
 from lib.packet import MeshPacket
 
 logger = logging.getLogger(__name__)
-
-class SimulationState:
-    """Class to hold all global mutated state of a simulation, not including
-    node-specific state such as the position of a moving node.
-    """
-    def __init__(self, conf: Config, env: SimpyEnvironment):
-        """Constructor
-
-        Arguments:
-        conf -- Config object of global sim constants. Only used for NR_NODES.
-        env -- SimPy Environment for simulation. Required for internal BroadcastPipe.
-        """
-        self.env = env
-        self.bc_pipe = BroadcastPipe(self.env)
-        self.packets = [] # used mostly for data tracking, but also for state
-        self.packetsAtN = [[] for _ in range(conf.NR_NODES)]
-        self.messageSeq = {"val": 0} # TODO: turn this into a locked counter
-
-class SimulationDataTracking:
-    """Class to hold data used to monitor a simulation which has no
-    impact on the state or progress of the simulation
-    """
-    def __init__(self):
-        self.messages = []
-        self.delays = []
-        self.totalPairs = 0
-        self.symmetricLinks = 0
-        self.asymmetricLinks = 0
-        self.noLinks = 0
 
 class SimulationResults:
     """Class to hold simulation result data. Any interesting or relevant
@@ -108,8 +80,8 @@ class SimulationResults:
         else:
             self.results["collisionRate"] = np.nan
 
-        if self.results["messageSeq"]["val"] != 0 and conf.NR_NODES - 1 != 0:
-            self.results["nodeReach"] = self.results["nrUseful"]/(self.results["messageSeq"]["val"]*(conf.NR_NODES-1))
+        if self.results["messageSeq"] != 0 and conf.NR_NODES - 1 != 0:
+            self.results["nodeReach"] = self.results["nrUseful"]/(self.results["messageSeq"]*(conf.NR_NODES-1))
         else:
             self.results["nodeReach"] = np.nan
 
@@ -155,9 +127,6 @@ class DiscreteEventSim:
         # internal global state which changes
         self.mutated_state = SimulationState(self.conf, self.env)
 
-        # nodes are our actors, so should be separate from our global mutating sim state.
-        self.nodes = []
-
         # stats & data tracking
         self.data_tracking = SimulationDataTracking()
 
@@ -167,32 +136,25 @@ class DiscreteEventSim:
         # node configs provided, create nodes with them
         for cfg in self.node_configs:
             n = MeshNode(self.conf,
-                self.nodes,
-                self.env,
-                self.mutated_state.bc_pipe,
-                self.conf.PERIOD,
-                self.data_tracking.messages,
-                self.mutated_state.packetsAtN,
-                self.mutated_state.packets,
-                self.data_tracking.delays,
+                self.mutated_state,
+                self.data_tracking,
                 cfg,
-                self.mutated_state.messageSeq
             )
-            self.nodes.append(n)
+            self.mutated_state.nodes.append(n)
 
         if self.graph is not None:
-            for n in self.nodes:
+            for n in self.mutated_state.nodes:
                 self.graph.add_node(n)
 
         # setup that requires having nodes
-        self.data_tracking.totalPairs, self.data_tracking.symmetricLinks, self.data_tracking.asymmetricLinks, self.data_tracking.noLinks = setup_asymmetric_links(self.conf, self.nodes)
+        self.data_tracking.totalPairs, self.data_tracking.symmetricLinks, self.data_tracking.asymmetricLinks, self.data_tracking.noLinks = setup_asymmetric_links(self.conf, self.mutated_state.nodes)
 
         if self.graph is not None and self.conf.MOVEMENT_ENABLED:
             # NOTE: this does not run under test, since we skip creating a GUI
             # TODO: revisit this design decision sometime. Do we want graphing/GUI to be handled in this object,
             # or by some external object the user wires in, like how batchSim.py adds in the simulation_progress process?
             # TODO: batchSim does this, but without the 4th parameter
-            self.env.process(run_graph_updates(self.env, self.graph, self.nodes, self.conf.ONE_MIN_INTERVAL))
+            self.env.process(run_graph_updates(self.env, self.graph, self.mutated_state.nodes, self.conf.ONE_MIN_INTERVAL))
         self.conf.update_router_dependencies()
 
     def run_simulation(self):
@@ -208,18 +170,21 @@ class DiscreteEventSim:
 
     def get_results(self) -> SimulationResults:
         # TODO: is it possible to add a check that the sim has finished running?
-        # first-order stats/data collection
+
+        # expect to use this very soon
+        #node_stats = [n.get_stats() for n in self.mutated_state.nodes]
+
         first_order_results = {
             "packets": self.mutated_state.packets,
             "packetsAtN": self.mutated_state.packetsAtN,
-            "messageSeq": self.mutated_state.messageSeq,
+            "messageSeq": self.mutated_state.messageSeq.peek(),
             "messages": self.data_tracking.messages,
             "delays": self.data_tracking.delays,
             "totalPairs": self.data_tracking.totalPairs,
             "symmetricLinks": self.data_tracking.symmetricLinks,
             "asymmetricLinks": self.data_tracking.asymmetricLinks,
             "noLinks": self.data_tracking.noLinks,
-            "nodes": self.nodes,
+            "nodes": self.mutated_state.nodes,
         }
         results = SimulationResults(first_order_results)
         results.finalize(self.conf)
