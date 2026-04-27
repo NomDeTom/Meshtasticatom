@@ -152,6 +152,68 @@ class TestDiscreteEventSim(unittest.TestCase):
         self.assertEqual(sim_results['movingNodes'], 1, 'expected number of moving nodes')
         self.assertEqual(sim_results['gpsEnabled'], 1, 'expected number of gps enabled nodes')
 
+    def test_connectivity_map_optimization_is_consistent(self):
+        from lib.node import default_generate_node_list
+
+        from lib.config import CONFIG
+        conf = CONFIG
+
+        all_results = []
+
+        # somewhat lazily test with connectivity map optimization on and off,
+        # to make sure the optimization doesn't change any results/the simulation
+        # is consistent regardless of this optimization. Further simulation changes
+        # that warrant this kind of testing should be very carefully considered,
+        # since that leads to exponential growth in configurations to test.
+        for enable_optimization in [True, False]:
+            # test against optimization being enabled/disabled
+            conf.ENABLE_CONNECTIVITY_MAP = enable_optimization
+
+            # crucial!! and perhaps a tad fragile
+            random.seed(conf.SEED)
+
+            self.assertEqual(conf.SEED, 44, "expected default seed for rng")
+
+            # imitate parse_params
+            conf.NR_NODES = 10
+            conf.update_router_dependencies()
+            nodeConfig = default_generate_node_list(conf)
+            # skipping GUI graphing to speed things up
+
+            # set up sim
+            sim = lib.discrete_event_sim.DiscreteEventSim(conf, nodeConfig)
+            sim.run_simulation()
+
+            # collect & unpack results for easy copy/paste of asserts
+            results = sim.get_results()
+            all_results.append(results)
+
+        # look at just specific simulation results for now. May go as deep as
+        # comparing MeshPacket objects later if that seems useful and we feel
+        # like adding comparison functions to those objects.
+        facets = [
+            'potentialReceivers',
+            'sent',
+            'nrCollisions',
+            'nrSensed',
+            'nrReceived',
+            'nrUseful',
+            'meanDelay',
+            'txAirUtilizationRate',
+            'collisionRate',
+            'nodeReach',
+            'nrReceived',
+            'usefulness',
+            'delayDropped',
+            'asymmetricLinkRate',
+            'symmetricLinkRate',
+            'noLinkRate',
+            'movingNodes',
+            'gpsEnabled',
+        ]
+
+        for f in facets:
+            self.assertEqual(all_results[0][f], all_results[1][f], 'connectivity map optimization is consistent')
 
     # TODO: add default-skip GUI test?
     def test_discrete_sim_ten_nodes(self):
