@@ -205,7 +205,7 @@ class DiscreteEventSim:
 
     def initialize_connectivity_map(self):
         '''use node configs to compute the initial connectivity map for later
-        lookups
+        lookups. Also, initialize baseline path loss matrix.
         '''
         for tx_node in self.node_configs:
             # compute the set of all nodes our signal is detectable at
@@ -219,8 +219,13 @@ class DiscreteEventSim:
                 dist = tx_node.position.euclidean_distance(rx_node.position)
                 pl = estimate_path_loss(self.conf, dist, self.conf.FREQ, tx_node.position.z, rx_node.position.z)
                 rssi = tx_power + tx_node.antenna_gain + rx_node.antenna_gain - pl
-                rssi += 8 # some extra margin (tested against 10-node standard)
-                if rssi > self.conf.current_preset['sensitivity']:
+
+                # compare with extra margin (set based on 10-node standard test)
+                if rssi + 8 > self.conf.current_preset['sensitivity']:
                     reachable_node_set.add(rx_node.node_id)
+
+                # cache path loss (it is symmetric, and static until one of the nodes moves)
+                self.mutated_state.baseline_pathloss_matrix[tx_node.node_id][rx_node.node_id] = pl
+                self.mutated_state.baseline_pathloss_matrix[rx_node.node_id][tx_node.node_id] = pl
 
             self.mutated_state.connectivity_map[tx_node.node_id] = reachable_node_set

@@ -7,7 +7,7 @@ NODENUM_BROADCAST = 0xFFFFFFFF
 logger = logging.getLogger(__name__)
 
 class MeshPacket:
-    def __init__(self, conf, nodes, origTxNodeId, destId, txNodeId, plen, seq, genTime, wantAck, isAck, requestId, now, connectivity_map):
+    def __init__(self, conf, nodes, origTxNodeId, destId, txNodeId, plen, seq, genTime, wantAck, isAck, requestId, now, connectivity_map, baseline_pathloss_matrix):
         """Create a new packet and calculate which nodes sense and receive it
 
         Arguments:
@@ -24,6 +24,7 @@ class MeshPacket:
         requestId -- ID of packet requesting ACK (only valid for ACK packets)
         now -- current sim time when called, always `env.now`
         connectivity_map -- map of nodeid -> set of reachable nodeids
+        baseline_pathloss_matrix -- pre-computed matrix of pathloss between nodes
         """
         self.conf = conf
         self.origTxNodeId = origTxNodeId
@@ -64,9 +65,11 @@ class MeshPacket:
                 continue
                 #pass # swap the comments on the pass/continue to skip the optimization, accepting a bit of overhead.
 
-            dist_3d = self.tx_node.position.euclidean_distance(rx_node.position)
+            # look up baseline path loss from matrix, since we've already computed it.
+            baseline_pathloss = baseline_pathloss_matrix[self.txNodeId][rx_node.nodeid]
+
             offset = self.conf.LINK_OFFSET[(self.txNodeId, rx_node.nodeid)]
-            self.LplAtN[rx_node.nodeid] = estimate_path_loss(self.conf, dist_3d, self.freq, self.tx_node.position.z, rx_node.position.z) + offset
+            self.LplAtN[rx_node.nodeid] = baseline_pathloss + offset
             self.rssiAtN[rx_node.nodeid] = self.txpow + self.tx_node.antennaGain + rx_node.antennaGain - self.LplAtN[rx_node.nodeid]
             if self.rssiAtN[rx_node.nodeid] >= self.conf.current_preset["sensitivity"]:
                 self.sensedByN[rx_node.nodeid] = True
