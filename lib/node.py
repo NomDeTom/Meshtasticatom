@@ -42,12 +42,17 @@ class MeshNodeStats:
     def __init__(self, nodeid: int):
         self.nodeid = nodeid
 
+        self.packetsHeard = 0
+        self.packetsRebroadcast = 0
+
     def get_stats_dictionary(self) -> dict:
         """Return dictionary holding all internal data
         (may not need this)
         """
         data = {
             "nodeid": self.nodeid,
+            "packetsHeard": self.packetsHeard,
+            "packetsRebroadcast": self.packetsRebroadcast,
         }
         return data
 
@@ -117,6 +122,7 @@ class MeshNode:
         self.antennaGain = nodeConfig.antenna_gain
         self.period = nodeConfig.period
 
+        # using this more like a struct than a proper object.
         self.my_stats = MeshNodeStats(self.nodeid)
 
         self.messageSeq = sim_state.messageSeq
@@ -480,10 +486,12 @@ class MeshNode:
                     self.env.process(self.transmit(pAck))
                 # Rebroadcasting Logic for received message. This is a broadcast or a DM not meant for us.
                 elif not p.destId == self.nodeid and not ackReceived and not realAckReceived and p.hopLimit > 0:
+                    self.my_stats.packetsHeard += 1 # packets which could potentially be rebroadcast
                     # FloodingRouter: rebroadcast received packet
                     if self.conf.SELECTED_ROUTER_TYPE == self.conf.ROUTER_TYPE.MANAGED_FLOOD:
                         if not self.is_client_mute:
                             logger.debug(f"{self.env.now:.3f} Node {self.nodeid} rebroadcasts received packet {p.seq}")
+                            self.my_stats.packetsRebroadcast += 1
                             pNew = MeshPacket(self.conf, self.nodes, p.origTxNodeId, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
                             pNew.hopLimit = p.hopLimit - 1
                             self.packets.append(pNew)
