@@ -372,8 +372,14 @@ class MeshNode:
     def receive(self, in_pipe):
         while True:
             p = yield in_pipe.get()
-            if p.sensedByN[self.nodeid] and not p.collidedAtN[self.nodeid] and p.onAirToN[self.nodeid]:  # start of reception
-                if not self.isTransmitting:
+
+            if p.sensedByN[self.nodeid] and p.onAirToN[self.nodeid]:  # start of reception
+                if p.collidedAtN[self.nodeid]:
+                    # this packet collided, so we can sense it but not decode it.
+                    # Mark it as no-longer on air and leave further processing to
+                    # the 'end of transmission' branch
+                    p.onAirToN[self.nodeid] = False
+                elif not self.isTransmitting:
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started receiving packet {p.seq} from {p.txNodeId}")
                     p.onAirToN[self.nodeid] = False
                     self.isReceiving.append(True)
