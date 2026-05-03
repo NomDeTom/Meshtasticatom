@@ -168,6 +168,7 @@ class TestLoraMeshCli(unittest.TestCase):
             """
         )
 
+        os.makedirs("out", exist_ok=True)
         with tempfile.NamedTemporaryFile("w", dir="out", suffix=".yaml", delete=False, encoding="utf-8") as scenario_file:
             scenario_file.write(scenario)
             scenario_filename = os.path.basename(scenario_file.name)
