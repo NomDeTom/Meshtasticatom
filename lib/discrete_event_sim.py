@@ -1,4 +1,5 @@
 import logging
+from typing import TYPE_CHECKING
 
 # probably not necessary, but "Environment" seemed too generic to me
 from simpy import Environment as SimpyEnvironment
@@ -6,11 +7,11 @@ import numpy as np
 
 from lib.common import setup_asymmetric_links
 from lib.config import Config
-from lib.discrete_event import BroadcastPipe
 from lib.discrete_event_sim_components import SimulationState, SimulationDataTracking
-from lib.gui import Graph, run_graph_updates
-from lib.node import MeshNode, NodeConfig, default_generate_node_list
-from lib.packet import MeshPacket
+from lib.node import MeshNode, NodeConfig
+
+if TYPE_CHECKING:
+    from lib.gui import Graph
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ class DiscreteEventSim:
     simulation config, all necessary state, and sim plumbing.
     """
 
-    def __init__(self, conf: Config, node_configs: [NodeConfig], graph: Graph | None = None):
+    def __init__(self, conf: Config, node_configs: [NodeConfig], graph: "Graph | None" = None):
         """Constructor.
 
         Arguments:
@@ -154,6 +155,8 @@ class DiscreteEventSim:
             # TODO: revisit this design decision sometime. Do we want graphing/GUI to be handled in this object,
             # or by some external object the user wires in, like how batchSim.py adds in the simulation_progress process?
             # TODO: batchSim does this, but without the 4th parameter
+            from lib.gui import run_graph_updates
+
             self.env.process(run_graph_updates(self.env, self.graph, self.mutated_state.nodes, self.conf.ONE_MIN_INTERVAL))
         self.conf.update_router_dependencies()
 
@@ -190,4 +193,3 @@ class DiscreteEventSim:
         results.finalize(self.conf)
 
         return results
-
