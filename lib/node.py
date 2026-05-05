@@ -258,7 +258,7 @@ class MeshNode:
                     rssi = tx_power + self.antennaGain + rx_node.antennaGain - pl
 
                     # compare with extra margin (set based on 10-node standard test)
-                    if rssi + 8 > self.conf.current_preset['sensitivity']:
+                    if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > self.conf.current_preset['sensitivity']:
                         new_reachable_set.add(rx_node.nodeid)
 
                     # cache path loss (it is symmetric, and static until one of the nodes moves)

@@ -58,6 +58,5 @@ class SimulationDataTracking:
         self.messages = []
         self.delays = []
         self.totalPairs = 0
-        self.symmetricLinks = 0
-        self.asymmetricLinks = 0
+        self.totalLinks = 0
         self.noLinks = 0

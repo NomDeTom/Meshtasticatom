@@ -222,11 +222,7 @@ def run_simulation(conf, node_config):
     print("Number of packets dropped by delay/hop limit:", delayDropped)
 
     if conf.MODEL_ASYMMETRIC_LINKS:
-        asymmetricLinkRate = results['asymmetricLinkRate']
-        symmetricLinkRate = results['symmetricLinkRate']
         noLinkRate = results['noLinkRate']
-        print("Asymmetric links:", round(asymmetricLinkRate * 100, 2), '%')
-        print("Symmetric links:", round(symmetricLinkRate * 100, 2), '%')
         print("No links:", round(noLinkRate * 100, 2), '%')
 
     if conf.MOVEMENT_ENABLED:

@@ -1,4 +1,5 @@
 import logging
+import random
 
 from lib.discrete_event_sim_components import Counter
 from lib.phy import airtime, estimate_path_loss
@@ -9,6 +10,11 @@ logger = logging.getLogger(__name__)
 
 class MeshPacket:
     unique_packet_counter = Counter()
+    asym_rng = random.Random(44) # same default seed as in lib/config.py
+
+    @staticmethod
+    def seed_asym_rng(seed):
+        MeshPacket.asym_rng.seed(seed)
 
     @staticmethod
     def reset_packet_counter():
@@ -73,6 +79,15 @@ class MeshPacket:
             # sense each other.
             if self.conf.ENABLE_CONNECTIVITY_MAP and not connectivity_map[self.txNodeId].__contains__(rx_node.nodeid):
                 logger.debug(f"skipping {self.txNodeId} -> {rx_node.nodeid} computation. connectivity map: {connectivity_map[self.txNodeId]}")
+                # Each tx -> rx computation we skip gets the asrm_rng one call out
+                # of sync between simulations with and without the connectivity
+                # map optimization. Thus particular tx -> rx calculations
+                # change between the optimization, which can lead to changes
+                # in sim behavior between the optimization being on/off, leading
+                # to inconsistencies beteen the optimization being on/off.
+                #
+                # Keep things balanced by 'unnecessarily' calling the rng here.
+                MeshPacket.asym_rng.gauss(0, conf.MODEL_ASYMMETRIC_LINKS_STDDEV)
                 continue
 
             if self.conf.ENABLE_CONNECTIVITY_MAP:
@@ -82,7 +97,13 @@ class MeshPacket:
                 dist_3d = self.tx_node.position.euclidean_distance(rx_node.position)
                 baseline_pathloss = estimate_path_loss(self.conf, dist_3d, self.freq, self.tx_node.position.z, rx_node.position.z)
 
-            offset = self.conf.LINK_OFFSET[(self.txNodeId, rx_node.nodeid)]
+            if conf.MODEL_ASYMMETRIC_LINKS:
+                offset = MeshPacket.asym_rng.gauss(0, conf.MODEL_ASYMMETRIC_LINKS_STDDEV)
+                logger.debug(f"packet {self.unique_packet_seq} for msg {self.seq} has asym offset {offset} dB")
+                if abs(offset) > conf.CONNECTIVITY_MAP_RSSI_MARGIN:
+                    logger.debug(f"packet {self.unique_packet_counter} has asymmetric RSSI offset {offset} which is outside margin. This will lead to inconsistent results with the connectivity map optimization.")
+            else:
+                offset = 0
             self.LplAtN[rx_node.nodeid] = baseline_pathloss + offset
             self.rssiAtN[rx_node.nodeid] = self.txpow + self.tx_node.antennaGain + rx_node.antennaGain - self.LplAtN[rx_node.nodeid]
             if self.rssiAtN[rx_node.nodeid] >= self.conf.current_preset["sensitivity"]:

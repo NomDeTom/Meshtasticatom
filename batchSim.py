@@ -121,8 +121,6 @@ usefulness_dict = {}
 usefulnessStds_dict = {}
 
 # If you have link asymmetry metrics
-asymmetricLinkRate_dict = {}
-symmetricLinkRate_dict = {}
 noLinkRate_dict = {}
 
 # Initialize dictionaries for each router type
@@ -138,8 +136,6 @@ for rt in routerTypes:
     usefulness_dict[rt] = []
     usefulnessStds_dict[rt] = []
 
-    asymmetricLinkRate_dict[rt] = []
-    symmetricLinkRate_dict[rt] = []
     noLinkRate_dict[rt] = []
 
 
@@ -201,8 +197,6 @@ for rt_i, routerType in enumerate(routerTypes):
     reachabilityStds = []
     usefulness = []
     usefulnessStds = []
-    asymmetricLinkRateAll = []
-    symmetricLinkRateAll = []
     noLinkRateAll = []
 
     # Inner loop for each nrNodes
@@ -213,8 +207,6 @@ for rt_i, routerType in enumerate(routerTypes):
         collisionRate = [0 for _ in range(repetitions)]
         meanDelay = [0 for _ in range(repetitions)]
         meanTxAirUtilization = [0 for _ in range(repetitions)]
-        asymmetricLinkRate = [0 for _ in range(repetitions)]
-        symmetricLinkRate = [0 for _ in range(repetitions)]
         noLinkRate = [0 for _ in range(repetitions)]
 
         print(f"\n[Router: {routerTypeLabel}] Start of {p+1} out of {len(numberOfNodes)} - {nrNodes} nodes")
@@ -262,8 +254,6 @@ for rt_i, routerType in enumerate(routerTypes):
             messageSeq = results["messageSeq"]
             delays = results["delays"]
             totalPairs = results["totalPairs"]
-            symmetricLinks = results["symmetricLinks"]
-            asymmetricLinks = results["asymmetricLinks"]
             noLinks = results["noLinks"]
             nodes = results["nodes"]
 
@@ -283,8 +273,6 @@ for rt_i, routerType in enumerate(routerTypes):
 
             if routerTypeConf.MODEL_ASYMMETRIC_LINKS:
                 # actually percentages, not rates
-                asymmetricLinkRate[rep] = round(results['asymmetricLinkRate'] * 100, 2)
-                symmetricLinkRate[rep] = round(results['symmetricLinkRate'] * 100, 2)
                 noLinkRate[rep] = round(results['noLinkRate'] * 100, 2)
 
         # After finishing all repetitions for this nrNodes, compute means/stdevs
@@ -298,8 +286,6 @@ for rt_i, routerType in enumerate(routerTypes):
         delayStds.append(np.nanstd(meanDelay))
         meanTxAirUtils.append(np.nanmean(meanTxAirUtilization))
         txAirUtilsStds.append(np.nanstd(meanTxAirUtilization))
-        asymmetricLinkRateAll.append(np.nanmean(asymmetricLinkRate))
-        symmetricLinkRateAll.append(np.nanmean(symmetricLinkRate))
         noLinkRateAll.append(np.nanmean(noLinkRate))
 
         # Saving to file if needed
@@ -339,8 +325,6 @@ for rt_i, routerType in enumerate(routerTypes):
         print('Delay average:', round(np.nanmean(meanDelay), 2))
         print('Tx air utilization average:', round(np.nanmean(meanTxAirUtilization), 2))
         if routerTypeConf.MODEL_ASYMMETRIC_LINKS:
-            print('Asymmetric Links:', round(np.nanmean(asymmetricLinkRate), 2))
-            print('Symmetric Links:', round(np.nanmean(symmetricLinkRate), 2))
             print('No Links:', round(np.nanmean(noLinkRate), 2))
 
     # After finishing all nrNodes for the *current* router type,
@@ -355,8 +339,6 @@ for rt_i, routerType in enumerate(routerTypes):
     delayStds_dict[routerType] = delayStds
     meanTxAirUtils_dict[routerType] = meanTxAirUtils
     txAirUtilsStds_dict[routerType] = txAirUtilsStds
-    asymmetricLinkRate_dict[routerType] = asymmetricLinkRateAll
-    symmetricLinkRate_dict[routerType] = symmetricLinkRateAll
     noLinkRate_dict[routerType] = noLinkRateAll
 
 

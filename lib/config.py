@@ -30,6 +30,8 @@ class Config:
 
         ### Discrete-event specific ###
         self.ENABLE_CONNECTIVITY_MAP = True # use the connectivity map optimization
+        self.CONNECTIVITY_MAP_RSSI_MARGIN = 8
+
         self.MODEM_PRESET = "LONG_FAST"  # LoRa modem preset to use (default LONG_FAST matches firmware)
         self.PERIOD = 100 * self.ONE_SECOND_INTERVAL  # mean period of generating a new message with exponential distribution in ms
         self.PACKETLENGTH = 40  # payload in bytes
@@ -420,10 +422,7 @@ class Config:
         # Adds a random offset to the link quality of each link
         self.MODEL_ASYMMETRIC_LINKS = True
         self.MODEL_ASYMMETRIC_LINKS_MEAN = 0
-        self.MODEL_ASYMMETRIC_LINKS_STDDEV = 3
-        # Stores the offset for each link
-        # Populated when the simulator first starts
-        self.LINK_OFFSET = {}
+        self.MODEL_ASYMMETRIC_LINKS_STDDEV = 2
 
         #################################################
         ####### MOVING NODE SIMULATION VARIABLES ########
