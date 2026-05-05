@@ -27,7 +27,7 @@ def check_collision(conf, env, packet, rx_nodeId, packetsAtN):
         for other in packetsAtN[rx_nodeId]:
             if frequency_collision(packet, other) and sf_collision(packet, other):
                 if timing_collision(conf, env, packet, other):
-                    logger.debug(f'Packet nr. {packet.seq} from {packet.txNodeId} and packet nr. {other.seq} from {other.txNodeId} will collide!')
+                    logger.debug(f'Packet nr. {packet.unique_packet_seq} from {packet.txNodeId} and packet nr. {other.unique_packet_seq} from {other.txNodeId} will collide!')
                     c = power_collision(packet, other, rx_nodeId)
                     # mark all the collided packets
                     for p in c:
@@ -179,6 +179,7 @@ def estimate_path_loss(conf, dist, freq, txZ=None, rxZ=None, model=None):
     return Lpl
 
 
+# TODO: take conf as parameter so we don't use this module's default conf
 def zero_link_budget(dist):
     return conf.PTX + 2 * conf.GL - estimate_path_loss(conf, dist, conf.FREQ) - conf.current_preset["sensitivity"]
 
@@ -199,10 +200,12 @@ def rootFinder(func, x0, args=(), tol=1, maxiter=100):
   print("Warning: could not estimate max. range")
   return x
 
+# TODO: take conf as parameter so we don't use this module's default conf
 def zero_link_budget_with_gain(dist, gain):
     return conf.PTX + gain - estimate_path_loss(conf, dist, conf.FREQ) - conf.current_preset["sensitivity"]
 
 def estimate_max_range(gain):
     return rootFinder(zero_link_budget_with_gain, 1500, args=(gain,))
 
+# TODO: take conf as parameter so we don't use this module's default conf
 MAXRANGE = rootFinder(zero_link_budget, 1500)

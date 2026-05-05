@@ -388,41 +388,43 @@ class MeshNode:
 
             # listen-before-talk from src/mesh/RadioLibInterface.cpp
             txTime = set_transmit_delay(self, packet)
-            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} picked wait time {txTime}")
+            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} schedules tx. Picked wait time {txTime}")
             yield self.env.timeout(txTime)
 
             # wait when currently receiving or transmitting, or channel is active
             while any(self.isReceiving) or self.isTransmitting or is_channel_active(self, self.env):
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} is busy Tx-ing {self.isTransmitting} or Rx-ing {any(self.isReceiving)} else channel busy!")
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} delaying tx: busy Tx-ing {self.isTransmitting=} or Rx-ing {any(self.isReceiving)=}, else channel busy!")
                 txTime = set_transmit_delay(self, packet)
                 yield self.env.timeout(txTime)
-            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} ends waiting")
+            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} ends waiting for scheduled tx")
 
             # check if you received an ACK for this message in the meantime
             self.was_seen_recently(packet, ownTransmit=True)
             if not self.perhaps_cancel_dupe(packet):  # if you did not receive an ACK for this message in the meantime
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started low level send {packet.seq} hopLimit {packet.hopLimit} original Tx {packet.origTxNodeId}")
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started low level send {packet.unique_packet_seq} for msg {packet.seq} hopLimit {packet.hopLimit} original Tx {packet.origTxNodeId}")
                 self.nrPacketsSent += 1
                 for rx_node in self.nodes:
                     if packet.sensedByN[rx_node.nodeid]:
                         if check_collision(self.conf, self.env, packet, rx_node.nodeid, self.packetsAtN) == 0:
                             self.packetsAtN[rx_node.nodeid].append(packet)
+                # packet's collidedAtN field is now computed/valid
                 packet.startTime = self.env.now
                 packet.endTime = self.env.now + packet.timeOnAir
                 self.txAirUtilization += packet.timeOnAir
                 self.airUtilization += packet.timeOnAir
-                self.bc_pipe.put(packet)
+                self.bc_pipe.put(packet) # queue for nodes to receive packet
                 self.isTransmitting = True
                 yield self.env.timeout(packet.timeOnAir)
                 self.isTransmitting = False
             else:  # received ACK: abort transmit, remove from packets generated
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} in the meantime received ACK, abort packet with seq. nr {packet.seq}")
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} in the meantime received ACK, abort packet with seq. nr {packet.unique_packet_seq} for msg {packet.seq}")
                 self.packets.remove(packet)
 
     def receive(self, in_pipe):
         while True:
             p = yield in_pipe.get()
 
+            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} fetches packet {p.unique_packet_seq} for msg {p.seq} from {p.txNodeId} from bc_pipe: sensed: {p.sensedByN[self.nodeid]} collided: {p.collidedAtN[self.nodeid]} on air: {p.onAirToN[self.nodeid]}")
             if p.sensedByN[self.nodeid] and p.onAirToN[self.nodeid]:  # start of reception
                 if p.collidedAtN[self.nodeid]:
                     # this packet collided, so we can sense it but not decode it.
@@ -430,11 +432,11 @@ class MeshNode:
                     # the 'end of transmission' branch
                     p.onAirToN[self.nodeid] = False
                 elif not self.isTransmitting:
-                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started receiving packet {p.seq} from {p.txNodeId}")
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started receiving packet {p.unique_packet_seq} for msg {p.seq} from {p.txNodeId}")
                     p.onAirToN[self.nodeid] = False
                     self.isReceiving.append(True)
                 else:  # if you were currently transmitting, you could not have sensed it
-                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} was transmitting, so could not receive packet {p.seq}")
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} was transmitting, so could not receive packet {p.unique_packet_seq} for msg {p.seq}")
                     p.sensedByN[self.nodeid] = False
                     p.onAirToN[self.nodeid] = False
             elif p.sensedByN[self.nodeid]:  # end of reception
@@ -443,11 +445,12 @@ class MeshNode:
                 except Exception:
                     pass
                 self.airUtilization += p.timeOnAir
+                # begin receiving packet fine, but a collision begins before we finish receiving.
                 if p.collidedAtN[self.nodeid]:
-                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not decode packet.")
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not decode packet {p.unique_packet_seq}.")
                     continue
                 p.receivedAtN[self.nodeid] = True
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} received packet {p.seq} with delay {round(self.env.now - p.genTime, 2)}") # TODO: better way to calculate delay for log
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} received packet {p.unique_packet_seq} for msg {p.seq} with delay {round(self.env.now - p.genTime, 2)}") # TODO: better way to calculate delay for log
                 self.delays.append(self.env.now - p.genTime)
 
                 # Update history of received packets
@@ -490,7 +493,7 @@ class MeshNode:
                     # FloodingRouter: rebroadcast received packet
                     if self.conf.SELECTED_ROUTER_TYPE == self.conf.ROUTER_TYPE.MANAGED_FLOOD:
                         if not self.is_client_mute:
-                            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} rebroadcasts received packet {p.seq}")
+                            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} schedules rebroadcast for received packet {p.unique_packet_seq} for msg {p.seq}")
                             self.my_stats.packetsRebroadcast += 1
                             pNew = MeshPacket(self.conf, self.nodes, p.origTxNodeId, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
                             pNew.hopLimit = p.hopLimit - 1
