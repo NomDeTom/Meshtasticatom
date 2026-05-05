@@ -27,7 +27,7 @@ def check_collision(conf, env, packet, rx_nodeId, packetsAtN):
         for other in packetsAtN[rx_nodeId]:
             if frequency_collision(packet, other) and sf_collision(packet, other):
                 if timing_collision(conf, env, packet, other):
-                    logger.debug(f'Packet nr. {packet.unique_packet_seq} from {packet.txNodeId} and packet nr. {other.unique_packet_seq} from {other.txNodeId} will collide!')
+                    logger.debug(f'Packet nr. {packet.unique_packet_seq} from {packet.txNodeId} and packet nr. {other.unique_packet_seq} from {other.txNodeId} will collide at node {rx_nodeId}!')
                     c = power_collision(packet, other, rx_nodeId)
                     # mark all the collided packets
                     for p in c:

@@ -128,6 +128,9 @@ class DiscreteEventSim:
         self.conf = copy.deepcopy(conf) # have our own copy so our setup_asymmetric_links doesn't change whatever config we've been passed.
         self.node_configs = node_configs
 
+        # reset MeshPacket class variables
+        MeshPacket.reset_packet_counter()
+
         # internal global state which changes
         self.mutated_state = SimulationState(self.conf, self.env)
 

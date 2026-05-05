@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 class MeshPacket:
     unique_packet_counter = Counter()
 
+    @staticmethod
+    def reset_packet_counter():
+        MeshPacket.unique_packet_counter = Counter()
+
     def __init__(self, conf, nodes, origTxNodeId, destId, txNodeId, plen, seq, genTime, wantAck, isAck, requestId, now, connectivity_map, baseline_pathloss_matrix):
         """Create a new packet and calculate which nodes sense and receive it
 

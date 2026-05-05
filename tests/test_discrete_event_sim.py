@@ -213,7 +213,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         ]
 
         for f in facets:
-            self.assertEqual(all_results[0][f], all_results[1][f], 'connectivity map optimization is consistent')
+            self.assertEqual(all_results[0][f], all_results[1][f], f'connectivity map optimization is inconsistent for facet {f}')
 
     # TODO: add default-skip GUI test?
     def test_discrete_sim_ten_nodes(self):
