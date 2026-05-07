@@ -162,7 +162,7 @@ class MeshNode:
         # rather than binding to a member variable
         self.node_conf = nodeConfig
 
-        self.nodeid = nodeConfig.node_id
+        self.nodeid = self.node_conf.node_id
 
         # set up internal RNGs
         self.moveRng = random.Random(self.nodeid)
@@ -170,11 +170,11 @@ class MeshNode:
         self.rebroadcastRng = random.Random()
 
         # require the user to specify a node configuration now, including position
-        self.position = nodeConfig.position # explicitly use position in node_conf
-        self.role = nodeConfig.role
-        self.hopLimit = nodeConfig.hop_limit
-        self.antennaGain = nodeConfig.antenna_gain
-        self.period = nodeConfig.period
+        self.position = self.node_conf.position # explicitly use position in node_conf
+        self.role = self.node_conf.role
+        self.hopLimit = self.node_conf.hop_limit
+        self.antennaGain = self.node_conf.antenna_gain
+        self.period = self.node_conf.period
 
         # using this more like a struct than a proper object.
         self.my_stats = MeshNodeStats(self.nodeid)
