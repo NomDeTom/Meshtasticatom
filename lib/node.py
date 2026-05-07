@@ -59,23 +59,41 @@ class MeshNodeStats:
 class NodeConfig:
     """Specific configuration for a node
     """
-    def __init__(self, node_id: int, position: Point, period: int, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False):
+    def __init__(self, node_id: int, position: Point, period: int, tx_power: int, freq: float, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False):
+        """Initial configuration of a node
+
+        Arguments:
+        node_id -- unique integer id of node (used as list index)
+        position -- beginning Point(x, y, z) location of node
+        period -- how often to generate messages. Average of an exponential distribution.
+        tx_power -- transmit power in dB
+        freq -- frequency in Hz
+        role -- Meshtastic firmware role. Default: CLIENT
+        antenna_gain -- antenna gain in dBi. Default 0
+        hop_limit -- hop limit. Default 3
+        neighbor_info -- if neighbor info is enabled. Default False
+        """
         self.node_id = node_id
         self.position = position.copy() # make sure we keep our own point
         self.period = period
+        self.tx_power = tx_power
+        self.freq = freq
         self.role = role
         self.antenna_gain = antenna_gain
         self.hop_limit = hop_limit
         self.neighbor_info = neighbor_info
 
     @classmethod
-    def from_gen_scenario_output(cls, node_id: int, node_dict: {}, period: int):
+    def from_gen_scenario_output(cls, node_id: int, node_dict: {}, period: int, tx_power: int, freq: float):
         """create NodeConfig from a node dict as returned from gen_scenario.
         You probably want to iterate over the keys that function gives you
         and pass individual values indexed by them to this method.
 
         Arguments:
         node_dict -- dictionary defining a single node. From gen_scenario.
+        period -- how often to generate messages. Average of an exponential distribution.
+        tx_power -- transmit power in dB
+        freq -- frequency in Hz
         """
         nd = node_dict
         position = Point(nd['x'], nd['y'], nd['z'])
@@ -100,14 +118,50 @@ class NodeConfig:
         else:
             role = MESHTASTIC_ROLE.CLIENT
 
-        return NodeConfig(node_id, position, period, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
+        return NodeConfig(node_id, position, period, tx_power, freq, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
+
+    def compute_rssi_and_pathloss_to(self, rx_nodeconf, conf: Config) -> (float, float):
+        """Compute RSSI and pathloss from this node config as the transmitting node
+        to a receiving node, using a given config for various physical parameters.
+
+        Arguments:
+        rx_nodeconf -- NodeConfig of node we are transmitting to
+        conf -- Config object specifying various physical parameters
+
+        Returns:
+        (rssi, pathloss) -- rssi at rx_nodeconf, and pathloss along the path
+        """
+        if self.node_id == rx_nodeconf.node_id:
+            raise ValueError(f"Calculating rssi/pathloss between identical nodes is invalid. Node ID {self.node_id}")
+
+        # compute path loss
+        dist = self.position.euclidean_distance(rx_nodeconf.position)
+        pl = estimate_path_loss(conf, dist, self.freq, self.position.z, rx_nodeconf.position.z)
+        rssi = self.tx_power + self.antenna_gain + rx_nodeconf.antenna_gain - pl
+
+        return (rssi, pl)
 
 class MeshNode:
     """Class containing all the particular state of a MeshNode, references to necessary
     external resources like the simpy env, and process functions for simulation
     """
     def __init__(self, conf, sim_state: SimulationState, data_tracking: SimulationDataTracking, nodeConfig: NodeConfig):
+        """Create a MeshNode. Houses all node-specific state, sim processes, and
+        connections to broader sim environment and data collection.
+
+        Arguments:
+        conf -- Config object of various sim parameters
+        sim_state -- object holding all mutating state of the simulation
+        data_tracking -- object holding data collected from sim, doesn't influence state.
+        nodeConfig -- initial configuration of node
+        """
         self.conf = conf
+
+        # initially to move repeated rssi/pathloss computation into NodeConfig class.
+        # maybe move other state/config (role, period, etc.) into here explicitly
+        # rather than binding to a member variable
+        self.node_conf = nodeConfig
+
         self.nodeid = nodeConfig.node_id
 
         # set up internal RNGs
@@ -116,7 +170,7 @@ class MeshNode:
         self.rebroadcastRng = random.Random()
 
         # require the user to specify a node configuration now, including position
-        self.position = nodeConfig.position.copy() # make sure we have our own point
+        self.position = nodeConfig.position # explicitly use position in node_conf
         self.role = nodeConfig.role
         self.hopLimit = nodeConfig.hop_limit
         self.antennaGain = nodeConfig.antenna_gain
@@ -252,10 +306,8 @@ class MeshNode:
                 for rx_node in self.nodes:
                     if rx_node.nodeid == self.nodeid:
                         continue # skip self
-                    tx_power = self.conf.PTX # can move this into NodeConfig w/ default
-                    dist = self.position.euclidean_distance(rx_node.position)
-                    pl = estimate_path_loss(self.conf, dist, self.conf.FREQ, self.position.z, rx_node.position.z)
-                    rssi = tx_power + self.antennaGain + rx_node.antennaGain - pl
+
+                    (rssi, pl) = self.node_conf.compute_rssi_and_pathloss_to(rx_node.node_conf, self.conf)
 
                     # compare with extra margin (set based on 10-node standard test)
                     if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > self.conf.current_preset['sensitivity']:
@@ -541,6 +593,6 @@ def default_generate_node_list(conf: Config) -> [NodeConfig]:
             role = MESHTASTIC_ROLE.CLIENT
 
         # make NodeConfig object to pass to MeshNode constructor
-        node_configs.append(NodeConfig(i, position, conf.PERIOD, role))
+        node_configs.append(NodeConfig(i, position, conf.PERIOD, conf.PTX, conf.FREQ, role))
 
     return node_configs

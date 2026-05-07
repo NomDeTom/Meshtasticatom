@@ -213,11 +213,7 @@ class DiscreteEventSim:
 
                 self.data_tracking.totalPairs += 1
 
-                # compute path loss
-                tx_power = self.conf.PTX # can move this into NodeConfig w/ default
-                dist = tx_node.position.euclidean_distance(rx_node.position)
-                pl = estimate_path_loss(self.conf, dist, self.conf.FREQ, tx_node.position.z, rx_node.position.z)
-                rssi = tx_power + tx_node.antenna_gain + rx_node.antenna_gain - pl
+                (rssi, pl) = tx_node.compute_rssi_and_pathloss_to(rx_node, self.conf)
 
                 # compare with extra margin (set based on 10-node standard test)
                 if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > self.conf.current_preset['sensitivity']:

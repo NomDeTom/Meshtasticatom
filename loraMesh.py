@@ -103,7 +103,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         with open(os.path.join("out", parsed_arguments.from_file), 'r', encoding="utf-8") as file:
             raw_config = yaml.load(file, Loader=yaml.FullLoader)
         config = [
-            NodeConfig.from_gen_scenario_output(node_id, node_config, period)
+            # transmit power and frequency not previously saved. Use defaults from Config.
+            NodeConfig.from_gen_scenario_output(node_id, node_config, period, conf.PTX, conf.FREQ)
             for node_id, node_config in raw_config.items()
         ]
         nr_nodes = len(config)
