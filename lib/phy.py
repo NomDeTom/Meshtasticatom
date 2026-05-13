@@ -4,16 +4,28 @@ import random
 
 from lib.config import CONFIG
 
+# TODO: if our config deviates from the default, we WILL get incorrect results.
+# refactor things to take a config object
 conf = CONFIG
 
 logger = logging.getLogger(__name__)
 
-
-
+# checked as of tag v2.7.15.567b8ea in meshtastic-firmware repo
+NUM_SYM_CAD = 2
+NUM_SYM_CAD_24GHZ = 4
 
 #                           CAD duration   +     airPropagationTime+TxRxTurnaround+MACprocessing
 def get_current_slot_time():
-    return 8.5 * (2.0 ** conf.current_preset["sf"]) / conf.current_preset["bw"] * 1000 + 0.2 + 0.4 + 7
+    # all times in ms
+    sum_prop_turnaround_mac_time = 0.2 + 0.4 + 7
+    symbol_time = (2.0 ** conf.current_preset["sf"]) / conf.current_preset["bw"]
+
+    if conf.REGION['wide_lora']:
+        # TODO: currently wide_lora isn't fully implemented
+        # currently only 2.4GHz LoRa
+        return (NUM_SYM_CAD_24GHZ + (2 * conf.current_preset['sf'] + 3) / 32) * symbol_time + sum_prop_turnaround_mac_time
+    else:
+        return max(2.25, NUM_SYM_CAD + 0.5) * symbol_time + sum_prop_turnaround_mac_time
 
 
 def check_collision(conf, env, packet, rx_nodeId, packetsAtN):
