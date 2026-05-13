@@ -321,7 +321,7 @@ class MeshNode:
                 lost_nodes = old_reachable_set.difference(new_reachable_set)
                 gained_nodes = new_reachable_set.difference(old_reachable_set)
 
-                logger.debug(f"node {self.nodeid} moved. Connectivity change: -{len(lost_nodes)}, +{len(gained_nodes)}.")
+                logger.debug(f"{self.env.now:.3f} node {self.nodeid} moved. Connectivity change: -{len(lost_nodes)}, +{len(gained_nodes)}.")
                 # TODO: -0, +0 case is very common. Skip what we can in this case.
                 # update this node's connectivity map
                 self.connectivity_map[self.nodeid] = new_reachable_set
