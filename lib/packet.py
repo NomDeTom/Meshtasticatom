@@ -79,15 +79,16 @@ class MeshPacket:
             # sense each other.
             if self.conf.ENABLE_CONNECTIVITY_MAP and not connectivity_map[self.txNodeId].__contains__(rx_node.nodeid):
                 logger.debug(f"skipping {self.txNodeId} -> {rx_node.nodeid} computation. connectivity map: {connectivity_map[self.txNodeId]}")
-                # Each tx -> rx computation we skip gets the asrm_rng one call out
-                # of sync between simulations with and without the connectivity
-                # map optimization. Thus particular tx -> rx calculations
-                # change between the optimization, which can lead to changes
-                # in sim behavior between the optimization being on/off, leading
-                # to inconsistencies beteen the optimization being on/off.
-                #
-                # Keep things balanced by 'unnecessarily' calling the rng here.
-                MeshPacket.asym_rng.gauss(0, conf.MODEL_ASYMMETRIC_LINKS_STDDEV)
+                if conf.MODEL_ASYMMETRIC_LINKS:
+                    # Each tx -> rx computation we skip gets the asrm_rng one call out
+                    # of sync between simulations with and without the connectivity
+                    # map optimization. Thus particular tx -> rx calculations
+                    # change between the optimization, which can lead to changes
+                    # in sim behavior between the optimization being on/off, leading
+                    # to inconsistencies beteen the optimization being on/off.
+                    #
+                    # Keep things balanced by 'unnecessarily' calling the rng here.
+                    MeshPacket.asym_rng.gauss(0, conf.MODEL_ASYMMETRIC_LINKS_STDDEV)
                 continue
 
             if self.conf.ENABLE_CONNECTIVITY_MAP:
