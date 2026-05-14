@@ -20,6 +20,7 @@ from lib.config import Config
 import lib.phy as phy
 from lib.common import find_random_position
 from lib.gui import gen_scenario, Graph
+from lib.interface_close import InterfaceCloseTimeout, close_interface
 from lib.point import Point
 
 logger = logging.getLogger(__name__)
@@ -237,24 +238,24 @@ class InteractiveGraph(Graph):
                     if p.packet["from"] == tx.hwId:
                         if "requestId" in p.packet["decoded"]:
                             if p.packet["priority"] == "ACK":
-                                msgType = "Real\/ACK"
+                                msgType = r"Real\/ACK"
                             else:
                                 msgType = "Response"
                         else:
                             msgType = "Original message"
                     elif "requestId" in p.packet["decoded"]:
                         if p.packet["decoded"]["simulator"]["portnum"] == "ROUTING_APP":
-                            msgType = "Forwarding\/real\/ACK"
+                            msgType = r"Forwarding\/real\/ACK"
                         else:
-                            msgType = "Forwarding\/response"
+                            msgType = r"Forwarding\/response"
                     else:
                         if int(p.packet['from']) == rx.hwId:
-                            msgType = "Implicit\/ACK"
+                            msgType = r"Implicit\/ACK"
                         else:
                             if to == "All":
                                 msgType = "Rebroadcast"
                             else:
-                                msgType = "Forwarding\/message"
+                                msgType = r"Forwarding\/message"
 
                     hopLimit = p.packet.get("hopLimit")
 
@@ -520,10 +521,13 @@ class InteractiveSim:
         time.sleep(3)
         for n in self.nodes[int(self.forwardToClient):]:
             try:
-                n.iface.close()
-                n.iface = None
+                close_interface(n.iface)
             except OSError:
                 pass
+            except InterfaceCloseTimeout as ex:
+                print(f"Warning: node {n.nodeid} interface close timed out during reconnect ({ex}).")
+            finally:
+                n.iface = None
         time.sleep(5)
         for n in self.nodes:
             while not n.iface:
@@ -749,7 +753,10 @@ class InteractiveSim:
         pub.unsubAll()
         for n in self.nodes:
             n.iface.localNode.exitSimulator()
-            n.iface.close()
+            try:
+                close_interface(n.iface)
+            except InterfaceCloseTimeout as ex:
+                print(f"Warning: node {n.nodeid} interface close timed out during shutdown ({ex}).")
         if self.docker:
             self.container.stop()
         if self.forwardToClient:
