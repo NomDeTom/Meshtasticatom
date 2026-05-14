@@ -316,6 +316,7 @@ class Config:
         # minimum sensitivity from https://www.rfwireless-world.com/calculators/LoRa-Sensitivity-Calculator.html, using a Noise Figure (NF) of 6dB
         # minimum received power for CAD: 3dB less than sensitivity
         # TODO: the 'bw' parameter is changed based on the region's 'wide_lora' setting. Implement this.
+        # Note: we store bandwidth here in Hz, but the firmware uses KHz.
         self.MODEM_PRESETS = {
             "SHORT_TURBO": {
                 "bw": 500e3,

@@ -15,10 +15,11 @@ NUM_SYM_CAD = 2
 NUM_SYM_CAD_24GHZ = 4
 
 #                           CAD duration   +     airPropagationTime+TxRxTurnaround+MACprocessing
-def get_current_slot_time():
+def get_current_slot_time(): # from RadioInterface::computeSlotTimeMsec
     # all times in ms
     sum_prop_turnaround_mac_time = 0.2 + 0.4 + 7
-    symbol_time = (2.0 ** conf.current_preset["sf"]) / conf.current_preset["bw"]
+    firmware_bw = conf.current_preset["bw"] / 1000 # convert Hz to KHz to match firmware
+    symbol_time = (2.0 ** conf.current_preset["sf"]) / firmware_bw
 
     if conf.REGION['wide_lora']:
         # TODO: currently wide_lora isn't fully implemented
