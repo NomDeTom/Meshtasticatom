@@ -78,7 +78,7 @@ class MeshPacket:
             # so is always an accurate map of what nodes could (with extra margin) even
             # sense each other.
             if self.conf.ENABLE_CONNECTIVITY_MAP and not connectivity_map[self.txNodeId].__contains__(rx_node.nodeid):
-                logger.debug(f"skipping {self.txNodeId} -> {rx_node.nodeid} computation. connectivity map: {connectivity_map[self.txNodeId]}")
+                logger.debug(f"{self.now:.3f} skipping {self.txNodeId} -> {rx_node.nodeid} computation. connectivity map: {connectivity_map[self.txNodeId]}")
                 if conf.MODEL_ASYMMETRIC_LINKS:
                     # Each tx -> rx computation we skip gets the asrm_rng one call out
                     # of sync between simulations with and without the connectivity
@@ -100,9 +100,9 @@ class MeshPacket:
 
             if conf.MODEL_ASYMMETRIC_LINKS:
                 offset = MeshPacket.asym_rng.gauss(0, conf.MODEL_ASYMMETRIC_LINKS_STDDEV)
-                logger.debug(f"packet {self.unique_packet_seq} for msg {self.seq} has asym offset {offset} dB")
+                logger.debug(f"{self.now:.3f} packet {self.unique_packet_seq} for msg {self.seq} has asym offset {offset} dB")
                 if abs(offset) > conf.CONNECTIVITY_MAP_RSSI_MARGIN:
-                    logger.debug(f"packet {self.unique_packet_counter} has asymmetric RSSI offset {offset} which is outside margin. This will lead to inconsistent results with the connectivity map optimization.")
+                    logger.warning(f"{self.now:.3f} packet {self.unique_packet_counter} has asymmetric RSSI offset {offset} which is outside margin. This will lead to inconsistent results with the connectivity map optimization.")
             else:
                 offset = 0
             self.LplAtN[rx_node.nodeid] = baseline_pathloss + offset
