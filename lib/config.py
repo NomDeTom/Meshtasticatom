@@ -29,6 +29,9 @@ class Config:
         self.ONE_HR_INTERVAL = self.ONE_MIN_INTERVAL * 60
 
         ### Discrete-event specific ###
+        self.ENABLE_CONNECTIVITY_MAP = True # use the connectivity map optimization
+        self.CONNECTIVITY_MAP_RSSI_MARGIN = 8
+
         self.MODEM_PRESET = "LONG_FAST"  # LoRa modem preset to use (default LONG_FAST matches firmware)
         self.PERIOD = 100 * self.ONE_SECOND_INTERVAL  # mean period of generating a new message with exponential distribution in ms
         self.PACKETLENGTH = 40  # payload in bytes
@@ -313,6 +316,7 @@ class Config:
         # minimum sensitivity from https://www.rfwireless-world.com/calculators/LoRa-Sensitivity-Calculator.html, using a Noise Figure (NF) of 6dB
         # minimum received power for CAD: 3dB less than sensitivity
         # TODO: the 'bw' parameter is changed based on the region's 'wide_lora' setting. Implement this.
+        # Note: we store bandwidth here in Hz, but the firmware uses KHz.
         self.MODEM_PRESETS = {
             "SHORT_TURBO": {
                 "bw": 500e3,
@@ -419,10 +423,7 @@ class Config:
         # Adds a random offset to the link quality of each link
         self.MODEL_ASYMMETRIC_LINKS = True
         self.MODEL_ASYMMETRIC_LINKS_MEAN = 0
-        self.MODEL_ASYMMETRIC_LINKS_STDDEV = 3
-        # Stores the offset for each link
-        # Populated when the simulator first starts
-        self.LINK_OFFSET = {}
+        self.MODEL_ASYMMETRIC_LINKS_STDDEV = 2
 
         #################################################
         ####### MOVING NODE SIMULATION VARIABLES ########

@@ -4,6 +4,24 @@ import lib.phy
 
 class TestPhy(unittest.TestCase):
 
+    def test_path_loss_estimator(self):
+        # make sure we reject invalid model selection integers
+        from lib.config import CONFIG
+        conf = CONFIG
+
+        model = -1 # invalid model
+        self.assertRaises(ValueError, lib.phy.estimate_path_loss, conf, 50, 915, 3, 3, model)
+        model = 7 # invalid model
+        self.assertRaises(ValueError, lib.phy.estimate_path_loss, conf, 50, 915, 3, 3, model)
+        model = 10 # invalid model
+        self.assertRaises(ValueError, lib.phy.estimate_path_loss, conf, 50, 915, 3, 3, model)
+        model = -10 # invalid model
+        self.assertRaises(ValueError, lib.phy.estimate_path_loss, conf, 50, 915, 3, 3, model)
+
+        # TODO: hardcode some expected values for the calculations across different
+        # models, to detect unintended changes. This also requires verifying
+        # the calculations are correct.
+
     def test_rootFinder(self):
         # double-check we can find the roots of some polynomials
         message = "sanity-check Newton-Raphson root-finding implementation"

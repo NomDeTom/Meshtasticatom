@@ -12,6 +12,7 @@ from lib.discrete_event_sim_components import SimulationState, SimulationDataTra
 from lib.mac import set_transmit_delay, get_retransmission_msec
 from lib.phy import check_collision, is_channel_active, airtime
 from lib.packet import NODENUM_BROADCAST, MeshPacket, MeshMessage
+from lib.phy import estimate_path_loss
 from lib.point import Point
 
 logger = logging.getLogger(__name__)
@@ -41,35 +42,58 @@ class MeshNodeStats:
     def __init__(self, nodeid: int):
         self.nodeid = nodeid
 
+        self.packetsHeard = 0
+        self.packetsRebroadcast = 0
+
     def get_stats_dictionary(self) -> dict:
         """Return dictionary holding all internal data
         (may not need this)
         """
         data = {
             "nodeid": self.nodeid,
+            "packetsHeard": self.packetsHeard,
+            "packetsRebroadcast": self.packetsRebroadcast,
         }
         return data
 
 class NodeConfig:
     """Specific configuration for a node
     """
-    def __init__(self, node_id: int, position: Point, period: int, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False):
+    def __init__(self, node_id: int, position: Point, period: int, tx_power: int, freq: float, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False):
+        """Initial configuration of a node
+
+        Arguments:
+        node_id -- unique integer id of node (used as list index)
+        position -- beginning Point(x, y, z) location of node
+        period -- how often to generate messages. Average of an exponential distribution.
+        tx_power -- transmit power in dB
+        freq -- frequency in Hz
+        role -- Meshtastic firmware role. Default: CLIENT
+        antenna_gain -- antenna gain in dBi. Default 0
+        hop_limit -- hop limit. Default 3
+        neighbor_info -- if neighbor info is enabled. Default False
+        """
         self.node_id = node_id
         self.position = position.copy() # make sure we keep our own point
         self.period = period
+        self.tx_power = tx_power
+        self.freq = freq
         self.role = role
         self.antenna_gain = antenna_gain
         self.hop_limit = hop_limit
         self.neighbor_info = neighbor_info
 
     @classmethod
-    def from_gen_scenario_output(cls, node_id: int, node_dict: {}, period: int):
+    def from_gen_scenario_output(cls, node_id: int, node_dict: {}, period: int, tx_power: int, freq: float):
         """create NodeConfig from a node dict as returned from gen_scenario.
         You probably want to iterate over the keys that function gives you
         and pass individual values indexed by them to this method.
 
         Arguments:
         node_dict -- dictionary defining a single node. From gen_scenario.
+        period -- how often to generate messages. Average of an exponential distribution.
+        tx_power -- transmit power in dB
+        freq -- frequency in Hz
         """
         nd = node_dict
         position = Point(nd['x'], nd['y'], nd['z'])
@@ -94,15 +118,51 @@ class NodeConfig:
         else:
             role = MESHTASTIC_ROLE.CLIENT
 
-        return NodeConfig(node_id, position, period, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
+        return NodeConfig(node_id, position, period, tx_power, freq, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'])
+
+    def compute_rssi_and_pathloss_to(self, rx_nodeconf, conf: Config) -> (float, float):
+        """Compute RSSI and pathloss from this node config as the transmitting node
+        to a receiving node, using a given config for various physical parameters.
+
+        Arguments:
+        rx_nodeconf -- NodeConfig of node we are transmitting to
+        conf -- Config object specifying various physical parameters
+
+        Returns:
+        (rssi, pathloss) -- rssi at rx_nodeconf, and pathloss along the path
+        """
+        if self.node_id == rx_nodeconf.node_id:
+            raise ValueError(f"Calculating rssi/pathloss between identical nodes is invalid. Node ID {self.node_id}")
+
+        # compute path loss
+        dist = self.position.euclidean_distance(rx_nodeconf.position)
+        pl = estimate_path_loss(conf, dist, self.freq, self.position.z, rx_nodeconf.position.z)
+        rssi = self.tx_power + self.antenna_gain + rx_nodeconf.antenna_gain - pl
+
+        return (rssi, pl)
 
 class MeshNode:
     """Class containing all the particular state of a MeshNode, references to necessary
     external resources like the simpy env, and process functions for simulation
     """
     def __init__(self, conf, sim_state: SimulationState, data_tracking: SimulationDataTracking, nodeConfig: NodeConfig):
+        """Create a MeshNode. Houses all node-specific state, sim processes, and
+        connections to broader sim environment and data collection.
+
+        Arguments:
+        conf -- Config object of various sim parameters
+        sim_state -- object holding all mutating state of the simulation
+        data_tracking -- object holding data collected from sim, doesn't influence state.
+        nodeConfig -- initial configuration of node
+        """
         self.conf = conf
-        self.nodeid = nodeConfig.node_id
+
+        # initially to move repeated rssi/pathloss computation into NodeConfig class.
+        # maybe move other state/config (role, period, etc.) into here explicitly
+        # rather than binding to a member variable
+        self.node_conf = nodeConfig
+
+        self.nodeid = self.node_conf.node_id
 
         # set up internal RNGs
         self.moveRng = random.Random(self.nodeid)
@@ -110,15 +170,18 @@ class MeshNode:
         self.rebroadcastRng = random.Random()
 
         # require the user to specify a node configuration now, including position
-        self.position = nodeConfig.position.copy() # make sure we have our own point
-        self.role = nodeConfig.role
-        self.hopLimit = nodeConfig.hop_limit
-        self.antennaGain = nodeConfig.antenna_gain
-        self.period = nodeConfig.period
+        self.position = self.node_conf.position # explicitly use position in node_conf
+        self.role = self.node_conf.role
+        self.hopLimit = self.node_conf.hop_limit
+        self.antennaGain = self.node_conf.antenna_gain
+        self.period = self.node_conf.period
 
+        # using this more like a struct than a proper object.
         self.my_stats = MeshNodeStats(self.nodeid)
 
         self.messageSeq = sim_state.messageSeq
+        self.connectivity_map = sim_state.connectivity_map
+        self.baseline_pathloss_matrix = sim_state.baseline_pathloss_matrix
         self.env = sim_state.env
         self.bc_pipe = sim_state.bc_pipe
         self.nodes = sim_state.nodes
@@ -232,6 +295,45 @@ class MeshNode:
             # Update node’s position
             self.position.update_xy(new_x, new_y)
 
+            # update connectivity map:
+            # - update for this node: we may have gained and lost reachable nodes
+            # - new reachable nodes: add ourselves to their connectivity map entry
+            # - lost reachable nodes: remove ourselves from their connectivity map entry
+            if self.conf.ENABLE_CONNECTIVITY_MAP:
+                # may need to deepcopy if we put more complex things in here
+                old_reachable_set = self.connectivity_map[self.nodeid].copy()
+                new_reachable_set = set()
+                for rx_node in self.nodes:
+                    if rx_node.nodeid == self.nodeid:
+                        continue # skip self
+
+                    (rssi, pl) = self.node_conf.compute_rssi_and_pathloss_to(rx_node.node_conf, self.conf)
+
+                    # compare with extra margin (set based on 10-node standard test)
+                    if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > self.conf.current_preset['sensitivity']:
+                        new_reachable_set.add(rx_node.nodeid)
+
+                    # cache path loss (it is symmetric, and static until one of the nodes moves)
+                    self.baseline_pathloss_matrix[self.nodeid][rx_node.nodeid] = pl
+                    self.baseline_pathloss_matrix[rx_node.nodeid][self.nodeid] = pl
+
+                # calculate set differences to detect added and removed nodes
+                lost_nodes = old_reachable_set.difference(new_reachable_set)
+                gained_nodes = new_reachable_set.difference(old_reachable_set)
+
+                logger.debug(f"{self.env.now:.3f} node {self.nodeid} moved. Connectivity change: -{len(lost_nodes)}, +{len(gained_nodes)}.")
+                # TODO: -0, +0 case is very common. Skip what we can in this case.
+                # update this node's connectivity map
+                self.connectivity_map[self.nodeid] = new_reachable_set
+                # add ourself to the connectivity map of every node we gained
+                for node_id in gained_nodes:
+                    self.connectivity_map[node_id].add(self.nodeid)
+                # remove ourself from the connectivity map of every node we lost
+                for node_id in lost_nodes:
+                    self.connectivity_map[node_id].discard(self.nodeid)
+
+                # connectivity map updated!
+
             if self.gpsEnabled:
                 distanceTraveled = self.position.euclidean_distance(self.lastBroadcastPosition)
                 logger.debug(f"{self.env.now:.3f} node {self.nodeid} checks last broadcast position distance: {distanceTraveled} from {self.lastBroadcastPosition} to {self.position}")
@@ -258,7 +360,7 @@ class MeshNode:
         # increment the shared counter
         messageSeq = self.messageSeq.get()
         self.messages.append(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
-        p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now)
+        p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} generated {type} message {p.seq} to {destId}")
         self.packets.append(p)
         self.env.process(self.transmit(p))
@@ -321,7 +423,7 @@ class MeshNode:
                         break
                     else:
                         if minRetransmissions > 0:  # generate new packet with same sequence number
-                            pNew = MeshPacket(self.conf, self.nodes, self.nodeid, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now)
+                            pNew = MeshPacket(self.conf, self.nodes, self.nodeid, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
                             pNew.retransmissions = minRetransmissions - 1
                             logger.debug(f"{self.env.now:.3f} Node {self.nodeid} wants to retransmit its generated packet to {destId} with seq.nr. {p.seq} minRetransmissions {minRetransmissions}")
                             self.packets.append(pNew)
@@ -338,41 +440,43 @@ class MeshNode:
 
             # listen-before-talk from src/mesh/RadioLibInterface.cpp
             txTime = set_transmit_delay(self, packet)
-            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} picked wait time {txTime}")
+            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} schedules tx. Picked wait time {txTime}")
             yield self.env.timeout(txTime)
 
             # wait when currently receiving or transmitting, or channel is active
             while any(self.isReceiving) or self.isTransmitting or is_channel_active(self, self.env):
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} is busy Tx-ing {self.isTransmitting} or Rx-ing {any(self.isReceiving)} else channel busy!")
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} delaying tx: busy Tx-ing {self.isTransmitting=} or Rx-ing {any(self.isReceiving)=}, else channel busy!")
                 txTime = set_transmit_delay(self, packet)
                 yield self.env.timeout(txTime)
-            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} ends waiting")
+            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} ends waiting for scheduled tx")
 
             # check if you received an ACK for this message in the meantime
             self.was_seen_recently(packet, ownTransmit=True)
             if not self.perhaps_cancel_dupe(packet):  # if you did not receive an ACK for this message in the meantime
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started low level send {packet.seq} hopLimit {packet.hopLimit} original Tx {packet.origTxNodeId}")
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started low level send {packet.unique_packet_seq} for msg {packet.seq} hopLimit {packet.hopLimit} original Tx {packet.origTxNodeId}")
                 self.nrPacketsSent += 1
                 for rx_node in self.nodes:
                     if packet.sensedByN[rx_node.nodeid]:
                         if check_collision(self.conf, self.env, packet, rx_node.nodeid, self.packetsAtN) == 0:
                             self.packetsAtN[rx_node.nodeid].append(packet)
+                # packet's collidedAtN field is now computed/valid
                 packet.startTime = self.env.now
                 packet.endTime = self.env.now + packet.timeOnAir
                 self.txAirUtilization += packet.timeOnAir
                 self.airUtilization += packet.timeOnAir
-                self.bc_pipe.put(packet)
+                self.bc_pipe.put(packet) # queue for nodes to receive packet
                 self.isTransmitting = True
                 yield self.env.timeout(packet.timeOnAir)
                 self.isTransmitting = False
             else:  # received ACK: abort transmit, remove from packets generated
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} in the meantime received ACK, abort packet with seq. nr {packet.seq}")
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} in the meantime received ACK, abort packet with seq. nr {packet.unique_packet_seq} for msg {packet.seq}")
                 self.packets.remove(packet)
 
     def receive(self, in_pipe):
         while True:
             p = yield in_pipe.get()
 
+            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} fetches packet {p.unique_packet_seq} for msg {p.seq} from {p.txNodeId} from bc_pipe: sensed: {p.sensedByN[self.nodeid]} collided: {p.collidedAtN[self.nodeid]} on air: {p.onAirToN[self.nodeid]}")
             if p.sensedByN[self.nodeid] and p.onAirToN[self.nodeid]:  # start of reception
                 if p.collidedAtN[self.nodeid]:
                     # this packet collided, so we can sense it but not decode it.
@@ -380,11 +484,11 @@ class MeshNode:
                     # the 'end of transmission' branch
                     p.onAirToN[self.nodeid] = False
                 elif not self.isTransmitting:
-                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started receiving packet {p.seq} from {p.txNodeId}")
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started receiving packet {p.unique_packet_seq} for msg {p.seq} from {p.txNodeId}")
                     p.onAirToN[self.nodeid] = False
                     self.isReceiving.append(True)
                 else:  # if you were currently transmitting, you could not have sensed it
-                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} was transmitting, so could not receive packet {p.seq}")
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} was transmitting, so could not receive packet {p.unique_packet_seq} for msg {p.seq}")
                     p.sensedByN[self.nodeid] = False
                     p.onAirToN[self.nodeid] = False
             elif p.sensedByN[self.nodeid]:  # end of reception
@@ -393,11 +497,12 @@ class MeshNode:
                 except Exception:
                     pass
                 self.airUtilization += p.timeOnAir
+                # begin receiving packet fine, but a collision begins before we finish receiving.
                 if p.collidedAtN[self.nodeid]:
-                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not decode packet.")
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not decode packet {p.unique_packet_seq}.")
                     continue
                 p.receivedAtN[self.nodeid] = True
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} received packet {p.seq} with delay {round(self.env.now - p.genTime, 2)}") # TODO: better way to calculate delay for log
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} received packet {p.unique_packet_seq} for msg {p.seq} with delay {round(self.env.now - p.genTime, 2)}") # TODO: better way to calculate delay for log
                 self.delays.append(self.env.now - p.genTime)
 
                 # Update history of received packets
@@ -431,16 +536,18 @@ class MeshNode:
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} sends a flooding ACK.")
                     messageSeq = self.messageSeq.get()
                     self.messages.append(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
-                    pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now)
+                    pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
                     self.packets.append(pAck)
                     self.env.process(self.transmit(pAck))
                 # Rebroadcasting Logic for received message. This is a broadcast or a DM not meant for us.
                 elif not p.destId == self.nodeid and not ackReceived and not realAckReceived and p.hopLimit > 0:
+                    self.my_stats.packetsHeard += 1 # packets which could potentially be rebroadcast
                     # FloodingRouter: rebroadcast received packet
                     if self.conf.SELECTED_ROUTER_TYPE == self.conf.ROUTER_TYPE.MANAGED_FLOOD:
                         if not self.is_client_mute:
-                            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} rebroadcasts received packet {p.seq}")
-                            pNew = MeshPacket(self.conf, self.nodes, p.origTxNodeId, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now)
+                            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} schedules rebroadcast for received packet {p.unique_packet_seq} for msg {p.seq}")
+                            self.my_stats.packetsRebroadcast += 1
+                            pNew = MeshPacket(self.conf, self.nodes, p.origTxNodeId, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
                             pNew.hopLimit = p.hopLimit - 1
                             self.packets.append(pNew)
                             self.env.process(self.transmit(pNew))
@@ -486,6 +593,6 @@ def default_generate_node_list(conf: Config) -> [NodeConfig]:
             role = MESHTASTIC_ROLE.CLIENT
 
         # make NodeConfig object to pass to MeshNode constructor
-        node_configs.append(NodeConfig(i, position, conf.PERIOD, role))
+        node_configs.append(NodeConfig(i, position, conf.PERIOD, conf.PTX, conf.FREQ, role))
 
     return node_configs

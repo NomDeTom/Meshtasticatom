@@ -45,8 +45,6 @@ class TestDiscreteEventSim(unittest.TestCase):
         # - delays (list of ...floats?)
         # - messageSeq - total # of messages
         # - totalPairs (int)
-        # - asymmetricLinks (int)
-        # - symmetricLinks (int)
         # - noLinks (int)
 
         # Things which are computed (keys in results):
@@ -64,8 +62,6 @@ class TestDiscreteEventSim(unittest.TestCase):
         # - nodereach *+
         # - usefulness +
         # - delayDropped
-        # - symmetricLinkRate *+
-        # - asymmetricLinkRate *+
         # - noLinkRate *+
         # - movingNodes *
         # - gpsEnabled *
@@ -112,10 +108,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         r['delays'] = [1.0 for _ in range(10)]
         r['messageSeq'] = 10 # total # of messages (not packets)
 
-        # as set up, totalPairs = symmetricLinks + asymmetricLinks + noLinks
         r['totalPairs'] = 3
-        r['asymmetricLinks'] = 0
-        r['symmetricLinks'] = 0
         r['noLinks'] = 0
 
         sim_results = lib.discrete_event_sim.SimulationResults(r)
@@ -141,10 +134,6 @@ class TestDiscreteEventSim(unittest.TestCase):
         #self.assertIsNotNone(sim_results['x'], 'x is created')
 
         # check rate calculations in [0, 1] (assuming we mocked sane values)
-        self.assertLessEqual(0.0, sim_results['asymmetricLinkRate'], 'calculated asymmetricLinkRate is above or equal to 0')
-        self.assertLessEqual(sim_results['asymmetricLinkRate'], 1.0, 'calculated asymmetricLinkRate is below or equal to 1')
-        self.assertLessEqual(0.0, sim_results['symmetricLinkRate'], 'calculated symmetricLinkRate is above or equal to 0')
-        self.assertLessEqual(sim_results['symmetricLinkRate'], 1.0, 'calculated symmetricLinkRate is below or equal to 1')
         self.assertLessEqual(0.0, sim_results['noLinkRate'], 'calculated noLinkRate is above or equal to 0')
         self.assertLessEqual(sim_results['noLinkRate'], 1.0, 'calculated noLinkRate is below or equal to 1')
 
@@ -152,6 +141,66 @@ class TestDiscreteEventSim(unittest.TestCase):
         self.assertEqual(sim_results['movingNodes'], 1, 'expected number of moving nodes')
         self.assertEqual(sim_results['gpsEnabled'], 1, 'expected number of gps enabled nodes')
 
+    def test_connectivity_map_optimization_is_consistent(self):
+        from lib.node import default_generate_node_list
+
+        from lib.config import CONFIG
+        conf = CONFIG
+
+        all_results = []
+
+        # somewhat lazily test with connectivity map optimization on and off,
+        # to make sure the optimization doesn't change any results/the simulation
+        # is consistent regardless of this optimization. Further simulation changes
+        # that warrant this kind of testing should be very carefully considered,
+        # since that leads to exponential growth in configurations to test.
+        for enable_optimization in [True, False]:
+            # test against optimization being enabled/disabled
+            conf.ENABLE_CONNECTIVITY_MAP = enable_optimization
+
+            # crucial!! and perhaps a tad fragile
+            random.seed(conf.SEED)
+
+            self.assertEqual(conf.SEED, 44, "expected default seed for rng")
+
+            # imitate parse_params
+            conf.NR_NODES = 10
+            conf.update_router_dependencies()
+            nodeConfig = default_generate_node_list(conf)
+            # skipping GUI graphing to speed things up
+
+            # set up sim
+            sim = lib.discrete_event_sim.DiscreteEventSim(conf, nodeConfig)
+            sim.run_simulation()
+
+            # collect & unpack results for easy copy/paste of asserts
+            results = sim.get_results()
+            all_results.append(results)
+
+        # look at just specific simulation results for now. May go as deep as
+        # comparing MeshPacket objects later if that seems useful and we feel
+        # like adding comparison functions to those objects.
+        facets = [
+            'potentialReceivers',
+            'sent',
+            'nrCollisions',
+            'nrSensed',
+            'nrReceived',
+            'nrUseful',
+            'meanDelay',
+            'txAirUtilizationRate',
+            'collisionRate',
+            'nodeReach',
+            'nrReceived',
+            'usefulness',
+            'delayDropped',
+            'noLinkRate',
+            'movingNodes',
+            'gpsEnabled',
+        ]
+
+        for f in facets:
+            self.assertEqual(all_results[0][f], all_results[1][f], f'connectivity map optimization is inconsistent for facet {f}')
 
     # TODO: add default-skip GUI test?
     def test_discrete_sim_ten_nodes(self):
@@ -187,8 +236,6 @@ class TestDiscreteEventSim(unittest.TestCase):
         messages = results["messages"]
         delays = results["delays"]
         totalPairs = results["totalPairs"]
-        symmetricLinks = results["symmetricLinks"]
-        asymmetricLinks = results["asymmetricLinks"]
         noLinks = results["noLinks"]
         nodes = results["nodes"]
 
@@ -201,45 +248,72 @@ class TestDiscreteEventSim(unittest.TestCase):
         # and modify your changes, or to update the hardcoded "known good"
         # simulation results is up to your judgement for which is
         # appropriate. Be cautious!
-        self.assertEqual(messageSeq, 183, "expected number of messages created")
+        self.assertEqual(messageSeq, 180, "expected number of messages created")
         sent = results['sent']
         potentialReceivers = results['potentialReceivers']
-        self.assertEqual(sent, 895, "expected number of packets sent")
-        self.assertEqual(potentialReceivers, 8055, "expected number of potential receivers")
+        self.assertEqual(sent, 834, "expected number of packets sent")
+        self.assertEqual(potentialReceivers, 7506, "expected number of potential receivers")
 
         nrCollisions = results['nrCollisions']
-        self.assertEqual(nrCollisions, 332, "expected number of collisions")
+        self.assertEqual(nrCollisions, 323, "expected number of collisions")
         nrSensed = results['nrSensed']
-        self.assertEqual(nrSensed, 3173, "expected number of packets sensed")
+        self.assertEqual(nrSensed, 2895, "expected number of packets sensed")
 
         nrReceived = results['nrReceived']
-        self.assertEqual(nrReceived, 2824, "expected number of packets received")
+        self.assertEqual(nrReceived, 2573, "expected number of packets received")
         meanDelay = results['meanDelay']
-        self.assertEqual(round(meanDelay, 2), 11174.95, "expected rounded delay average")
+        self.assertEqual(round(meanDelay, 2), 6403.13, "expected rounded delay average")
         txAirUtilizationRate = results['txAirUtilizationRate']
-        self.assertEqual(round(txAirUtilizationRate * 100, 2), 5.15, "expected rounded average tx air utilization")
+        self.assertEqual(round(txAirUtilizationRate * 100, 2), 4.83, "expected rounded average tx air utilization")
 
         nodeReach = results['nodeReach']
-        self.assertEqual(round(nodeReach*100, 2), 85.55, "expected rounded percentage of nodes reached")
+        self.assertEqual(round(nodeReach*100, 2), 79.57, "expected rounded percentage of nodes reached")
 
         usefulness = results['usefulness']
-        self.assertEqual(round(usefulness*100, 2), 49.89, "expected rounded 'usefulness' percentage")
+        self.assertEqual(round(usefulness*100, 2), 50.1, "expected rounded 'usefulness' percentage")
 
         delayDropped = results['delayDropped']
-        self.assertEqual(delayDropped, 1280, "expected number of packets dropped")
+        self.assertEqual(delayDropped, 1143, "expected number of packets dropped")
         # default config has both asymmetric links and movement enabled
-        asymmetricLinkRate = results['asymmetricLinkRate']
-        self.assertEqual(round(asymmetricLinkRate * 100, 2), 8.89, "expected rounded percentage of asymmetric links")
-        symmetricLinkRate = results['symmetricLinkRate']
-        self.assertEqual(round(symmetricLinkRate * 100, 2), 42.22, "expected rounded percentage of symmetric links")
         noLinkRate = results['noLinkRate']
-        self.assertEqual(round(noLinkRate * 100, 2), 48.89, "expected rounded percentage of 'no' links")
+        self.assertEqual(round(noLinkRate * 100, 2), 55.56, "expected rounded percentage of 'no' links")
 
         movingNodes = results['movingNodes']
         self.assertEqual(movingNodes, 4, "expected number of moving nodes")
 
         gpsEnabled = results['gpsEnabled']
         self.assertEqual(gpsEnabled, 1, "expected number of nodes with GPS")
+
+    def test_sim_does_not_change_config(self):
+        import copy
+
+        from lib.node import default_generate_node_list
+
+        # get default config, set node number
+        from lib.config import CONFIG
+        conf = CONFIG
+
+        # copied from the 10-node test just because, but not necessary
+        random.seed(conf.SEED)
+
+        conf.NR_NODES = 3 # smaller number for speed.
+        conf.update_router_dependencies()
+        nodeConfig = default_generate_node_list(conf)
+        # skipping GUI graphing to speed things up
+
+        # get copy of the config pre-run
+        old_conf = copy.deepcopy(conf)
+
+        # set up and run sim
+        sim = lib.discrete_event_sim.DiscreteEventSim(conf, nodeConfig)
+        sim.run_simulation()
+
+        # go through the full sim lifecycle, to cover everywhere that may touch config
+        results = sim.get_results()
+
+        # set difference trick to compare configs
+        conf_diff = conf.__dict__.items() ^ old_conf.__dict__.items()
+        self.assertEqual(len(conf_diff), 0, "config has not been changed by running a simulation")
 
 if __name__ == '__main__':
     unittest.main()

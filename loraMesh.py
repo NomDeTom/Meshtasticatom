@@ -61,6 +61,7 @@ def parse_params(conf, args=None) -> [NodeConfig]:
     parser.add_argument('--simtime-seconds', type=float, help='Override simulation duration in seconds')
     parser.add_argument('--period-seconds', type=float, help='Override mean message-generation period in seconds')
     parser.add_argument('--no-gui', action='store_true', help='Run without Tk/Matplotlib graphing or schedule plotting')
+    parser.add_argument('--disable-connectivity-map', action='store_true', help='disable the connectivity map optimization. May be faster for some scenarios with many moving nodes and/or a densely connected network.')
     parser.add_argument('-v', '--verbose', action='store_true', help='enable verbose/debug output')
 
     parsed_arguments = parser.parse_args(args)
@@ -88,6 +89,12 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         gui_enabled = False
         plot_enabled = False
 
+    # enforce defaulting to True
+    if parsed_arguments.disable_connectivity_map:
+        conf.ENABLE_CONNECTIVITY_MAP = False
+    else:
+        conf.ENABLE_CONNECTIVITY_MAP = True
+
     if parsed_arguments.from_file is not None and parsed_arguments.router_type is not None:
         parser.error("Incompatible argument selection. --from-file and --router-type can not be used together")
 
@@ -96,7 +103,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         with open(os.path.join("out", parsed_arguments.from_file), 'r', encoding="utf-8") as file:
             raw_config = yaml.load(file, Loader=yaml.FullLoader)
         config = [
-            NodeConfig.from_gen_scenario_output(node_id, node_config, period)
+            # transmit power and frequency not previously saved. Use defaults from Config.
+            NodeConfig.from_gen_scenario_output(node_id, node_config, period, conf.PTX, conf.FREQ)
             for node_id, node_config in raw_config.items()
         ]
         nr_nodes = len(config)
@@ -215,11 +223,7 @@ def run_simulation(conf, node_config):
     print("Number of packets dropped by delay/hop limit:", delayDropped)
 
     if conf.MODEL_ASYMMETRIC_LINKS:
-        asymmetricLinkRate = results['asymmetricLinkRate']
-        symmetricLinkRate = results['symmetricLinkRate']
         noLinkRate = results['noLinkRate']
-        print("Asymmetric links:", round(asymmetricLinkRate * 100, 2), '%')
-        print("Symmetric links:", round(symmetricLinkRate * 100, 2), '%')
         print("No links:", round(noLinkRate * 100, 2), '%')
 
     if conf.MOVEMENT_ENABLED:

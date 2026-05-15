@@ -1,3 +1,4 @@
+import copy
 import logging
 from typing import TYPE_CHECKING
 
@@ -5,13 +6,14 @@ from typing import TYPE_CHECKING
 from simpy import Environment as SimpyEnvironment
 import numpy as np
 
-from lib.common import setup_asymmetric_links
 from lib.config import Config
 from lib.discrete_event_sim_components import SimulationState, SimulationDataTracking
 from lib.node import MeshNode, NodeConfig
 
 if TYPE_CHECKING:
     from lib.gui import Graph
+from lib.packet import MeshPacket
+from lib.phy import estimate_path_loss
 
 logger = logging.getLogger(__name__)
 
@@ -94,12 +96,8 @@ class SimulationResults:
 
         self.results["delayDropped"] = sum(n.droppedByDelay for n in nodes)
 
-        if conf.MODEL_ASYMMETRIC_LINKS and self.results["totalPairs"] != 0:
-            asymmetricLinkRate = self.results["asymmetricLinks"] / self.results["totalPairs"]
-            symmetricLinkRate = self.results["symmetricLinks"] / self.results["totalPairs"]
+        if self.results["totalPairs"] != 0:
             noLinkRate = self.results["noLinks"] / self.results["totalPairs"]
-            self.results["asymmetricLinkRate"] = asymmetricLinkRate
-            self.results["symmetricLinkRate"] = symmetricLinkRate
             self.results["noLinkRate"] = noLinkRate
 
         if conf.MOVEMENT_ENABLED:
@@ -122,8 +120,12 @@ class DiscreteEventSim:
 
         # set constant state/initial state from parameters
         self.env = SimpyEnvironment()
-        self.conf = conf
+        self.conf = copy.deepcopy(conf) # have our own copy so our setup_asymmetric_links doesn't change whatever config we've been passed.
         self.node_configs = node_configs
+
+        # reset MeshPacket class variables
+        MeshPacket.seed_asym_rng(self.conf.SEED)
+        MeshPacket.reset_packet_counter()
 
         # internal global state which changes
         self.mutated_state = SimulationState(self.conf, self.env)
@@ -134,12 +136,19 @@ class DiscreteEventSim:
         # note: we allow user to specify if graphing will happen or not
         self.graph = graph
 
+        # use node configs to populate the connectivity matrix and compute
+        # initial condition links/no links.  Because we always expect link/no
+        # link counts, and thus do an O(n^2) precomputation anyways, just
+        # always do this and reserve checking/not checking the map later based
+        # on config settings.
+        self.initialize_connectivity_map()
+
         # node configs provided, create nodes with them
         for cfg in self.node_configs:
             n = MeshNode(self.conf,
                 self.mutated_state,
                 self.data_tracking,
-                cfg,
+                cfg
             )
             self.mutated_state.nodes.append(n)
 
@@ -147,8 +156,7 @@ class DiscreteEventSim:
             for n in self.mutated_state.nodes:
                 self.graph.add_node(n)
 
-        # setup that requires having nodes
-        self.data_tracking.totalPairs, self.data_tracking.symmetricLinks, self.data_tracking.asymmetricLinks, self.data_tracking.noLinks = setup_asymmetric_links(self.conf, self.mutated_state.nodes)
+        logger.debug(f"connectivity map: {self.mutated_state.connectivity_map}")
 
         if self.graph is not None and self.conf.MOVEMENT_ENABLED:
             # NOTE: this does not run under test, since we skip creating a GUI
@@ -184,8 +192,6 @@ class DiscreteEventSim:
             "messages": self.data_tracking.messages,
             "delays": self.data_tracking.delays,
             "totalPairs": self.data_tracking.totalPairs,
-            "symmetricLinks": self.data_tracking.symmetricLinks,
-            "asymmetricLinks": self.data_tracking.asymmetricLinks,
             "noLinks": self.data_tracking.noLinks,
             "nodes": self.mutated_state.nodes,
         }
@@ -193,3 +199,34 @@ class DiscreteEventSim:
         results.finalize(self.conf)
 
         return results
+
+    def initialize_connectivity_map(self):
+        '''use node configs to compute the initial connectivity map for later
+        lookups. Also, initialize baseline path loss matrix.
+        '''
+        for tx_node in self.node_configs:
+            # compute the set of all nodes our signal is detectable at
+            reachable_node_set = set()
+            for rx_node in self.node_configs:
+                if tx_node.node_id == rx_node.node_id:
+                    continue # skip self
+
+                self.data_tracking.totalPairs += 1
+
+                (rssi, pl) = tx_node.compute_rssi_and_pathloss_to(rx_node, self.conf)
+
+                # compare with extra margin (set based on 10-node standard test)
+                if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > self.conf.current_preset['sensitivity']:
+                    reachable_node_set.add(rx_node.node_id)
+
+                # compute total/no links without margin
+                if rssi >= self.conf.current_preset['sensitivity']:
+                    self.data_tracking.totalLinks += 1
+                else:
+                    self.data_tracking.noLinks += 1
+
+                # cache path loss (it is symmetric, and static until one of the nodes moves)
+                self.mutated_state.baseline_pathloss_matrix[tx_node.node_id][rx_node.node_id] = pl
+                self.mutated_state.baseline_pathloss_matrix[rx_node.node_id][tx_node.node_id] = pl
+
+            self.mutated_state.connectivity_map[tx_node.node_id] = reachable_node_set

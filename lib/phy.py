@@ -4,16 +4,29 @@ import random
 
 from lib.config import CONFIG
 
+# TODO: if our config deviates from the default, we WILL get incorrect results.
+# refactor things to take a config object
 conf = CONFIG
 
 logger = logging.getLogger(__name__)
 
-
-
+# checked as of tag v2.7.15.567b8ea in meshtastic-firmware repo
+NUM_SYM_CAD = 2
+NUM_SYM_CAD_24GHZ = 4
 
 #                           CAD duration   +     airPropagationTime+TxRxTurnaround+MACprocessing
-def get_current_slot_time():
-    return 8.5 * (2.0 ** conf.current_preset["sf"]) / conf.current_preset["bw"] * 1000 + 0.2 + 0.4 + 7
+def get_current_slot_time(): # from RadioInterface::computeSlotTimeMsec
+    # all times in ms
+    sum_prop_turnaround_mac_time = 0.2 + 0.4 + 7
+    firmware_bw = conf.current_preset["bw"] / 1000 # convert Hz to KHz to match firmware
+    symbol_time = (2.0 ** conf.current_preset["sf"]) / firmware_bw
+
+    if conf.REGION['wide_lora']:
+        # TODO: currently wide_lora isn't fully implemented
+        # currently only 2.4GHz LoRa
+        return (NUM_SYM_CAD_24GHZ + (2 * conf.current_preset['sf'] + 3) / 32) * symbol_time + sum_prop_turnaround_mac_time
+    else:
+        return max(2.25, NUM_SYM_CAD + 0.5) * symbol_time + sum_prop_turnaround_mac_time
 
 
 def check_collision(conf, env, packet, rx_nodeId, packetsAtN):
@@ -27,7 +40,7 @@ def check_collision(conf, env, packet, rx_nodeId, packetsAtN):
         for other in packetsAtN[rx_nodeId]:
             if frequency_collision(packet, other) and sf_collision(packet, other):
                 if timing_collision(conf, env, packet, other):
-                    logger.debug(f'Packet nr. {packet.seq} from {packet.txNodeId} and packet nr. {other.seq} from {other.txNodeId} will collide!')
+                    logger.debug(f'Packet nr. {packet.unique_packet_seq} from {packet.txNodeId} and packet nr. {other.unique_packet_seq} from {other.txNodeId} will collide at node {rx_nodeId}!')
                     c = power_collision(packet, other, rx_nodeId)
                     # mark all the collided packets
                     for p in c:
@@ -107,33 +120,53 @@ def airtime(conf, sf, cr, pl, bw):
     return (Tpream + Tpayload) * 1000
 
 
-def estimate_path_loss(conf, dist, freq, txZ=conf.HM, rxZ=conf.HM):
+def estimate_path_loss(conf, dist, freq, txZ=None, rxZ=None, model=None):
+    '''Calculate path loss between transmitter and receiver using a specific model
+
+    Arguments:
+    conf -- config object
+    dist -- distance between nodes in meters
+    freq -- frequency in MHz
+    txZ -- height of transmitter. Default: conf.HM
+    rxZ -- height of receiver. Default: conf.HM
+    model -- choice of model (currently integer in [0,6], default: conf.MODEL)
+
+    Returns:
+    path loss as float
+    '''
+    if txZ is None:
+        txZ = conf.HM
+    if rxZ is None:
+        rxZ = conf.HM
+    if model is None:
+        model = conf.MODEL
+
     # With randomized movements we may end up on top of another node which is problematic for log(dist)
     dist = max(dist, .001)
 
     # Log-Distance model
-    if conf.MODEL == 0:
+    if model == 0:
         Lpl = conf.LPLD0 + 10 * conf.GAMMA * math.log10(dist / conf.D0)
 
     # Okumura-Hata model
-    elif 1 <= conf.MODEL <= 4:
+    elif 1 <= model <= 4:
         # small and medium-size cities
-        if conf.MODEL == 1:
+        if model == 1:
             ahm = (1.1 * (math.log10(freq) - 6.0) - 0.7) * rxZ - (1.56 * (math.log10(freq) - 6.0) - 0.8)
             C = 0
         # metropolitan areas
-        elif conf.MODEL == 2:
+        elif model == 2:
             if freq <= 200000000:
                 ahm = 8.29 * ((math.log10(1.54 * rxZ)) ** 2) - 1.1
             elif freq >= 400000000:
                 ahm = 3.2 * ((math.log10(11.75 * rxZ)) ** 2) - 4.97
             C = 0
         # suburban environments
-        elif conf.MODEL == 3:
+        elif model == 3:
             ahm = (1.1 * (math.log10(freq) - 6.0) - 0.7) * rxZ - (1.56 * (math.log10(freq) - 6.0) - 0.8)
             C = -2 * ((math.log10(freq) - math.log10(28000000)) ** 2) - 5.4
         # rural area
-        elif conf.MODEL == 4:
+        elif model == 4:
             ahm = (1.1 * (math.log10(freq) - 6.0) - 0.7) * rxZ - (1.56 * (math.log10(freq) - 6.0) - 0.8)
             C = -4.78 * ((math.log10(freq) - 6.0) ** 2) + 18.33 * (math.log10(freq) - 6.0) - 40.98
 
@@ -142,21 +175,24 @@ def estimate_path_loss(conf, dist, freq, txZ=conf.HM, rxZ=conf.HM):
         Lpl = A + B * (math.log10(dist) - 3.0) + C
 
     # 3GPP model
-    elif 5 <= conf.MODEL < 7:
+    elif 5 <= model < 7:
         # Suburban Macro
-        if conf.MODEL == 5:
+        if model == 5:
             C = 0  # dB
         # Urban Macro
-        elif conf.MODEL == 6:
+        elif model == 6:
             C = 3  # dB
 
         Lpl = (44.9 - 6.55 * math.log10(txZ)) * (math.log10(dist) - 3.0) \
             + 45.5 + (35.46 - 1.1 * rxZ) * (math.log10(freq) - 6.0) \
             - 13.82 * math.log10(rxZ) + 0.7 * rxZ + C
+    else:
+        raise ValueError(f"Unsupported path loss model: {model}")
 
     return Lpl
 
 
+# TODO: take conf as parameter so we don't use this module's default conf
 def zero_link_budget(dist):
     return conf.PTX + 2 * conf.GL - estimate_path_loss(conf, dist, conf.FREQ) - conf.current_preset["sensitivity"]
 
@@ -177,10 +213,12 @@ def rootFinder(func, x0, args=(), tol=1, maxiter=100):
   print("Warning: could not estimate max. range")
   return x
 
+# TODO: take conf as parameter so we don't use this module's default conf
 def zero_link_budget_with_gain(dist, gain):
     return conf.PTX + gain - estimate_path_loss(conf, dist, conf.FREQ) - conf.current_preset["sensitivity"]
 
 def estimate_max_range(gain):
     return rootFinder(zero_link_budget_with_gain, 1500, args=(gain,))
 
+# TODO: take conf as parameter so we don't use this module's default conf
 MAXRANGE = rootFinder(zero_link_budget, 1500)
