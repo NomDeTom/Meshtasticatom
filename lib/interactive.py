@@ -1,4 +1,5 @@
 import cmd
+import errno
 import socket
 import sys
 import threading
@@ -752,17 +753,54 @@ class InteractiveSim:
         print("\nClosing all nodes...")
         pub.unsubAll()
         for n in self.nodes:
-            n.iface.localNode.exitSimulator()
+            self.exit_simulator(n)
             try:
                 close_interface(n.iface)
+            except OSError as ex:
+                if ex.errno != errno.EBADF:
+                    raise
+                print(f"Warning: node {n.nodeid} interface was already closed during shutdown ({ex}).")
             except InterfaceCloseTimeout as ex:
                 print(f"Warning: node {n.nodeid} interface close timed out during shutdown ({ex}).")
+            finally:
+                n.iface = None
         if self.docker:
-            self.container.stop()
+            self.stop_container()
         if self.forwardToClient:
-            self._wantExit = True
-            self.forwardSocket.close()
-            self.clientSocket.close()
+            self.wantExit = True
+            if self.forwardSocket is not None:
+                self.forwardSocket.close()
+            if self.clientSocket is not None:
+                self.clientSocket.close()
+
+    @staticmethod
+    def exit_simulator(node):
+        iface = node.iface
+        if iface is None or getattr(iface, "localNode", None) is None:
+            return
+        try:
+            iface.localNode.exitSimulator()
+        except OSError as ex:
+            if ex.errno != errno.EBADF:
+                raise
+            print(f"Warning: node {node.nodeid} simulator was already closed during shutdown ({ex}).")
+
+    def stop_container(self):
+        try:
+            self.container.stop()
+        except Exception as ex:
+            if self.is_docker_not_found(ex):
+                print(f"Warning: Docker container was already removed during shutdown ({ex}).")
+                return
+            raise
+
+    @staticmethod
+    def is_docker_not_found(ex):
+        response = getattr(ex, "response", None)
+        status_code = getattr(ex, "status_code", None) or getattr(response, "status_code", None)
+        return status_code == 404 or (
+            ex.__class__.__module__ == "docker.errors" and ex.__class__.__name__ == "NotFound"
+        )
 
 
 class CommandProcessor(cmd.Cmd):
