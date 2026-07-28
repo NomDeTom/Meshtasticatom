@@ -129,7 +129,7 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         from lib.gui import gen_scenario
 
         config_dict = gen_scenario(conf)
-        config = [NodeConfig.from_gen_scenario_output(node_id, cfg, period) for node_id, cfg in config_dict.items()]
+        config = [NodeConfig.from_gen_scenario_output(node_id, cfg, period, conf.PTX, conf.FREQ) for node_id, cfg in config_dict.items()]
         nr_nodes = len(config)
 
     if nr_nodes < 2:

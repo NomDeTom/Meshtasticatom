@@ -232,7 +232,15 @@ for rt_i, routerType in enumerate(routerTypes):
                 x, y = coords[nodeId]
 
                 # We create a NodeConfig object so that MeshNode will use that
-                nodeConfig = NodeConfig(nodeId, Point(x, y, routerTypeConf.HM), routerTypeConf.PERIOD, antenna_gain=routerTypeConf.GL, hop_limit=routerTypeConf.hopLimit)
+                nodeConfig = NodeConfig(
+                    node_id=nodeId, 
+                    position=Point(x, y, routerTypeConf.HM), 
+                    period=routerTypeConf.PERIOD, 
+                    tx_power=routerTypeConf.PTX, 
+                    freq=routerTypeConf.FREQ, 
+                    antenna_gain=routerTypeConf.GL, 
+                    hop_limit=routerTypeConf.hopLimit
+                    )
                 node_configs.append(nodeConfig)
 
             if SHOW_GRAPH:
