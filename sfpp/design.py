@@ -123,6 +123,59 @@ RIVALS = [
 # that cannot reproduce its own baseline is wired wrong, and this is the cheapest way to notice.
 REPRODUCES_BASELINE = ("hop-scaling-40", "congestion-40")
 
+# One sentence per coordinate, in the terms a reader of the page has - what changed, not which flag
+# moved. The digest composes a cell's sentence from its mesh and its rival, so a page can say what
+# `batumi-legacy-50-hop-limit-15` was without anyone opening this file. `sweep.DESCRIPTIONS` is the
+# same idea for the block sweeps.
+MESH_NOTES = {
+    "batumi": "the 92-node Batumi snapshot on its own ground, at the shipped defaults",
+    "batumi-x4": "Batumi mirrored into four reflected copies - four times the nodes over the same "
+    "terrain, so size moves and the ground does not. Seam-spanning pairs sit outside the fitted "
+    "link budget; read pairs_beyond_calibration before anything else",
+    "batumi-legacy-25": "Batumi with a quarter of the mesh still on 2.6, as a mesh part-way through "
+    "an upgrade",
+    "batumi-legacy-50": "Batumi with half the mesh still on 2.6 - the upgrade stalled halfway",
+    "batumi-short-fast": "Batumi on SHORT_FAST instead of LONG_FAST: more airtime per second and "
+    "less range per hop",
+}
+
+RIVAL_NOTES = {
+    "none": "nothing changed - the mesh as the firmware ships it",
+    "extra-repeats": "a node tolerates a second heard copy before cancelling its own rebroadcast, "
+    "so a text is relayed more often. Not in any release",
+    "favourite-routers": "router-like nodes favourite each other, so a relay between two of them "
+    "keeps its hop limit instead of spending one",
+    "coding-rate-ladder": "each retransmission goes out at a higher coding rate - more redundancy "
+    "and more airtime per attempt. Not in any release",
+    "m4-early-flood": "an addressed message floods sooner instead of waiting out the directed "
+    "attempts",
+    "hop-limit-7": "every node at 7 hops instead of the per-node 3-7 by centrality. Also removes "
+    "the centrality assignment, so it is two changes and reads as one",
+    "hop-limit-15": "every node at 15 hops - a ceiling far past anything this mesh can use, which "
+    "is the point: it shows what the limit was costing when it bound",
+    "hop-scaling-40": "the hop recommendation still aims at 40 nodes, the firmware's own constant. "
+    "This arm must reproduce the unchanged mesh exactly",
+    "hop-scaling-60": "the hop recommendation aims at 60 nodes, so it suggests further travel",
+    "hop-scaling-80": "the hop recommendation aims at 80 nodes - most of this mesh, and about as "
+    "far as the suggestion can reach",
+    "congestion-40": "broadcast intervals still start stretching above 40 nodes, the firmware's own "
+    "constant. This arm must reproduce the unchanged mesh exactly",
+    "congestion-60": "broadcast intervals hold their shipped cadence up to 60 nodes before "
+    "stretching, so the mesh stays chattier for longer",
+    "congestion-80": "broadcast intervals hold their shipped cadence up to 80 nodes - on a mesh "
+    "this size, almost no throttling at all",
+}
+
+
+def describes():
+    """{cell name: one sentence}, composed from the mesh and the rival it crosses."""
+    return {
+        f"{mesh}-{rival}": f"{MESH_NOTES[mesh]}; {RIVAL_NOTES[rival]}. Crossed against the archive "
+        f"off and at every placement and count."
+        for mesh, _ in MESHES
+        for rival, _ in RIVALS
+    }
+
 
 def archives():
     """(label, flags) for each archive configuration, `off` first."""
