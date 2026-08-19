@@ -170,6 +170,50 @@ class Cells(unittest.TestCase):
         )
 
 
+class ShardedBlocks(unittest.TestCase):
+    """A block that arrives in several files is one block, not several.
+
+    The cross shards a heavy cell one job per seed - the mirrored Batumi mesh is four times the
+    nodes and a whole cell in one job runs past the runner's ceiling - and the artifacts merge into
+    one directory, so the shards must be named apart on disk while carrying the same `block`. Read
+    per file instead of per block, the digest would enter the same block three times and average
+    nothing over seeds, which is the failure this guards.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def shards(self, directory):
+        os.makedirs(directory, exist_ok=True)
+        for seed, text in ((7, 0.6), (11, 0.7), (13, 0.8)):
+            reports = [
+                report(block="X-arm", value="off", seed=seed, text=text, held=0.0),
+                report(block="X-arm", value="spread x3", seed=seed, text=text, held=0.5),
+            ]
+            with open(os.path.join(directory, f"X-arm.s{seed}.json"), "w") as f:
+                json.dump(reports, f)
+        return directory
+
+    def test_three_shards_are_one_block(self):
+        summary = C.collate(self.shards(os.path.join(self.tmp.name, "sharded")))
+        self.assertEqual([b["block"] for b in summary["blocks"]], ["X-arm"])
+
+    def test_the_seeds_are_averaged_across_the_shards(self):
+        summary = C.collate(self.shards(os.path.join(self.tmp.name, "avg")))
+        cells = {c["value"]: c for c in summary["blocks"][0]["cells"]}
+        self.assertEqual(sorted(cells["off"]["seeds"]), [7, 11, 13])
+        # (0.6 + 0.7 + 0.8) / 3, which only exists if all three files reached one cell.
+        self.assertAlmostEqual(cells["off"]["metrics"]["text"], 0.7, places=6)
+        self.assertIn("text", cells["off"]["sd"])
+
+    def test_a_sharded_block_is_not_reported_missing(self):
+        summary = C.collate(
+            self.shards(os.path.join(self.tmp.name, "expect")), expected=["X-arm"]
+        )
+        self.assertEqual(summary["missing_blocks"], [])
+
+
 class Gate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
