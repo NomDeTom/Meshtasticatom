@@ -97,7 +97,7 @@ jobs:
           args=(
             --archive "$GITHUB_WORKSPACE/results/runs"
             --out "$GITHUB_WORKSPACE/site"
-            --name meshtasticator-explorer.html
+            --name meshtasticatom-explorer.html
             --for-pages
             --link-base "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${RESULTS_BRANCH}/runs"
           )
@@ -121,17 +121,17 @@ jobs:
           fi
           remote="https://x-access-token:${PAGES_TOKEN}@github.com/${PAGES_REPO}.git"
           git clone --depth 1 --branch "$PAGES_BRANCH" "$remote" pages
-          cp site/meshtasticator-explorer.html pages/meshtasticator-explorer.html
+          cp site/meshtasticatom-explorer.html pages/meshtasticatom-explorer.html
           cd pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # One file, by name. The site's index is hand-curated and this job does not touch it.
-          git add meshtasticator-explorer.html
+          git add meshtasticatom-explorer.html
           if git diff --cached --quiet; then
             echo "site copy unchanged"
             exit 0
           fi
-          git commit -q -m "meshtasticator-explorer: rebuild from the sweep archive"
+          git commit -q -m "meshtasticatom-explorer: rebuild from the sweep archive"
           for attempt in 1 2 3 4; do
             if git push -q origin "HEAD:$PAGES_BRANCH"; then
               echo "published to $PAGES_REPO"

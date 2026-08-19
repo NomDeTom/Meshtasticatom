@@ -627,9 +627,9 @@ class PublishedCopy(unittest.TestCase):
 
     def test_it_is_not_called_index(self):
         # The site has its own index and this is one page on it.
-        out = self._build("--name", "meshtasticator-explorer.html")
+        out = self._build("--name", "meshtasticatom-explorer.html")
         self.assertTrue(
-            os.path.exists(os.path.join(out, "meshtasticator-explorer.html"))
+            os.path.exists(os.path.join(out, "meshtasticatom-explorer.html"))
         )
         self.assertFalse(os.path.exists(os.path.join(out, "index.html")))
 
