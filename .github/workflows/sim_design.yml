@@ -18,13 +18,27 @@
 # 511 s, four times over for four times the nodes. A whole mirrored cell at three seeds is thirty
 # of those, about 4.3 hours before any allowance for a slower runner, against GitHub's six-hour job
 # ceiling. Per seed it is 85 minutes, which leaves room for a runner half this speed.
+#
+# Those two figures are 24-hour runs and the cross now runs 72 (see design.TRAFFIC for why). Scaling
+# the simulated part - the link build is paid once per run either way - the mirrored mesh comes to
+# roughly 1450 s a run and a per-seed job of ten archive configurations to about 4 hours. Hence the
+# raised ceiling below. These are extrapolations from a 24-hour measurement, not measurements: the
+# collate job now compares each block's seconds-per-simulated-hour against its own history, so the
+# first real 72-hour round is what should correct them.
 name: Sim Design (cross)
 
 on:
   schedule:
-    # Sunday 03:40 UTC. Weekly rather than nightly: a full round is 65 jobs of an hour or more, and
+    # Sunday 04:40 UTC. Weekly rather than nightly: a full round is 65 jobs of an hour or more, and
     # the two nightly sweeps already have the runners between 02:10 and 06:20.
-    - cron: 40 3 * * 0
+    #
+    # An hour later than it reads in the history, and the hour is the point: this and
+    # sim_sweep_matrix both used to fire at 03:40 on Sunday. Each file's comment reasoned only about
+    # the *nightly* block sweep and concluded 03:40 was clear of it; neither mentioned the other
+    # Sunday workflow at the same minute. Between them they can ask for 18 concurrent runners, and
+    # both are `cancel-in-progress: false`, so the loser does not get dropped - it queues, and burns
+    # part of its own `timeout-minutes` before its first line of work.
+    - cron: 40 4 * * 0
   workflow_dispatch:
     inputs:
       mesh:
@@ -146,11 +160,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Ten archive configurations at one seed: 21 minutes on Batumi as measured on this tree, 85 on
-    # the mirrored mesh. Set for the mirrored mesh with room for a runner half this speed, and
-    # short enough that a job which has hung is killed inside the hour rather than holding a runner
-    # until the platform ceiling.
-    timeout-minutes: 180
+    # Ten archive configurations at one seed. At 24 hours that was 21 minutes on Batumi and 85 on
+    # the mirrored mesh; at 72 it extrapolates to roughly an hour and four hours respectively, so
+    # 180 no longer has margin for the mirrored cells and would start killing them mid-round. 300
+    # keeps a runner half this speed inside the limit while staying clear of the platform's own
+    # 360-minute hard ceiling, which no `timeout-minutes` can raise.
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       # Below the account's concurrency allowance, so a round never occupies every runner and

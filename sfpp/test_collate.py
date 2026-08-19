@@ -260,6 +260,147 @@ class Gate(unittest.TestCase):
         self.assertEqual([b["block"] for b in again["blocks"]], ["B-arm"])
 
 
+class Timing(unittest.TestCase):
+    """The runtime comparison. TRAPS.md #7's missing check: `wall_seconds` was recorded and summed,
+    and nothing compared it against a previous run."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def archive(self, rates, block="B-arm"):
+        """A digest per prior run, each carrying one block at a given seconds-per-simulated-hour."""
+        root = os.path.join(self.tmp.name, "archive")
+        for i, rate in enumerate(rates):
+            run = os.path.join(root, f"run-{i}")
+            os.makedirs(run, exist_ok=True)
+            with open(os.path.join(run, "summary.json"), "w") as f:
+                json.dump(
+                    {
+                        "run_id": f"run-{i}",
+                        "blocks": [{"block": block, "seconds_per_sim_hour": rate}],
+                    },
+                    f,
+                )
+        return root
+
+    def run_at(self, seconds, hours, name="timing"):
+        """One block whose cells each took `seconds` of wall-clock for `hours` of simulated time."""
+        return write_run(
+            os.path.join(self.tmp.name, name),
+            {
+                "B-arm": [
+                    report(value=v, wall_seconds=seconds, opts={"nodes": 60, "hours": hours})
+                    for v in (1, 2)
+                ]
+            },
+        )
+
+    def rate_of(self, summary, block="B-arm"):
+        return next(b for b in summary["blocks"] if b["block"] == block)["seconds_per_sim_hour"]
+
+    def test_the_rate_is_wall_clock_over_simulated_hours(self):
+        summary = C.collate(self.run_at(120.0, 24))
+        # Two cells, 120 s each over 24 simulated hours each: 240 / 48.
+        self.assertAlmostEqual(self.rate_of(summary), 5.0)
+
+    def test_a_block_that_got_much_slower_is_flagged(self):
+        summary = C.collate(
+            self.run_at(1200.0, 24, name="slow"), history_dir=self.archive([5.0, 5.2, 4.9])
+        )
+        self.assertTrue(any("slower" in w for w in summary["gate"]["warnings"]))
+
+    def test_a_slowdown_is_a_warning_not_a_failure(self):
+        summary = C.collate(
+            self.run_at(1200.0, 24, name="warnonly"), history_dir=self.archive([5.0, 5.2, 4.9])
+        )
+        self.assertTrue(summary["gate"]["ok"])
+        self.assertEqual(summary["gate"]["failures"], [])
+
+    def test_a_block_that_got_much_faster_is_also_flagged(self):
+        # A fragmented mesh or an arm that stopped being read both cost less to simulate.
+        summary = C.collate(
+            self.run_at(12.0, 24, name="fast"), history_dir=self.archive([5.0, 5.2, 4.9])
+        )
+        self.assertTrue(any("faster" in w for w in summary["gate"]["warnings"]))
+
+    def test_ordinary_runner_noise_is_not_flagged(self):
+        summary = C.collate(
+            self.run_at(150.0, 24, name="noise"), history_dir=self.archive([5.0, 5.2, 4.9])
+        )
+        self.assertEqual(summary["gate"]["warnings"], [])
+
+    def test_changing_hours_alone_does_not_read_as_a_regression(self):
+        """The interaction that would have made this gate useless.
+
+        The 2 h and 24 h sweeps are being raised to 72 h so a diurnal cycle and the slower build-ups
+        are visible. Gating on the raw `wall_seconds` sum would have flagged every block in the
+        archive the night that landed - a 3x total against an unchanged rate - and taught everyone to
+        ignore the gate before it ever caught anything.
+        """
+        history = self.archive([5.0, 5.2, 4.9])
+        # Three times the simulated hours, three times the wall clock: the same machine, same speed.
+        summary = C.collate(self.run_at(360.0, 72, name="longer"), history_dir=history)
+        self.assertAlmostEqual(self.rate_of(summary), 5.0)
+        self.assertEqual(summary["gate"]["warnings"], [])
+
+    def test_a_block_new_to_the_archive_is_not_compared(self):
+        summary = C.collate(
+            self.run_at(9000.0, 24, name="new"), history_dir=self.archive([5.0], block="B-other")
+        )
+        self.assertEqual(summary["gate"]["warnings"], [])
+
+    def test_one_prior_run_is_not_enough_history(self):
+        summary = C.collate(
+            self.run_at(9000.0, 24, name="thin"), history_dir=self.archive([5.0])
+        )
+        self.assertEqual(summary["gate"]["warnings"], [])
+
+    def test_a_run_is_not_compared_against_itself(self):
+        """A re-collate of the run in flight would otherwise find its own digest and never drift."""
+        root = self.archive([5.0, 5.2, 4.9])
+        mine = os.path.join(root, "mine")
+        os.makedirs(mine, exist_ok=True)
+        with open(os.path.join(mine, "summary.json"), "w") as f:
+            json.dump(
+                {"run_id": "mine", "blocks": [{"block": "B-arm", "seconds_per_sim_hour": 500.0}]}, f
+            )
+        summary = C.collate(
+            self.run_at(1200.0, 24, name="self"), run_id="mine", history_dir=root
+        )
+        # Its own 500.0 excluded, the median is the archive's ~5 and the slowdown still shows.
+        self.assertTrue(any("slower" in w for w in summary["gate"]["warnings"]))
+
+    def test_a_cell_that_does_not_record_hours_is_not_rated(self):
+        run = write_run(
+            os.path.join(self.tmp.name, "nohours"),
+            {"B-arm": [report(value=v, wall_seconds=99.0) for v in (1, 2)]},
+        )
+        summary = C.collate(run, history_dir=self.archive([5.0, 5.2, 4.9]))
+        self.assertIsNone(self.rate_of(summary))
+        self.assertEqual(summary["gate"]["warnings"], [])
+
+    def test_no_archive_means_no_comparison(self):
+        summary = C.collate(self.run_at(9000.0, 24, name="noarchive"))
+        self.assertEqual(summary["gate"]["warnings"], [])
+
+    def test_an_unreadable_digest_does_not_stop_the_comparison(self):
+        root = self.archive([5.0, 5.2, 4.9])
+        broken = os.path.join(root, "broken")
+        os.makedirs(broken, exist_ok=True)
+        with open(os.path.join(broken, "summary.json"), "w") as f:
+            f.write("{not json")
+        summary = C.collate(self.run_at(1200.0, 24, name="broken"), history_dir=root)
+        self.assertTrue(any("slower" in w for w in summary["gate"]["warnings"]))
+
+    def test_the_trend_report_names_a_drifted_block(self):
+        md = C.markdown(
+            C.collate(self.run_at(1200.0, 24, name="md"), history_dir=self.archive([5.0, 5.2, 4.9]))
+        )
+        self.assertIn("Runtime against this block's own history", md)
+        self.assertIn("B-arm", md)
+
+
 class Trend(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -70,9 +70,17 @@ MESHES = [
 
 # Traffic every cell carries, so the addressed measures have denominators and the DM-dependent
 # rivals are not inert. Not part of the cross: changing it changes every cell equally.
+#
+# 72 hours, which is `campaign.py`'s own default rather than a number invented here. This was 24, and
+# 24 is one pass of a 24-hour curve: `--diurnal commuter` is 17:1 peak-to-trough and README §4.4 calls
+# it "nearly inert on a run shorter than a day", so at 24 h a time-of-day effect and an artefact of
+# wherever `--start-hour` happened to land are the same reading. Three passes tell them apart. The
+# other half is the slow build-ups - the hop-scaling feedback loop needs time to converge at all
+# (README §10.4), and `held`/`union` measured while the first buckets are still filling is a
+# different number from the same mesh once reconciliation has run a few bucket-close cycles.
 TRAFFIC = [
     "--hours",
-    "24",
+    "72",
     "--hop-spread",
     "--dm-per-hour",
     "6",

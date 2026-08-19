@@ -103,6 +103,13 @@ jobs:
           [ -n "$SEED_BASE" ] && args+=(--seed-base "$SEED_BASE")
           [ -n "$SCENARIO" ] && args+=(--scenario "$SCENARIO")
           [ -n "$EXPECT" ] && args+=(--expect "$EXPECT")
+          # Every prior run's digest, so each block's runtime is compared against its own past rather
+          # than against a figure written into a workflow comment once and never revisited. The
+          # comparison is a rate - wall-clock seconds per *simulated* hour - so it survives a change
+          # to `--hours` or the seed count; the raw total would not. Warn-only: a hosted runner is
+          # shared hardware. This run's own directory is excluded by --run-id, which matters on a
+          # re-collate, when its digest is already sitting in the archive.
+          args+=(--history "$GITHUB_WORKSPACE/results/runs")
           python3 -m sfpp.collate "${args[@]}"
           # The gates decide this workflow's colour, but only after the results are committed: a run
           # that found a silent loss is the one run whose data must not be lost. The digest reaches

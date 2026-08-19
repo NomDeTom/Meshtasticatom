@@ -135,6 +135,23 @@ QUEUE_DROP_WARN = 0.10
 # look live.
 NOT_A_MEASUREMENT = ("opts", "seed", "wall_seconds")
 
+# How far a block's runtime may drift from its own history before the digest says so. TRAPS.md #7 is
+# a terrain index that was slower than the sort it replaced, and its entry reads "the data to compare
+# against a previous run exists; nothing compares it yet" - this is that comparison.
+#
+# Compared as **wall-clock seconds per simulated hour**, never as the raw `wall_seconds` sum. The sum
+# moves whenever the seed count or `--hours` moves, so gating on it would fire on every block the
+# next time either is retuned and teach everyone to ignore the gate. The rate is invariant to both.
+#
+# Warn, never fatal, and generously wide: a hosted runner is shared hardware and a 30-40% swing
+# between two identical runs is ordinary. What this is for is the 4x kind - an optimisation that cost
+# more than it saved - which a hard `timeout-minutes` only catches once it has grown enough to fail a
+# job outright, long after the commit that caused it.
+TIMING_DRIFT_FACTOR = 2.0
+# Below this many prior observations there is no median worth the name, and a first run has none at
+# all. A block new to the archive is silently ungated rather than compared against nothing.
+TIMING_MIN_HISTORY = 2
+
 
 def load_block(path):
     """Every cell report in one block file, as written by sweep.run_block."""
@@ -438,6 +455,95 @@ def describe(block):
         return None
 
 
+def _sim_hours(reports):
+    """Total simulated hours across these cells, or None if any cell does not say.
+
+    Summed rather than assumed constant: a block sweeping `--hours` would otherwise be normalised by
+    one arm's duration and report every other arm as a regression.
+    """
+    total = 0.0
+    for r in reports:
+        hours = (r.get("opts") or {}).get("hours")
+        if not hours:
+            return None
+        total += float(hours)
+    return total or None
+
+
+def _seconds_per_sim_hour(reports):
+    """Wall-clock seconds spent per simulated hour - the one timing figure comparable across runs."""
+    hours = _sim_hours(reports)
+    if not hours:
+        return None
+    wall = sum(r.get("wall_seconds") or 0 for r in reports)
+    return round(wall / hours, 4) if wall else None
+
+
+def load_history(archive_dir, exclude_run_id=None):
+    """{block name: [seconds_per_sim_hour, ...]} from every prior digest in the archive.
+
+    Reads the digests this module has already written, not the raw block JSONs: the archive keeps the
+    digests and prunes the raw data (see the retention note on each sweep's upload step), so the
+    digest is the only history that is still there months later.
+
+    A digest that will not parse is skipped rather than fatal, for the reason `explorer.py` does the
+    same - a corrupt or half-pushed file from one night must not stop tonight's run from collating.
+    """
+    history = {}
+    if not archive_dir or not os.path.isdir(archive_dir):
+        return history
+    for path in sorted(glob.glob(os.path.join(archive_dir, "*", "summary.json"))):
+        try:
+            with open(path) as f:
+                prior = json.load(f)
+        except (OSError, ValueError):
+            continue
+        # A re-collate of the run in flight would otherwise compare it against itself and never drift.
+        if exclude_run_id and prior.get("run_id") == exclude_run_id:
+            continue
+        for block in prior.get("blocks") or []:
+            rate = block.get("seconds_per_sim_hour")
+            if isinstance(rate, (int, float)) and rate > 0:
+                history.setdefault(block.get("block"), []).append(float(rate))
+    return history
+
+
+def check_timing(blocks, history):
+    """Flag a block whose seconds-per-simulated-hour has drifted from its own past. Warn only.
+
+    Both directions are reported, because both have a real failure mode. Slower is TRAPS.md #7, the
+    optimisation that cost more than it saved. Faster is the subtler one: a mesh that fragmented, an
+    arm that stopped being read, or traffic that stopped being generated all make a run cheaper by
+    doing less work, and a run that got four times faster overnight has not been optimised.
+    """
+    for block in blocks:
+        rate = block.get("seconds_per_sim_hour")
+        past = history.get(block["block"]) or []
+        if not rate or len(past) < TIMING_MIN_HISTORY:
+            continue
+        median = statistics.median(past)
+        if not median:
+            continue
+        block["timing"] = {
+            "seconds_per_sim_hour": rate,
+            "median": round(median, 4),
+            "ratio": round(rate / median, 3),
+            "runs_compared": len(past),
+        }
+        if rate > median * TIMING_DRIFT_FACTOR:
+            block["flags"].append(
+                f"slower: {rate:.3g} s per simulated hour against {median:.3g} over "
+                f"{len(past)} prior run(s) - {rate / median:.1f}x, and a runtime regression is "
+                f"invisible to `timeout-minutes` until it fails a job outright"
+            )
+        elif rate * TIMING_DRIFT_FACTOR < median:
+            block["flags"].append(
+                f"faster: {rate:.3g} s per simulated hour against {median:.3g} over "
+                f"{len(past)} prior run(s) - {median / rate:.1f}x quicker, which is worth a look: "
+                f"a fragmented mesh or an arm that stopped being read both cost less to simulate"
+            )
+
+
 def summarise_block(reports):
     first = reports[0]
     cells = cells_of(reports)
@@ -449,6 +555,12 @@ def summarise_block(reports):
         "transport": first.get("transport"),
         "cells": cells,
         "wall_seconds": sum(r.get("wall_seconds") or 0 for r in reports),
+        # The comparable form of the above. `wall_seconds` is a sum over however many cells and seeds
+        # this block happened to run, at whatever `--hours` it was configured with, so two runs of the
+        # same block are only comparable once both are divided out. See TIMING_DRIFT_FACTOR.
+        "runs": len(reports),
+        "sim_hours": _sim_hours(reports),
+        "seconds_per_sim_hour": _seconds_per_sim_hour(reports),
         "nodes": metric(first, "nodes"),
         "explains": describe(first.get("block", "?")),
         "scenario": (first.get("opts") or {}).get("scenario"),
@@ -503,7 +615,14 @@ def summarise_block(reports):
     return block
 
 
-def collate(runs_dir, run_id=None, seed_base=None, scenario=None, expected=None):
+def collate(
+    runs_dir,
+    run_id=None,
+    seed_base=None,
+    scenario=None,
+    expected=None,
+    history_dir=None,
+):
     # Grouped on the `block` field rather than one block per file, because a block does not have to
     # arrive in one file. A heavy cell of the cross is sharded one job per seed - the mirrored mesh
     # is four times the nodes and a whole cell in one job runs past the runner's ceiling - and each
@@ -518,6 +637,9 @@ def collate(runs_dir, run_id=None, seed_base=None, scenario=None, expected=None)
             if "block" in report:
                 by_block.setdefault(report["block"], []).append(report)
     blocks = [summarise_block(reports) for reports in by_block.values()]
+    # Against this block's own past, not against a figure written into a comment once. Skipped
+    # entirely when no archive is given, so a local collate of one run behaves exactly as before.
+    check_timing(blocks, load_history(history_dir, exclude_run_id=run_id))
 
     present = {b["block"] for b in blocks}
     missing = sorted(set(expected) - present) if expected else []
@@ -635,6 +757,35 @@ def markdown(summary):
             "",
         ]
 
+    # Runtime against this block's own past, for the blocks that have one. Quoted as a rate rather
+    # than a total, because the total moves whenever the seed count or `--hours` does and would read
+    # as a regression every time either is retuned.
+    drifted = sorted(
+        (b for b in summary["blocks"] if b.get("timing")),
+        key=lambda b: b["timing"]["ratio"],
+        reverse=True,
+    )
+    drifted = [b for b in drifted if b["timing"]["ratio"] >= 1.5 or b["timing"]["ratio"] <= 0.67]
+    if drifted:
+        out += [
+            "## Runtime against this block's own history",
+            "",
+            "Wall-clock seconds per **simulated** hour, against the median of the same block's prior "
+            "runs in this archive. Normalised because the raw total moves with the seed count and "
+            "`--hours`; a rate does not. Runner hardware is shared, so read a ratio near 1 as noise "
+            f"and the flagged ones (past {TIMING_DRIFT_FACTOR:g}x either way) as worth a look.",
+            "",
+            "| block | s/sim-h | median | ratio | runs compared |",
+            "| --- | --: | --: | --: | --: |",
+        ]
+        for b in drifted:
+            t = b["timing"]
+            out.append(
+                f"| `{b['block']}` | {t['seconds_per_sim_hour']:.3g} | {t['median']:.3g} | "
+                f"{t['ratio']:.2f}x | {t['runs_compared']} |"
+            )
+        out.append("")
+
     # The trend proper: which variables move a delivery measure at all, largest first. A reader who
     # stops after this table has the run's answer; everything below is the working.
     ranked = sorted(
@@ -748,6 +899,11 @@ def main(argv=None):
         "which would report every block a partial run never asked for as missing",
     )
     ap.add_argument(
+        "--history",
+        help="archive of prior run directories (each holding a summary.json), so a block's runtime "
+        "is compared against its own past. Omit to skip the timing comparison entirely",
+    )
+    ap.add_argument(
         "--fail-on-gate",
         action="store_true",
         help="exit non-zero when a fatal gate failed",
@@ -766,6 +922,7 @@ def main(argv=None):
         seed_base=opts.seed_base,
         scenario=opts.scenario,
         expected=expected,
+        history_dir=opts.history,
     )
     out_dir = opts.out or opts.runs
     os.makedirs(out_dir, exist_ok=True)
