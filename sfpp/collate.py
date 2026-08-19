@@ -414,15 +414,26 @@ def _has_denominator(cells, key):
 
 
 def describe(block):
-    """Return what this block changes, in one sentence, or None if the sweep does not declare it.
+    """Return what this block changes, in one sentence, or None if neither producer declares it.
 
-    Imported lazily: a digest can be collated from run JSONs alone, and a matrix run's cells are not
-    in sweep.BLOCKS at all.
+    Two producers, asked in turn: `sweep.BLOCKS` names its blocks outright, and `design.cells()`
+    composes a cell's sentence from the mesh and the rival it crosses. A matrix run's cells are in
+    neither and get no sentence, which is the honest answer rather than a guessed one.
+
+    Imported lazily, because a digest can be collated from run JSONs alone - the archive is
+    re-readable on a machine that has the reports and not the sweep definitions.
     """
     try:
         from .sweep import DESCRIPTIONS
 
-        return DESCRIPTIONS.get(block)
+        if block in DESCRIPTIONS:
+            return DESCRIPTIONS[block]
+    except ImportError:
+        pass
+    try:
+        from .design import describes
+
+        return describes().get(block)
     except ImportError:
         return None
 

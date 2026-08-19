@@ -111,6 +111,10 @@ A run leaves three things beside each other, and needs no post-processing step t
 | ----------------- | ---------------------- | --------------------------------------------------------------------------------- |
 | `campaign.py`     | `-m sfpp.campaign`     | one scenario end to end; writes JSON, report and charts                          |
 | `sweep.py`        | `-m sfpp.sweep`        | a named block: one arm, several values, shared seeds; same three outputs         |
+| `design.py`       | `-m sfpp.design`       | the three-axis cross: archive configuration x rival x mesh, one job per cell     |
+| `matrix.py`       | `-m sfpp.matrix`       | place and radio crossed over real ground, with controls                          |
+| `collate.py`      | `-m sfpp.collate`      | many runs' JSON reduced to one digest, with the standing gates applied           |
+| `explorer.py`     | `-m sfpp.explorer`     | every digest in an archive rolled into one page                                  |
 | `report.py`       | `-m sfpp.report`       | per-portnum statistics as distributions, text marked and first                    |
 | `analyse.py`      | `-m sfpp.analyse`      | markdown tables from saved JSON, re-tabulated without re-running                  |
 | `autochart.py`    | (automatic)            | charts rendered by the run that produced the data                                 |
@@ -134,7 +138,16 @@ The two `figures*.py` tools are the exception - they draw from blocks pinned by 
 `--runs` and `--out` and say which file they wanted rather than skipping in silence. A block run
 under `--grid` carries the grid in its filename, which is the usual reason one is not found.
 
-`python3 -m sfpp.sweep --list` prints the named blocks.
+`python3 -m sfpp.sweep --list` prints the named blocks. `python3 -m sfpp.design --list` prints the
+cells of the cross.
+
+**`sweep.py` and `design.py` answer different questions and neither substitutes for the other.** A
+block sweep moves one flag at a time with the archive switched on in every cell - `--protocol` is not
+in its BASE and the campaign default is `sr` - so it says what a variable does to a mesh and can
+never say what the archive is worth, because the archive is never off. The cross puts the archive on
+one axis, everything that could be deployed instead of it on a second, and the mesh on a third, so
+every number is a difference against the same mesh at the same seed with the archive off. Read a
+block sweep for mechanism and the cross for deployment advice.
 
 ---
 
