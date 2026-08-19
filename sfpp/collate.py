@@ -147,6 +147,25 @@ NOT_A_MEASUREMENT = ("opts", "seed", "wall_seconds")
 # between two identical runs is ordinary. What this is for is the 4x kind - an optimisation that cost
 # more than it saved - which a hard `timeout-minutes` only catches once it has grown enough to fail a
 # job outright, long after the commit that caused it.
+# Every kind of flag this module raises, as a vocabulary rather than a prose prefix. A flag is
+# recorded twice over: as the sentence a reader wants (`flags`) and as its kind (`flag_kinds`), so the
+# run-health page can group and count them without parsing the sentence back apart. Held to this set
+# by test_collate, so a new check cannot invent a kind that nothing renders.
+FLAG_KINDS = (
+    "chutil-impossible",  # fatal: a node busier than all the time
+    "no-ground",  # fatal: --scenario asked for, none recorded
+    "silent-loss",  # fatal: a checksum closed over two unequal sets
+    "audit-disagrees",  # fatal: the at-rest audit contradicts the checksum
+    "no-terrain",  # ground recorded, no terrain applied
+    "beyond-envelope",  # pairs outside the fitted budget, on the raw one instead
+    "placement-capped",  # a role-bounded placement gave fewer archives than asked
+    "queue-drops",  # airtime measured through a backoff cap
+    "sketch-failures",  # misdecodes or decode failures
+    "inert",  # every value of the arm produced identical numbers
+    "slower",  # runtime drifted up against this block's own history
+    "faster",  # runtime drifted down, which is not automatically good news
+)
+
 TIMING_DRIFT_FACTOR = 2.0
 # Below this many prior observations there is no median worth the name, and a first run has none at
 # all. A block new to the archive is silently ungated rather than compared against nothing.
@@ -337,7 +356,11 @@ def _inert(grouped):
 
 
 def check_cell(report, where):
-    """Apply the per-run gates, returning (fatal, warnings) already worded for a reader.
+    """Apply the per-run gates, returning (fatal, warnings) as (kind, sentence) pairs.
+
+    The kind is carried from here rather than recovered later: the run-health page groups and counts
+    flags, and recognising them by re-reading their prose would break the first time one was reworded.
+    Every kind used here is in FLAG_KINDS, which test_collate enforces.
 
     Every one of these corresponds to a defect that shipped in this simulator and produced a
     confident wrong number rather than an error. They are cheap; the reason to run them on every
@@ -354,14 +377,20 @@ def check_cell(report, where):
     chutil = (traffic.get("node_channel_util_percent") or {}).get("max")
     if chutil is not None and chutil > 100:
         fatal.append(
-            f"{where}: node channel utilisation {chutil:.1f}% exceeds 100 - physically impossible"
+            (
+                "chutil-impossible",
+                f"{where}: node channel utilisation {chutil:.1f}% exceeds 100 - physically impossible",
+            )
         )
 
     # A Scenario with no nodes was falsy, so `if scenario:` was False and the run came out flat
     # while the label said alpine. No error, a plausible number, a wrong label.
     if opts.get("scenario") and not ground:
         fatal.append(
-            f"{where}: --scenario {opts['scenario']} was asked for and the run recorded no ground"
+            (
+                "no-ground",
+                f"{where}: --scenario {opts['scenario']} was asked for and the run recorded no ground",
+            )
         )
     if (
         opts.get("scenario")
@@ -369,19 +398,28 @@ def check_cell(report, where):
         and not (ground.get("terrain_applied") or ground.get("fixed_geometry"))
     ):
         warn.append(
-            f"{where}: --scenario {opts['scenario']} recorded ground but applied no terrain"
+            (
+                "no-terrain",
+                f"{where}: --scenario {opts['scenario']} recorded ground but applied no terrain",
+            )
         )
 
     # The design-falsifying counters. A run with a good reception figure and a non-zero silent-loss
     # count is not a good run.
     if sfpp.get("silent_losses"):
         fatal.append(
-            f"{where}: SILENT LOSSES {sfpp['silent_losses']:g} - a checksum closed over two unequal sets"
+            (
+                "silent-loss",
+                f"{where}: SILENT LOSSES {sfpp['silent_losses']:g} - a checksum closed over two unequal sets",
+            )
         )
     if sfpp.get("audit_checksum_agrees_sets_differ"):
         fatal.append(
-            f"{where}: at-rest audit disagrees with the checksum in "
-            f"{sfpp['audit_checksum_agrees_sets_differ']:g} case(s)"
+            (
+                "audit-disagrees",
+                f"{where}: at-rest audit disagrees with the checksum in "
+                f"{sfpp['audit_checksum_agrees_sets_differ']:g} case(s)",
+            )
         )
 
     # A fit answers any input, including ones it has never seen. Its elevation terms are positive and
@@ -393,10 +431,13 @@ def check_cell(report, where):
     ):
         envelope = ground.get("calibration_envelope_m")
         warn.append(
-            f"{where}: {ground['pairs_beyond_calibration']} pair(s) beyond the fit's "
-            f"{envelope / 1000:.1f} km envelope - those fell back to the raw budget"
-            if envelope
-            else f"{where}: {ground['pairs_beyond_calibration']} pair(s) beyond the fit's envelope"
+            (
+                "beyond-envelope",
+                f"{where}: {ground['pairs_beyond_calibration']} pair(s) beyond the fit's "
+                f"{envelope / 1000:.1f} km envelope - those fell back to the raw budget"
+                if envelope
+                else f"{where}: {ground['pairs_beyond_calibration']} pair(s) beyond the fit's envelope",
+            )
         )
 
     # Role-bounded placements cap at the mesh's router count and repeat above it, so two rows of a
@@ -404,19 +445,25 @@ def check_cell(report, where):
     req, placed = sfpp.get("servers_requested"), sfpp.get("servers_placed")
     if req is not None and placed is not None and req != placed:
         warn.append(
-            f"{where}: {req} archives requested, {placed} placed - group on the placed count"
+            (
+                "placement-capped",
+                f"{where}: {req} archives requested, {placed} placed - group on the placed count",
+            )
         )
 
     # A backoff cap discarding rebroadcasts rescales every airtime figure in the run.
     tx, drops = traffic.get("transmissions"), traffic.get("queue_drops")
     if tx and drops and drops / tx > QUEUE_DROP_WARN:
         warn.append(
-            f"{where}: queue drops {drops / tx:.1%} of transmissions - airtime here is measured through a cap"
+            (
+                "queue-drops",
+                f"{where}: queue drops {drops / tx:.1%} of transmissions - airtime here is measured through a cap",
+            )
         )
 
     for counter in ("misdecodes", "decode_failures"):
         if sfpp.get(counter):
-            warn.append(f"{where}: {counter} {sfpp[counter]:g}")
+            warn.append(("sketch-failures", f"{where}: {counter} {sfpp[counter]:g}"))
     return fatal, warn
 
 
@@ -431,11 +478,13 @@ def _has_denominator(cells, key):
 
 
 def describe(block):
-    """Return what this block changes, in one sentence, or None if neither producer declares it.
+    """Return what this block changes, in one sentence, or None if no producer declares it.
 
-    Two producers, asked in turn: `sweep.BLOCKS` names its blocks outright, and `design.cells()`
-    composes a cell's sentence from the mesh and the rival it crosses. A matrix run's cells are in
-    neither and get no sentence, which is the honest answer rather than a guessed one.
+    Three producers, asked in turn: `sweep.BLOCKS` names its blocks outright, `design.cells()`
+    composes a cell's sentence from the mesh and the rival it crosses, and `matrix.describes()` from
+    the scale and the preset. Matrix used to be absent here and its cells came through nameless -
+    honest, but an absence, and one that would have become a page of blank rows the moment anything
+    rendered the grid.
 
     Imported lazily, because a digest can be collated from run JSONs alone - the archive is
     re-readable on a machine that has the reports and not the sweep definitions.
@@ -447,12 +496,15 @@ def describe(block):
             return DESCRIPTIONS[block]
     except ImportError:
         pass
-    try:
-        from .design import describes
-
-        return describes().get(block)
-    except ImportError:
-        return None
+    for module in ("design", "matrix"):
+        try:
+            producer = __import__(f"{__package__}.{module}", fromlist=["describes"])
+            found = producer.describes().get(block)
+        except ImportError:
+            continue
+        if found:
+            return found
+    return None
 
 
 def _sim_hours(reports):
@@ -531,16 +583,20 @@ def check_timing(blocks, history):
             "runs_compared": len(past),
         }
         if rate > median * TIMING_DRIFT_FACTOR:
-            block["flags"].append(
+            add_flag(
+                block,
+                "slower",
                 f"slower: {rate:.3g} s per simulated hour against {median:.3g} over "
                 f"{len(past)} prior run(s) - {rate / median:.1f}x, and a runtime regression is "
-                f"invisible to `timeout-minutes` until it fails a job outright"
+                f"invisible to `timeout-minutes` until it fails a job outright",
             )
         elif rate * TIMING_DRIFT_FACTOR < median:
-            block["flags"].append(
+            add_flag(
+                block,
+                "faster",
                 f"faster: {rate:.3g} s per simulated hour against {median:.3g} over "
                 f"{len(past)} prior run(s) - {median / rate:.1f}x quicker, which is worth a look: "
-                f"a fragmented mesh or an arm that stopped being read both cost less to simulate"
+                f"a fragmented mesh or an arm that stopped being read both cost less to simulate",
             )
 
 
@@ -605,14 +661,64 @@ def summarise_block(reports):
 
     if _inert(group_by_value(reports)):
         block["flags"].append(
-            f"inert: every value of `{block['arm']}` produced identical numbers - "
-            "either the flag is not read, or it needs a second flag before it does anything (README §10.4)"
+            (
+                "inert",
+                f"inert: every value of `{block['arm']}` produced identical numbers - "
+                "either the flag is not read, or it needs a second flag before it does anything "
+                "(README §10.4)",
+            )
         )
     for r in reports:
         fatal, warn = check_cell(r, f"{block['arm']}={r.get('value')}")
         block["fatal"] += fatal
         block["flags"] += warn
+    _settle_flags(block)
     return block
+
+
+def add_flag(block, kind, text):
+    """Record one flag on an already-summarised block, keeping `flags` and `flag_kinds` in step.
+
+    Exists because not every check can run inside `summarise_block`: the timing comparison needs the
+    whole run's blocks before it can be made, so it lands afterwards. Appending to `block["flags"]`
+    directly at that point left a (kind, text) tuple in a list that had already been flattened to
+    sentences - which JSON turned into a list, `explorer.py` then tried to put in a set, and the whole
+    page build died on `unhashable type: 'list'`. Worse, the kind never reached `flag_kinds`, so the
+    one gate added to catch a regression was itself uncounted.
+    """
+    block.setdefault("flags", []).append(text)
+    kinds = block.setdefault("flag_kinds", {})
+    kinds[kind] = kinds.get(kind, 0) + 1
+    block["flag_kinds"] = dict(sorted(kinds.items()))
+
+
+def _settle_flags(block):
+    """Turn the (kind, sentence) pairs collected above into what the digest publishes.
+
+    `flags` and `fatal` stay plain sentences, because that is what every reader of this digest already
+    expects - the trend report prints them and `explorer.py` puts them in a set, which a list from
+    round-tripped JSON could not go into. The kinds go beside them, counted, so the run-health page can
+    group by kind without recognising a sentence.
+
+    Tolerant of a bare string so a check that forgets its kind degrades to `unclassified` rather than
+    crashing a whole night's collate; test_collate asserts none currently does.
+    """
+    for field in ("flags", "fatal"):
+        kinds, sentences = [], []
+        for entry in block[field]:
+            if isinstance(entry, tuple):
+                kind, text = entry
+            else:
+                kind, text = "unclassified", entry
+            kinds.append(kind)
+            sentences.append(text)
+        block[field] = sentences
+        counts = {}
+        for kind in kinds:
+            counts[kind] = counts.get(kind, 0) + 1
+        block["fatal_kinds" if field == "fatal" else "flag_kinds"] = dict(
+            sorted(counts.items())
+        )
 
 
 def collate(
@@ -672,10 +778,20 @@ def gate(blocks, missing):
     """Judge the run. Only the design-falsifying and physically impossible are fatal."""
     failures = [f"{b['block']}: {f}" for b in blocks for f in b["fatal"]]
     warnings = [f"{b['block']}: {f}" for b in blocks for f in b["flags"]]
+    # The same warnings counted by kind, and by how many blocks each kind touched. A run with 400
+    # `beyond-envelope` warnings from one mirrored cell and one `inert` is not the same run as the
+    # reverse, and a flat list of 401 sentences reads identically either way.
+    by_kind = {}
+    for b in blocks:
+        for kind, count in (b.get("flag_kinds") or {}).items():
+            entry = by_kind.setdefault(kind, {"flags": 0, "blocks": 0})
+            entry["flags"] += count
+            entry["blocks"] += 1
     return {
         "ok": not failures,
         "failures": failures,
         "warnings": warnings,
+        "warnings_by_kind": dict(sorted(by_kind.items())),
         "blocks_run": len(blocks),
         "blocks_missing": len(missing),
     }

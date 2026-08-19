@@ -83,9 +83,146 @@ def index_by_block(runs):
                     "cells": {c["value"]: c["metrics"] for c in b["cells"]},
                     "cost": b.get("cost"),
                     "flags": b.get("flags", []),
+                    "flag_kinds": b.get("flag_kinds") or {},
+                    "timing": b.get("timing"),
+                    "seconds_per_sim_hour": b.get("seconds_per_sim_hour"),
+                    "wall_seconds": b.get("wall_seconds"),
                 }
             )
     return blocks
+
+
+def declared_surfaces():
+    """{surface: {cell name: sentence}} for every sweep this tree declares, run or not.
+
+    The archive can only say what *has* run. The other half of "what is still to do" is what the
+    producers declare, which means importing them - so this is the one place the module reaches past
+    the digests. Each import is guarded the way `collate.describe()` guards its own: a digest archive
+    must stay readable on a machine that has the reports and not the sweep definitions, and there the
+    honest answer is a schedule with no declared side rather than a traceback.
+    """
+    surfaces = {}
+    try:
+        from .sweep import BLOCKS, DESCRIPTIONS
+
+        surfaces["blocks"] = {name: DESCRIPTIONS.get(name, "") for name in BLOCKS}
+    except ImportError:
+        pass
+    for module, label in (("matrix", "matrix"), ("design", "design")):
+        try:
+            producer = __import__(f"{__package__}.{module}", fromlist=["describes"])
+            surfaces[label] = dict(producer.describes())
+        except ImportError:
+            continue
+    return surfaces
+
+
+def schedule(runs, surfaces=None):
+    """Every declared cell against what the archive holds for it.
+
+    Two different readings of "still to do", and they diverge sharply here: a nightly block sweep runs
+    every block every night, while the weekly surfaces touch a cell once a week - so "not in the latest
+    run" means nothing for the second group and everything for the first. Both are recorded per row
+    (`runs` and `last_run`) and neither is called "done" on its own.
+    """
+    surfaces = declared_surfaces() if surfaces is None else surfaces
+    seen = {}
+    for run in runs:
+        for b in run.get("blocks", []):
+            entry = seen.setdefault(b["block"], {"runs": 0, "last": None})
+            entry["runs"] += 1
+            entry["last"] = run.get("run_id") or entry["last"]
+    latest = (runs[-1].get("run_id") if runs else None) or None
+    in_latest = {
+        b["block"] for b in (runs[-1].get("blocks", []) if runs else [])
+    }
+
+    out = []
+    for surface, cells in sorted(surfaces.items()):
+        rows = []
+        for name, sentence in sorted(cells.items()):
+            got = seen.get(name)
+            rows.append(
+                {
+                    "cell": name,
+                    "explains": sentence,
+                    "runs": got["runs"] if got else 0,
+                    "last_run": got["last"] if got else None,
+                    "in_latest": name in in_latest,
+                }
+            )
+        out.append(
+            {
+                "surface": surface,
+                "declared": len(cells),
+                "ever_run": sum(1 for r in rows if r["runs"]),
+                "never_run": sum(1 for r in rows if not r["runs"]),
+                "in_latest": sum(1 for r in rows if r["in_latest"]),
+                "rows": rows,
+            }
+        )
+    # Anything the archive holds that nothing declares - a renamed or retired cell whose old results
+    # are still in the branch. Not an error, but it is why a "done" count can exceed the declared one.
+    declared = {name for cells in surfaces.values() for name in cells}
+    undeclared = sorted(set(seen) - declared)
+    return {"surfaces": out, "undeclared": undeclared, "latest_run": latest}
+
+
+def run_health(runs):
+    """Per run: what it cost, what it flagged, and whether its runtime drifted.
+
+    Duration is reported both ways on purpose. `wall_seconds` is what the run actually spent, which is
+    the number that decides whether a job fits its ceiling; seconds-per-simulated-hour is the only form
+    comparable between two runs of different length, and the digest gates on that one. A run reported
+    only by its total looks like a regression every time --hours changes.
+    """
+    out = []
+    for run in runs:
+        gate = run.get("gate", {})
+        blocks = run.get("blocks", [])
+        rates = [
+            b["seconds_per_sim_hour"]
+            for b in blocks
+            if isinstance(b.get("seconds_per_sim_hour"), (int, float))
+        ]
+        drifted = [b for b in blocks if b.get("timing")]
+        slowest = max(
+            (b for b in blocks if isinstance(b.get("wall_seconds"), (int, float))),
+            key=lambda b: b["wall_seconds"],
+            default=None,
+        )
+        out.append(
+            {
+                "run_id": run.get("run_id") or run.get("_name"),
+                "href": run.get("_href"),
+                "generated": run.get("generated"),
+                "scenario": run.get("scenario_requested") or "flat",
+                "seed_base": run.get("seed_base"),
+                "wall_seconds": run.get("wall_seconds") or 0,
+                "blocks_run": gate.get("blocks_run", 0),
+                "blocks_missing": gate.get("blocks_missing", 0),
+                "ok": gate.get("ok", True),
+                "failures": len(gate.get("failures", [])),
+                "warnings": len(gate.get("warnings", [])),
+                "by_kind": gate.get("warnings_by_kind") or {},
+                "median_rate": statistics.median(rates) if rates else None,
+                "slowest_block": slowest["block"] if slowest else None,
+                "slowest_seconds": slowest["wall_seconds"] if slowest else None,
+                "drifted": sorted(
+                    (
+                        {
+                            "block": b["block"],
+                            "ratio": b["timing"]["ratio"],
+                            "rate": b["timing"]["seconds_per_sim_hour"],
+                            "median": b["timing"]["median"],
+                        }
+                        for b in drifted
+                    ),
+                    key=lambda d: -d["ratio"],
+                ),
+            }
+        )
+    return out
 
 
 def spread_of(run, key):
@@ -266,6 +403,35 @@ p.sub { color: var(--muted); margin: 0 0 1.5rem; }
 .meta b { color: var(--text); font-weight: 600; }
 .panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
 .scroll { overflow-x: auto; }
+/* Tabs. Progressive enhancement: with no JS every panel stays visible and the nav is inert, so the
+   page remains one long readable document - which is also what printing and grepping it want. */
+.tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--border); margin: 1.5rem 0 0; }
+.tabs button {
+  border: 1px solid transparent; border-bottom: none; background: none; color: var(--muted);
+  padding: .5rem .9rem; cursor: pointer; font: inherit; border-radius: 8px 8px 0 0;
+}
+.tabs button:hover { color: var(--accent); }
+.tabs button[aria-selected="true"] {
+  color: var(--text); background: var(--panel-bg);
+  border-color: var(--border); margin-bottom: -1px; font-weight: 600;
+}
+.tabs .count { color: var(--muted); font-weight: 400; font-size: .8em; }
+/* The `hidden` attribute is in the markup so the first paint shows one panel rather than flashing
+   all five. That means overriding the UA's own [hidden] rule for the no-JS case, or the panels stay
+   hidden with nothing able to reveal them - the nav only becomes live once the script adds .tabbed. */
+.tab-panel[hidden] { display: block; }
+body.tabbed .tab-panel[hidden] { display: none; }
+.tab-panel > h2:first-child { margin-top: 1.5rem; }
+/* A kind of flag, counted. Neutral by default - `beyond-envelope` on a mirrored cell is expected,
+   and colouring every warning red teaches people to stop reading them. */
+.kind { display: inline-flex; gap: .35rem; align-items: baseline; border: 1px solid var(--border);
+        border-radius: 999px; padding: .1rem .5rem; font-size: .78rem; margin: .15rem .25rem .15rem 0; }
+.kind b { font-weight: 600; }
+.kind.warnish { border-color: var(--warn); color: var(--warn); }
+.drift-up { color: var(--warn); font-weight: 600; }
+.drift-down { color: var(--accent); font-weight: 600; }
+.never { color: var(--muted); }
+.tick { color: var(--accent); font-weight: 600; }
 table { border-collapse: collapse; width: 100%; font-size: .85rem; }
 th, td { text-align: right; padding: .35rem .5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
 th:first-child, td:first-child { text-align: left; }
@@ -318,9 +484,26 @@ JS = """
     btn.textContent = (shown ? 'Show' : 'Hide') + ' license';
   });
 })();
+// Tabs. The body only gets `tabbed` once this runs, so a browser with JS off never hides a panel.
+(function () {
+  const nav = document.querySelector('.tabs');
+  const panels = Array.from(document.querySelectorAll('.tab-panel'));
+  if (!nav || !panels.length) return;
+  const buttons = Array.from(nav.querySelectorAll('button[data-tab]'));
+  document.body.classList.add('tabbed');
+  function show(name) {
+    for (const p of panels) p.hidden = p.dataset.tab !== name;
+    for (const b of buttons) b.setAttribute('aria-selected', String(b.dataset.tab === name));
+    if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
+  }
+  for (const b of buttons) b.addEventListener('click', () => show(b.dataset.tab));
+  const wanted = location.hash.slice(1);
+  show(buttons.some((b) => b.dataset.tab === wanted) ? wanted : buttons[0].dataset.tab);
+})();
 const q = document.getElementById('q');
 const sc = document.getElementById('scenario');
 function apply() {
+  if (!q || !sc) return;
   const needle = (q.value || '').toLowerCase();
   const scen = sc.value;
   for (const el of document.querySelectorAll('[data-block]')) {
@@ -330,9 +513,162 @@ function apply() {
     el.classList.toggle('hidden', !(hitText && hitScen));
   }
 }
-q.addEventListener('input', apply);
-sc.addEventListener('change', apply);
+if (q) q.addEventListener('input', apply);
+if (sc) sc.addEventListener('change', apply);
 """
+
+
+def render_schedule(sched):
+    """The declared test matrix against what the archive holds - what is done, and what is not."""
+    out = [
+        '<section class="tab-panel" data-tab="schedule" hidden>',
+        "<h2>Schedule</h2>",
+        '<p class="sub">Every cell the tree declares, against the runs in this archive. '
+        "<b>Two different readings of &ldquo;still to do&rdquo;</b> and they disagree by design: the "
+        "block sweep runs nightly and touches all 87 every night, while the matrix and the cross run "
+        "weekly and touch a cell once a week - so <i>not in the latest run</i> means something for the "
+        "first and nothing for the other two. <code>runs</code> counts every run a cell appears in; "
+        "<code>never</code> is the column that means work outstanding.</p>",
+    ]
+    if not sched["surfaces"]:
+        out += [
+            '<div class="panel"><p class="sub">No sweep definitions are importable here, so only the '
+            "run side is knowable. This is the expected state for an archive read on a machine "
+            "without the simulator.</p></div>",
+            "</section>",
+        ]
+        return out
+
+    out.append('<div class="panel scroll"><table><thead><tr><th>surface</th><th>declared</th>'
+               "<th>ever run</th><th>never run</th><th>in latest</th></tr></thead><tbody>")
+    for su in sched["surfaces"]:
+        outstanding = (
+            '<span class="never">0</span>' if not su["never_run"] else str(su["never_run"])
+        )
+        out.append(
+            f'<tr><td class="mono">{_esc(su["surface"])}</td><td>{su["declared"]}</td>'
+            f'<td class="tick">{su["ever_run"]}</td>'
+            f"<td>{outstanding}</td>"
+            f'<td>{su["in_latest"]}</td></tr>'
+        )
+    out.append("</tbody></table></div>")
+
+    if sched["undeclared"]:
+        out.append(
+            '<p class="flag">In the archive but declared by nothing - a renamed or retired cell whose '
+            "results are still in the branch: "
+            + ", ".join(f"<code>{_esc(n)}</code>" for n in sched["undeclared"])
+            + "</p>"
+        )
+
+    for su in sched["surfaces"]:
+        out += [
+            f'<div class="panel"><h3>{_esc(su["surface"])}</h3>',
+            '<div class="scroll"><table><thead><tr><th>cell</th><th>runs</th><th>last run</th>'
+            "<th>latest</th><th>covers</th></tr></thead><tbody>",
+        ]
+        latest_yes = '<span class="tick">yes</span>'
+        latest_no = '<span class="never">no</span>'
+        for row in su["rows"]:
+            counted = (
+                '<td><span class="never">never</span></td><td class="never">-</td>'
+                if not row["runs"]
+                else f'<td>{row["runs"]}</td><td class="mono">{_esc(row["last_run"] or "-")}</td>'
+            )
+            out.append(
+                f'<tr><td class="mono">{_esc(row["cell"])}</td>'
+                + counted
+                + f"<td>{latest_yes if row['in_latest'] else latest_no}</td>"
+                + f'<td class="left sub">{_esc(row["explains"] or "")}</td></tr>'
+            )
+        out += ["</tbody></table></div></div>"]
+    out.append("</section>")
+    return out
+
+
+def render_health(health):
+    """Per run: duration both ways, flags grouped by kind, and any runtime drift."""
+    out = [
+        '<section class="tab-panel" data-tab="health" hidden>',
+        "<h2>Run health</h2>",
+        '<p class="sub">What each run cost and what it flagged. <b>Duration is given both ways on '
+        "purpose.</b> <code>compute h</code> is what the run actually spent, which is what decides "
+        "whether a job fits its ceiling; <code>s/sim-h</code> is wall-clock seconds per <i>simulated</i> "
+        "hour, the only form comparable between runs of different length - and the form the digest "
+        "gates on, because the total moves whenever <code>--hours</code> or the seed count does. "
+        "Flag kinds are counted, not ranked: <code>beyond-envelope</code> on a mirrored cell is "
+        "expected by construction, and colouring every warning red would train everyone to skip "
+        "them.</p>",
+    ]
+    if not health:
+        out += ['<div class="panel"><p class="sub">No runs in this archive yet.</p></div>', "</section>"]
+        return out
+
+    out.append(
+        '<div class="panel scroll"><table><thead><tr><th>run</th><th>ground</th><th>compute h</th>'
+        "<th>s/sim-h median</th><th>slowest block</th><th>blocks</th><th>missing</th>"
+        "<th>fatal</th><th>warnings</th><th>drifted</th></tr></thead><tbody>"
+    )
+    for h in reversed(health):
+        out.append(
+            f'<tr><td class="mono">{_esc(h["run_id"])}</td><td>{_esc(h["scenario"])}</td>'
+            f'<td>{h["wall_seconds"] / 3600:.1f}</td>'
+            f'<td>{_fmt(h["median_rate"], 2)}</td>'
+            + (
+                f'<td class="left mono">{_esc(h["slowest_block"])} '
+                f'<span class="sub">{h["slowest_seconds"] / 60:.0f}m</span></td>'
+                if h["slowest_block"]
+                else '<td class="never">-</td>'
+            )
+            + f'<td>{h["blocks_run"]}</td>'
+            f'<td>{h["blocks_missing"] or "-"}</td>'
+            + (
+                f'<td class="bad">{h["failures"]}</td>'
+                if h["failures"]
+                else '<td class="never">0</td>'
+            )
+            + f'<td>{h["warnings"] or "-"}</td>'
+            f'<td>{len(h["drifted"]) or "-"}</td></tr>'
+        )
+    out.append("</tbody></table></div>")
+
+    # Flag kinds, newest run first. Grouped per run rather than pooled: a kind that appeared once and
+    # then every night after is a different story from one that fired once a month ago.
+    for h in reversed(health):
+        if not h["by_kind"] and not h["drifted"]:
+            continue
+        out.append(f'<div class="panel"><h3>{_esc(h["run_id"])}</h3>')
+        if h["by_kind"]:
+            out.append("<p>")
+            for kind, counts in h["by_kind"].items():
+                warnish = " warnish" if kind in ("slower", "inert", "queue-drops") else ""
+                out.append(
+                    f'<span class="kind{warnish}"><b>{_esc(kind)}</b> {counts["flags"]} '
+                    f'<span class="sub">in {counts["blocks"]} block(s)</span></span>'
+                )
+            out.append("</p>")
+        if h["drifted"]:
+            out.append(
+                '<div class="scroll"><table><thead><tr><th>block</th><th>s/sim-h</th>'
+                "<th>median</th><th>ratio</th></tr></thead><tbody>"
+            )
+            for d in h["drifted"]:
+                cls = (
+                    "drift-up"
+                    if d["ratio"] >= 1.5
+                    else "drift-down"
+                    if d["ratio"] <= 0.67
+                    else ""
+                )
+                out.append(
+                    f'<tr><td class="mono">{_esc(d["block"])}</td>'
+                    f'<td>{_fmt(d["rate"], 2)}</td><td>{_fmt(d["median"], 2)}</td>'
+                    f'<td class="{cls}">{d["ratio"]:.2f}x</td></tr>'
+                )
+            out.append("</tbody></table></div>")
+        out.append("</div>")
+    out.append("</section>")
+    return out
 
 
 def render_html(runs, blocks, board, for_pages=False):
@@ -415,6 +751,24 @@ def render_html(runs, blocks, board, for_pages=False):
         "</div>",
     ]
 
+    sched = schedule(runs)
+    health = run_health(runs)
+    pending = sum(su["never_run"] for su in sched["surfaces"])
+    flagged = sum(h["warnings"] for h in health)
+    out += [
+        '<nav class="tabs" role="tablist">',
+        '<button data-tab="trend" role="tab" aria-selected="true">Trend</button>',
+        '<button data-tab="blocks" role="tab" aria-selected="false">Every block</button>',
+        f'<button data-tab="schedule" role="tab" aria-selected="false">Schedule'
+        + (f' <span class="count">{pending} to do</span>' if pending else "")
+        + "</button>",
+        f'<button data-tab="health" role="tab" aria-selected="false">Run health'
+        + (f' <span class="count">{flagged} flags</span>' if flagged else "")
+        + "</button>",
+        '<button data-tab="runs" role="tab" aria-selected="false">Runs</button>',
+        "</nav>",
+    ]
+
     if failures:
         out.append('<div class="panel">')
         out.append(
@@ -425,6 +779,7 @@ def render_html(runs, blocks, board, for_pages=False):
         out.append("</div>")
 
     out += [
+        '<section class="tab-panel" data-tab="trend">',
         "<h2>What moves a delivery measure</h2>",
         '<p class="sub">Mean spread of the measure each block moves most, averaged over the runs that '
         "carry it. The four measures have four denominators and are <b>not comparable to each other</b> - "
@@ -444,6 +799,8 @@ def render_html(runs, blocks, board, for_pages=False):
     out.append("</tbody></table></div>")
 
     out += [
+        "</section>",
+        '<section class="tab-panel" data-tab="blocks" hidden>',
         "<h2>Every block, run by run</h2>",
         '<div class="controls">',
         '<input type="search" id="q" placeholder="filter by block or arm…" />',
@@ -511,7 +868,11 @@ def render_html(runs, blocks, board, for_pages=False):
             out.append(f'<p class="flag">{_esc(f)}</p>')
         out.append("</div>")
 
+    out += ["</section>"]
+    out += render_schedule(sched)
+    out += render_health(health)
     out += [
+        '<section class="tab-panel" data-tab="runs" hidden>',
         "<h2>Runs</h2>",
         '<div class="panel scroll"><table><thead><tr><th>run</th><th>ground</th><th>seed base</th>'
         "<th>blocks</th><th>missing</th><th>warnings</th><th>compute h</th><th>report</th>"
@@ -540,6 +901,7 @@ def render_html(runs, blocks, board, for_pages=False):
         )
     out += [
         "</tbody></table></div>",
+        "</section>",
         "<footer>Built by <code>sfpp.explorer</code> from the run digests in this branch. "
         "Nothing here is hand-edited; a scheduled job rewrites the page.</footer>",
         "</main>",

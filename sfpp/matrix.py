@@ -70,6 +70,42 @@ BASE = [
 ]
 
 
+# What each cell covers, in one sentence, for a reader of the results rather than a maintainer of the
+# grid. `sweep.DESCRIPTIONS` is the same idea for the block sweeps and `design.describes()` for the
+# cross; this module had neither, so `collate.describe()` returned None for every matrix cell and the
+# digest carried them nameless - "the honest answer rather than a guessed one", but an absence either
+# way. Composed from the preset and the scale rather than written out cell by cell, because the two
+# coordinates are the whole content of a cell name and hand-writing six of them would let them drift.
+#
+# Held to the grid by test_matrix: every cell has one, and every one names a cell.
+PRESET_NOTES = {
+    "SHORT_FAST": "SHORT_FAST, the fast end of what deployed meshes run: least airtime per packet "
+    "and the least range per hop, so the mesh is quiet but sparser",
+    "LITE_FAST": "LITE_FAST, the EU_866 default - a narrower 125 kHz channel that buys sensitivity "
+    "back at four times LONG_FAST's airtime",
+    "LONG_FAST": "LONG_FAST, the shipped default and the middle of the deployed range",
+}
+
+MIRROR_NOTES = {
+    1: "the 92-node Batumi snapshot on its own ground",
+    4: "Batumi mirrored into four reflected copies - 368 nodes over the same terrain, so size moves "
+    "and the ground does not. Three-quarters of the resulting pairs fall outside the fitted link "
+    "budget, so read pairs_beyond_calibration before anything else here",
+}
+
+
+def describes():
+    """{cell name: one sentence}, composed from the scale and the preset it crosses."""
+    return {
+        f"batumi-x{mirror}-{preset}": (
+            f"{MIRROR_NOTES[mirror]}, on {PRESET_NOTES[preset]}. Crossed against the archive off "
+            f"and at every placement and count, so the capping of the role-bounded placements is "
+            f"visible rather than hidden."
+        )
+        for preset, mirror in itertools.product(PRESETS, MIRRORS)
+    }
+
+
 def cells():
     """{name: (preset, mirror)} - one job's worth of work per entry."""
     return {
@@ -149,9 +185,11 @@ def main(argv=None):
 
     known = cells()
     if opts.list:
+        notes = describes()
         for name, (preset, mirror) in known.items():
             runs = (len(PLACES) * len(SERVERS) + 1) * len(opts.seeds)
             print(f"{name:28} {preset} x{mirror}  {runs} runs per invocation")
+            print(f"{'':28} {notes[name]}")
         print(f"\n{len(known)} cells, {len(opts.seeds)} seeds each")
         return 0
     if not opts.cell:

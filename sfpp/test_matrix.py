@@ -81,6 +81,49 @@ class TestGrid(unittest.TestCase):
         self.assertIn("random-any", M.PLACES)
 
 
+class TestDescriptions(unittest.TestCase):
+    """Every cell says what it covers, and the saying is enforced rather than hoped for.
+
+    Mirrors the four checks `test_mesh` holds `sweep.DESCRIPTIONS` to. The failure this prevents is
+    quiet: `collate.describe()` returns None for a cell no producer declares, so a missing sentence
+    does not fail anything - it renders as a blank row in the digest and on the page, which reads as
+    "this cell does nothing interesting" rather than "nobody wrote it down".
+    """
+
+    def test_every_cell_has_an_explanation(self):
+        self.assertEqual(sorted(set(M.cells()) - set(M.describes())), [])
+
+    def test_no_explanation_outlives_its_cell(self):
+        self.assertEqual(sorted(set(M.describes()) - set(M.cells())), [])
+
+    def test_an_explanation_is_a_sentence(self):
+        for name, text in M.describes().items():
+            self.assertTrue(text.endswith("."), f"{name}: not a sentence")
+            self.assertGreater(len(text), 30, f"{name}: too short to explain anything")
+
+    def test_sibling_cells_do_not_share_an_explanation(self):
+        """Cells differ in exactly two coordinates, and both have to reach the sentence.
+
+        Composing the text from the preset and the scale is what makes this hold; writing six
+        sentences by hand is what would eventually break it.
+        """
+        seen = {}
+        for name, text in M.describes().items():
+            self.assertNotIn(text, seen, f"{name} and {seen.get(text)} share an explanation")
+            seen[text] = name
+
+    def test_every_preset_and_scale_in_the_grid_has_a_note(self):
+        """The composition's own inputs, so adding a preset to PRESETS fails here rather than with a
+        KeyError halfway through a scheduled round."""
+        self.assertEqual(sorted(set(M.PRESETS) - set(M.PRESET_NOTES)), [])
+        self.assertEqual(sorted(set(M.MIRRORS) - set(M.MIRROR_NOTES)), [])
+
+    def test_the_digest_finds_a_matrix_cell_by_name(self):
+        """The end the explanation exists for. Matrix cells reached collate nameless before this."""
+        for name in M.cells():
+            self.assertIsNotNone(C.describe(name), name)
+
+
 class TestDuration(unittest.TestCase):
     def test_the_matrix_runs_long_enough_for_a_diurnal_cycle(self):
         """Three passes of the 24-hour curve, not one.

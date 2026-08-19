@@ -2571,8 +2571,9 @@ print(",".join(failed))
         undocumented = sorted(f for f in flags if f not in readme)
         self.assertEqual(undocumented, [], "flags the README does not mention")
 
-        # And the other way: a flag the README names in backticks must still exist. `--runs` and
-        # `--out` belong to the analysis tools rather than to campaign, so they are exempt.
+        # And the other way: a flag the README names in backticks must still exist. `--runs`,
+        # `--out` and `--history` belong to the analysis tools rather than to campaign, so they are
+        # exempt.
         named = set(re.findall(r"`(--[a-z0-9][a-z0-9-]+)", readme))
         ghosts = sorted(
             named
@@ -2586,6 +2587,8 @@ print(",".join(failed))
                 "--seed-base",
                 "--grid",
                 "--run",
+                # collate.py's, for the runtime comparison against the archive's own history.
+                "--history",
             }
         )
         self.assertEqual(
