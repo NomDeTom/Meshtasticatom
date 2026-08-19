@@ -1,10 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Compiles Meshtastic firmware source (GPL-3.0): src/modules/Native/PinSketch.cpp
+// See NOTICE at the repository root.
 // Vector generator for cross-checking the Python port against the firmware's own PinSketch.
 //
-// Compiles src/modules/Native/PinSketch.cpp directly - that file has no dependencies beyond the
-// standard library, so the oracle is the shipping code rather than a copy of it. check_oracle.py
-// runs the same cases through pinsketch.py and diffs the output.
+// Compiles the firmware's src/modules/Native/PinSketch.cpp directly - that file has no dependencies
+// beyond the standard library, so the oracle is the shipping code rather than a copy of it.
+// check_oracle.py runs the same cases through pinsketch.py and diffs the output. The firmware is a
+// separate repository since the simulator moved here, so its path comes from
+// MESHTASTIC_FIRMWARE_ROOT or a sibling checkout.
 //
-//   g++ -O2 -I../../src/modules/Native -o oracle oracle.cpp ../../src/modules/Native/PinSketch.cpp
+// check_oracle.py compiles this itself, against whichever firmware checkout it finds:
+//
+//   g++ -O2 -I $FW/src/modules/Native -o oracle oracle.cpp $FW/src/modules/Native/PinSketch.cpp
 //
 // Protocol: one command per line on stdin.
 //   mul <a> <b>          -> field product

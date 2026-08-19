@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Transcribed from Meshtastic firmware (GPL-3.0): src/modules/Native/SketchIndex.cpp
+# See NOTICE at the repository root.
 """The set layer above PinSketch, ported from src/modules/Native/SketchIndex.cpp.
 
 Two identifiers per object, both derived from its hash with no shared key:

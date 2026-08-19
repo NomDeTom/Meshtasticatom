@@ -56,3 +56,5 @@ program
 cache/
 runs/
 site/
+# The differential-test oracle, compiled on demand from the firmware's own PinSketch.cpp.
+sfpp/oracle
