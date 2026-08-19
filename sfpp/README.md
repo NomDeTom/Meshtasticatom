@@ -800,7 +800,7 @@ diameter column reads fragmented rather than a number.
 | `admin`        | per hop of separation, and **per session rather than per request** - a change that took on the third press is a change that took: `sessions`, `requests_sent`, `attempts_per_session`, `request_delivered`, `session_completed`, `success_rate`, `completed_on_attempt` (everything in `1` means the retries are dead weight), and **`failed_because`** splitting `no_key` / `request_lost` / `reply_lost`, counted once per failed session on its final attempt. `keys_preloaded` records the assumption. Present only with `--admin-probes-per-hour` |
 | `dm`           | direct messages, judged **at the node addressed** - `composed`, `delivered`, `reception`, `lost`, plus `no_key` and `no_addressable_peer` (nobody in the node list yet) and `reception_of_attempted` over all three outcomes. `hops` and `latency_ms` distributions at the recipient, and the population - `eligible_nodes` / `originating_nodes` / `emitting_nodes`. Present only with `--dm-per-hour` |
 | `link_quality` | every directed link graded by margin over sensitivity: `comfortable` (≥10 dB), `adequate` (5-10), **`fragile`** (<5, so a little fading removes it), plus **`one_way_links`** (heard one way only - the amplifier signature) and `near_miss` (pairs within 6 dB *below* sensitivity, i.e. what the cliff hides) |
-| `hops_away`    | how far away each node's NodeDB believes its peers are, against the topology's own answer - the belief and the truth side by side                                                                                    |
+| `hops_away`    | how far away each node's NodeDB believes its peers are, against the topology's own answer - the belief and the truth side by side. **`typical_nodes`** is the readable few: see §7.1a |
 | `hop_scaling`  | the firmware's hop histogram: truth, what a node observed, and what its estimator inferred per hop, plus the recommendation it would make                                                                            |
 | `adaptive`     | the per-node time series `--trace-interval-s` collects. Empty unless that flag is set                                                                                                                                |
 | `opts`         | every resolved option, so a report can be replayed without the command line that made it                                                                                                                            |
@@ -830,6 +830,43 @@ the last packet returns zero.
   archive-delivered coverage, not an inference from what a server holds
 - `per_node_share_of_unreachable_delivered` and `nodes_with_zero_delivered` - the tail, because the
   mean is dragged up by nodes that had little to recover
+
+### 7.1a The few nodes the hop histograms are printed for - `hops_away.typical_nodes`
+
+`hops_away` carries a histogram per node, which at 60 to 500 nodes is why nobody reads it.
+`typical_nodes` picks five and labels each with what it stands for, ranked by **observed reach**:
+`worst`, `p10`, `median`, `p90`, `best`, each carrying `of_nodes` so one node is never mistaken for a
+population. Two labels landing on the same node on a small mesh are merged rather than printed twice.
+
+**Not the mean node**, deliberately. §7.3's standing instruction is to prefer the worst node to the
+mean, and the node every archive argument is about is the one whose receptions stop above two hops
+while the topology offered six.
+
+Each row carries **three histograms, two of which are in different units** - which is easy to misread,
+so the unit is in the key:
+
+| Key | Counts | Comparable with |
+| --- | --- | --- |
+| `truth_peers_at_hop` | **nodes** at each hop distance, from the topology | `estimated_peers_at_hop` |
+| `estimated_peers_at_hop` | **nodes** the firmware module believes sit at each hop - its own *scaled* histogram (counts over its `filtering_denominator`, which is the array the recommendation walk reads), averaged over the run | `truth_peers_at_hop` |
+| `observed_receptions_at_hop` | **receptions** that arrived having travelled that many hops | neither of the above |
+
+The first two are belief against truth in the same unit, which is the comparison the hop
+recommendation rests on. The third is a different quantity - one busy neighbour contributes many
+receptions at one hop - and must not be read as a third column of the same table.
+
+`truth` has no zero bucket and `observed` does. That is not a discrepancy: a node is not its own peer,
+but a direct reception has travelled no hops.
+
+**The estimate is averaged over the run, not the last value** - a converged estimator and an
+oscillating one have the same final reading. It needs `--reception-bin-s` to have something to average
+and is `null` without it, rather than a snapshot wearing the name. Each row also carries the state the
+recommendation came from - `suggested_hop`, `table_fill_percent`, `filtering_denominator`,
+`dropped_full` - because a suggestion off a full table with a raised denominator is a different claim
+from the same number off a table with room in it.
+
+Mesh-wide aggregates of the same three quantities are in `hop_scaling`, which is the section to read
+for a trend and this one for a node.
 
 ### 7.2 What counts as success
 
