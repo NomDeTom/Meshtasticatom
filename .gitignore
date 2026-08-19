@@ -58,3 +58,8 @@ runs/
 site/
 # The differential-test oracle, compiled on demand from the firmware's own PinSketch.cpp.
 sfpp/oracle
+# sfpp/store.py drives the firmware's sqlite schema from Python, in WAL mode - so a run leaves a
+# database and its two sidecars behind.
+*.db
+*.db-wal
+*.db-shm
