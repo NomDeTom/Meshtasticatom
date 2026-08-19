@@ -201,8 +201,14 @@ def cells():
     }
 
 
-def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir):
-    """One (mesh, rival) pair against every archive configuration, at each seed."""
+def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir, tag=None):
+    """One (mesh, rival) pair against every archive configuration, at each seed.
+
+    `tag` distinguishes the file when a cell is sharded across jobs - the mirrored mesh is four
+    times the nodes, and its whole cell in one job runs past the runner's ceiling. Every shard keeps
+    the same `block`, which is what the digest groups on; only the filename differs, because the
+    shards' artifacts are merged into one directory and identical names would overwrite.
+    """
     parser = build_parser()
     results = []
     for archive, archive_flags in archives():
@@ -228,7 +234,7 @@ def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir):
                 flush=True,
             )
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"{name}.json")
+    path = os.path.join(out_dir, f"{name}.{tag}.json" if tag else f"{name}.json")
     with open(path, "w") as f:
         json.dump(results, f, indent=2)
     print(f"wrote {path}")
@@ -245,6 +251,11 @@ def main(argv=None):
     ap.add_argument("--mesh", help="with --list, print only this mesh's cells")
     ap.add_argument("--seeds", nargs="+", type=int, default=[7, 11, 13])
     ap.add_argument("--out", default="runs")
+    ap.add_argument(
+        "--tag",
+        help="suffix this shard's filename. For splitting one cell over several jobs; the cell "
+        "keeps its name in the reports, so the digest still reads the shards as one block",
+    )
     opts = ap.parse_args(argv)
 
     known = cells()
@@ -267,7 +278,7 @@ def main(argv=None):
         return ap.error("give --cell or --list")
     if opts.cell not in known:
         return ap.error(f"unknown cell {opts.cell!r}; --list prints them")
-    run_cell(opts.cell, *known[opts.cell], opts.seeds, opts.out)
+    run_cell(opts.cell, *known[opts.cell], opts.seeds, opts.out, opts.tag)
     return 0
 
 

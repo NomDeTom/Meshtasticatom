@@ -504,14 +504,20 @@ def summarise_block(reports):
 
 
 def collate(runs_dir, run_id=None, seed_base=None, scenario=None, expected=None):
-    blocks = []
+    # Grouped on the `block` field rather than one block per file, because a block does not have to
+    # arrive in one file. A heavy cell of the cross is sharded one job per seed - the mirrored mesh
+    # is four times the nodes and a whole cell in one job runs past the runner's ceiling - and each
+    # shard uploads its own file under its own name. Reading a block per file would then average
+    # nothing over seeds and enter the same block three times in the digest.
+    by_block = {}
     for path in sorted(glob.glob(os.path.join(runs_dir, "*.json"))):
         # summary.json is this module's own output; a re-collate must not read it back in as a block.
         if os.path.basename(path) == "summary.json":
             continue
-        reports = load_block(path)
-        if reports and "block" in reports[0]:
-            blocks.append(summarise_block(reports))
+        for report in load_block(path):
+            if "block" in report:
+                by_block.setdefault(report["block"], []).append(report)
+    blocks = [summarise_block(reports) for reports in by_block.values()]
 
     present = {b["block"] for b in blocks}
     missing = sorted(set(expected) - present) if expected else []

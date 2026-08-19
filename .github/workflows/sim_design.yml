@@ -7,10 +7,17 @@
 # workflow puts the archive on one axis, everything that could be deployed instead of it on another,
 # and the mesh on a third, so every difference is read against the same mesh at the same seed.
 #
-# One job per (mesh, rival) cell, which is 13 jobs for a single mesh and 65 for a full round. A cell
-# is the archive's ten configurations at each seed, run in sequence inside the job - the archive
-# configurations have to sit in one job because they are what the cell is a difference across, and a
-# cell split over runners is a cell whose control might have come from a different draw.
+# One job per (mesh, rival, seed): the archive's ten configurations at one seed, run in sequence.
+# That is the smallest unit the cross can be cut into, and the cut is where it is because the ten
+# archive configurations are what a cell is a difference *across* - split those over runners and a
+# cell's control comes from a different draw than the arms it is subtracted from. Seeds are safe to
+# split because each is an independent draw already.
+#
+# The cut is not free - a job per seed is three times the checkout and setup - and it is here
+# because of a measurement. On this tree a 24-hour Batumi run is 128 s and the mirrored mesh is
+# 511 s, four times over for four times the nodes. A whole mirrored cell at three seeds is thirty
+# of those, about 4.3 hours before any allowance for a slower runner, against GitHub's six-hour job
+# ceiling. Per seed it is 85 minutes, which leaves room for a runner half this speed.
 name: Sim Design (cross)
 
 on:
@@ -59,7 +66,6 @@ jobs:
     outputs:
       matrix: ${{ steps.draw.outputs.matrix }}
       cells: ${{ steps.draw.outputs.cells }}
-      seeds: ${{ steps.draw.outputs.seeds }}
       seed_base: ${{ steps.draw.outputs.seed_base }}
       run_id: ${{ steps.draw.outputs.run_id }}
     steps:
@@ -119,36 +125,44 @@ jobs:
               sys.exit(f"seed count must be 1-10, got {count!r}")
           seeds = [int(seed_base) + i for i in range(int(count))]
 
-          print(f"matrix={json.dumps(chosen)}")
+          # One entry per (cell, seed). `cells` stays the cell names alone: that is what the digest
+          # is checked against, and a shard is not a block - all three shards of a cell carry the
+          # same `block` and are collated as one.
+          jobs = [{"cell": c, "seed": s} for c in chosen for s in seeds]
+          if len(jobs) > 256:
+              sys.exit(f"{len(jobs)} jobs exceeds the 256 a matrix may hold; run fewer meshes, "
+                       f"rivals or seeds at a time")
+
+          print(f"matrix={json.dumps(jobs)}")
           print(f"cells={' '.join(chosen)}")
-          print(f"seeds={' '.join(str(s) for s in seeds)}")
           print(f"seed_base={seed_base}")
           print(f"run_id=design-{datetime.date.today().isoformat()}-{seed_base}")
           PY
           cat "$GITHUB_OUTPUT"
 
   cross:
-    name: ${{ matrix.cell }}
+    name: ${{ matrix.cell }} @${{ matrix.seed }}
     needs: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # A cell is ten archive configurations at each seed. On Batumi that is a couple of minutes a
-    # run; the mirrored mesh is four times the nodes and several times the airtime, and it is the
-    # one this ceiling is set for.
-    timeout-minutes: 330
+    # Ten archive configurations at one seed: 21 minutes on Batumi as measured on this tree, 85 on
+    # the mirrored mesh. Set for the mirrored mesh with room for a runner half this speed, and
+    # short enough that a job which has hung is killed inside the hour rather than holding a runner
+    # until the platform ceiling.
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       # Below the account's concurrency allowance, so a round never occupies every runner and
-      # leaves another workflow queued behind 65 simulator jobs.
+      # leaves another workflow queued behind a couple of hundred simulator jobs.
       max-parallel: 12
       matrix:
-        cell: ${{ fromJSON(needs.plan.outputs.matrix) }}
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       # Each job gets its own scenario cache. Every cell in a round reads the same Batumi rasters,
       # and two jobs racing to write the same derived CSV is the kind of thing that fails once a
       # month and is never reproducible.
-      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}
+      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}-${{ matrix.seed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -164,20 +178,20 @@ jobs:
       - name: Install the scenario loader
         run: pip install --quiet "PyYAML>=6.0"
 
-      - name: ${{ matrix.cell }}
+      - name: ${{ matrix.cell }} at seed ${{ matrix.seed }}
         env:
           CELL: ${{ matrix.cell }}
-          SEEDS: ${{ needs.plan.outputs.seeds }}
+          SEED: ${{ matrix.seed }}
         run: |
           set -euo pipefail
-          # SEEDS is a space-separated list this workflow generated, not a dispatch input.
-          # shellcheck disable=SC2086
-          python3 -u -m sfpp.design --cell "$CELL" --seeds $SEEDS --out out
+          # --tag names the file apart from the cell's other seeds. The reports keep the cell's
+          # name, so the digest reads the three shards as one block.
+          python3 -u -m sfpp.design --cell "$CELL" --seeds "$SEED" --tag "s$SEED" --out out
 
       - uses: actions/upload-artifact@v4
-        if: always() # a cell that failed halfway still wrote the archive configurations it finished
+        if: always() # a shard that failed halfway still wrote the archive configurations it finished
         with:
-          name: design-${{ matrix.cell }}
+          name: design-${{ matrix.cell }}-s${{ matrix.seed }}
           path: out
           if-no-files-found: warn
           # The raw data: every cell's full report. The results branch gets the digest only, because
