@@ -97,6 +97,11 @@ SUCCESSES = ("text", "dm", "admin", "held")
 # What an arm costs, read beside whichever success it moved.
 COST = "text"
 
+# The arm a cell is a difference against, where a block declares one. `design.py` puts a silent
+# control in every cell so each later arm is a difference on the same mesh at the same seed; a block
+# sweep has no such cell and its arms are read against each other instead.
+CONTROL = "control"
+
 # The price side of an arm. Several blocks - reconciliation strategy, signing, advert transport -
 # deliberately hold delivery flat and differ only in what they spend, and ranking those on delivery
 # alone reports them as having done nothing. `D-resolve` is the case that made this obvious: enum
@@ -235,6 +240,25 @@ def _ratio(cells, key):
     if len(present) < 2 or len(present) != len(values):
         return None
     return max(present) / min(present)
+
+
+def against_control(cells):
+    """Each cell's difference from the block's control arm, where there is one.
+
+    A difference rather than a ratio because these are shares: "+0.041 reach" is the sentence a
+    reader wants, and a ratio of two reception fractions is not. The control keeps a row of its own
+    reading zero, so the table shows what it was and not only what was subtracted.
+    """
+    control = next((c for c in cells if c["value"] == CONTROL), None)
+    if control is None:
+        return
+    for cell in cells:
+        cell["vs_control"] = {
+            k: cell["metrics"][k] - control["metrics"][k]
+            for k in SUCCESSES + (COST,)
+            if cell["metrics"].get(k) is not None
+            and control["metrics"].get(k) is not None
+        }
 
 
 def _effect(cells, key):
@@ -402,6 +426,7 @@ def describe(block):
 def summarise_block(reports):
     first = reports[0]
     cells = cells_of(reports)
+    against_control(cells)
     block = {
         "block": first.get("block", "?"),
         "arm": first.get("arm", "?"),

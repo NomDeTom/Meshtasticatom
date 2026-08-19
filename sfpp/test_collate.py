@@ -748,3 +748,44 @@ class PriceOfAnArm(unittest.TestCase):
         self.assertIn("Moved no delivery measure", md)
         self.assertIn("advert_bytes", md)
         self.assertNotIn("moved no delivery measure: `B-arm`.", md)
+
+
+class AgainstControl(unittest.TestCase):
+    """A cell that names a control is read as a difference from it, not as a bare number."""
+
+    def _cells(self, *values):
+        return C.cells_of([report(value=v, text=t, held=h) for v, t, h in values])
+
+    def test_each_arm_is_differenced_against_the_control(self):
+        cells = self._cells(("control", 0.700, 0.000), ("archive", 0.742, 0.860))
+        C.against_control(cells)
+        arm = next(c for c in cells if c["value"] == "archive")
+        self.assertAlmostEqual(arm["vs_control"]["text"], 0.042, places=6)
+        self.assertAlmostEqual(arm["vs_control"]["held"], 0.860, places=6)
+
+    def test_the_control_keeps_a_row_reading_zero(self):
+        # It has to stay visible: a table of differences with the thing differenced away is a table
+        # nobody can check.
+        cells = self._cells(("control", 0.700, 0.0), ("archive", 0.742, 0.86))
+        C.against_control(cells)
+        control = next(c for c in cells if c["value"] == "control")
+        self.assertEqual(control["vs_control"]["text"], 0.0)
+
+    def test_a_block_without_a_control_is_left_alone(self):
+        # The block sweeps have no control arm; their arms are read against each other.
+        cells = self._cells(("sketch", 0.7, 0.85), ("enum", 0.7, 0.86))
+        C.against_control(cells)
+        self.assertNotIn("vs_control", cells[0])
+
+    def test_a_measure_the_control_never_recorded_is_not_differenced(self):
+        # A DM figure needs DM traffic; subtracting from a null reads as a loss of the whole value.
+        cells = C.cells_of(
+            [
+                report(value="control", dm=None),
+                report(value="archive", dm={"reception": 0.9, "composed": 100}),
+            ]
+        )
+        C.against_control(cells)
+        arm = next(c for c in cells if c["value"] == "archive")
+        self.assertNotIn("dm", arm["vs_control"])
+        self.assertIn("text", arm["vs_control"])
