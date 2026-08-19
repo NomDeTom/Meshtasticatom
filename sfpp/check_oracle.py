@@ -1,12 +1,19 @@
 """Differential test: the Python sketch against the firmware's C++, case for case.
 
-The simulator's conclusions are only worth anything if its sketches are the firmware's sketches, so
-this compares the two implementations directly rather than asserting properties of the port alone.
-Build the oracle first:
+`pinsketch.py` is a transcription of `src/modules/Native/PinSketch.cpp`, not a reimplementation of
+it, and the simulator's conclusions are only worth anything if its sketches are the bytes the
+firmware would actually put on the air. This compiles the firmware's own source and diffs the two
+implementations case for case, rather than asserting properties of the port alone.
 
-    g++ -O2 -I../../src/modules/Native -o oracle oracle.cpp ../../src/modules/Native/PinSketch.cpp
+The firmware is a separate repository, so its source has to be found:
 
-Then, from sim/:  python3 -m sfpp.check_oracle
+    MESHTASTIC_FIRMWARE_ROOT=/path/to/firmware python3 -m sfpp.check_oracle
+
+Without it, a sibling checkout is tried (../MeshtasticFirmware, ../firmware). With no firmware
+source reachable the check reports that and exits 0 - it is a cross-repository check and a tree
+that cannot see the firmware has not failed anything. Pass --require to turn that into a failure,
+which is what a CI job that means to run it should do.
+
 Exit code is non-zero on any divergence.
 """
 
@@ -17,7 +24,62 @@ import sys
 
 from . import pinsketch, sketchindex
 
-ORACLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oracle")
+HERE = os.path.dirname(os.path.abspath(__file__))
+ORACLE = os.path.join(HERE, "oracle")
+
+# Where the firmware's PinSketch lives inside a firmware checkout.
+FIRMWARE_SOURCE = os.path.join("src", "modules", "Native")
+
+
+def firmware_root():
+    """Find the firmware checkout to compile against, or None if none is reachable."""
+
+    def holds_firmware(root):
+        return bool(root) and os.path.isfile(
+            os.path.join(root, FIRMWARE_SOURCE, "PinSketch.cpp")
+        )
+
+    # An explicit path is answered with itself or with an error, never with somewhere else. The
+    # first version fell through to the sibling search when the named path was wrong, so a typo in
+    # MESHTASTIC_FIRMWARE_ROOT produced 628 passing checks against a checkout the caller had not
+    # asked for - a default silently substituting for a request, which is trap 1 in this tree's
+    # own list.
+    named = os.environ.get("MESHTASTIC_FIRMWARE_ROOT")
+    if named:
+        if holds_firmware(named):
+            return named
+        sys.exit(
+            f"MESHTASTIC_FIRMWARE_ROOT={named!r} has no {FIRMWARE_SOURCE}/PinSketch.cpp"
+        )
+
+    # A sibling checkout is the usual local arrangement, and was the only one before the move.
+    parent = os.path.dirname(os.path.dirname(HERE))
+    for root in (
+        os.path.join(parent, "MeshtasticFirmware"),
+        os.path.join(parent, "firmware"),
+    ):
+        if holds_firmware(root):
+            return root
+    return None
+
+
+def build_oracle(root):
+    """Compile the vector generator against the firmware's own PinSketch.cpp."""
+    native = os.path.join(root, FIRMWARE_SOURCE)
+    cmd = [
+        "g++",
+        "-O2",
+        "-I",
+        native,
+        "-o",
+        ORACLE,
+        os.path.join(HERE, "oracle.cpp"),
+        os.path.join(native, "PinSketch.cpp"),
+    ]
+    built = subprocess.run(cmd, capture_output=True, text=True)
+    if built.returncode:
+        sys.exit(f"oracle did not compile:\n{built.stderr}")
+    return ORACLE
 
 
 class Oracle:
@@ -184,7 +246,21 @@ class BucketSummaryPair:
         self.checksum_nonzero = summary.checksum != 0
 
 
-def main():
+def main(argv=None):
+    require = "--require" in (argv if argv is not None else sys.argv[1:])
+    root = firmware_root()
+    if root is None:
+        message = (
+            "no Meshtastic firmware checkout found, so the Python sketch cannot be diffed against "
+            "the C++ it transcribes. Set MESHTASTIC_FIRMWARE_ROOT to a firmware checkout."
+        )
+        if require:
+            sys.exit(f"FAIL: {message}")
+        print(f"SKIP: {message}")
+        return 0
+    print(f"oracle: compiling against {root}")
+    build_oracle(root)
+
     rng = random.Random(20260816)
     oracle = Oracle()
     try:
@@ -200,8 +276,9 @@ def main():
     print(f"\n{checks - len(failures)}/{checks} checks passed")
     if failures:
         print("failed: " + ", ".join(failures[:10]))
-        sys.exit(1)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
