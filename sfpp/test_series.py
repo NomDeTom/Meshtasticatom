@@ -19,12 +19,22 @@ from .campaign import build_parser, run_once
 
 
 def fingerprint(report):
-    """Everything the simulation decided, with the series and the machine's own timings removed."""
+    """Everything the *simulation* decided, with what only the observer produced removed.
+
+    Three things are dropped and no more, because the point of this fingerprint is to be narrow: the
+    machine's own timings, the series itself, and the two per-node fields that exist only because the
+    series was sampled. Dropping `hops_away` wholesale would have been easier and would have stopped
+    the fingerprint noticing if sampling ever changed what a node believed - which is exactly the
+    failure it is here to catch.
+    """
     r = json.loads(json.dumps(report))
     for key in ("wall_seconds", "transport", "series"):
         r.pop(key, None)
     for key in ("out", "reception_bin_s", "mesh_map"):
         (r.get("opts") or {}).pop(key, None)
+    for row in (r.get("hops_away") or {}).get("typical_nodes") or []:
+        row.pop("estimated_peers_at_hop", None)
+        row.pop("estimate_samples", None)
     return hashlib.sha256(json.dumps(r, sort_keys=True).encode()).hexdigest()
 
 
@@ -37,6 +47,20 @@ def run(**flags):
 
 class Inertness(unittest.TestCase):
     """The sampler must be an observer and nothing else."""
+
+    def test_sampling_changes_nothing_a_node_believed(self):
+        """Narrower than the fingerprint and worth its own name: the estimator's *state* - what it
+        recommends, how full its table is, what denominator it settled on - must be what it would have
+        been unsampled. Reading a histogram must not change it."""
+        plain = {r["node"]: r for r in run()["hops_away"]["typical_nodes"]}
+        sampled = {
+            r["node"]: r for r in run(reception_bin_s=1800)["hops_away"]["typical_nodes"]
+        }
+        self.assertEqual(sorted(plain), sorted(sampled))
+        for node, row in plain.items():
+            for key in ("suggested_hop", "table_fill_percent", "filtering_denominator",
+                        "dropped_full", "truth_peers_at_hop", "observed_receptions_at_hop"):
+                self.assertEqual(row[key], sampled[node][key], f"node {node} {key}")
 
     def test_asking_for_the_series_does_not_change_the_run(self):
         """The whole guarantee. If this fails, every series run is a different experiment from the
@@ -142,6 +166,81 @@ class Series(unittest.TestCase):
             self.assertLessEqual(row["chutil_max"], 100.0)
             self.assertLessEqual(row["chutil_median"], row["chutil_p90"] + 1e-9)
             self.assertLessEqual(row["chutil_p90"], row["chutil_max"] + 1e-9)
+
+
+class TypicalNodes(unittest.TestCase):
+    """The handful of nodes the hop histograms are actually printed for.
+
+    The selection is the work here: all 60-500 nodes is what nobody reads, and the mean node is the
+    wrong one to pick - SS7.3's standing instruction is to prefer the worst node to the mean, and the
+    node the archive argument is about is the one whose receptions stop above two hops.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.report = run(reception_bin_s=1800, hop_spread=True)
+        cls.rows = cls.report["hops_away"]["typical_nodes"]
+
+    def test_the_selection_spans_the_range_rather_than_sampling_the_middle(self):
+        labels = " ".join(r["stands_for"] for r in self.rows)
+        for wanted in ("worst", "p10", "median", "p90", "best"):
+            self.assertIn(wanted, labels, f"{wanted} is not represented")
+
+    def test_the_worst_node_really_is_the_worst(self):
+        """Ranked by observed reach, so the first row must be the minimum, not merely a low one."""
+        worst = next(r for r in self.rows if "worst" in r["stands_for"])
+        everything = self.report["hops_away"]["observed_per_node"]
+        lowest = min(sum(v["counts"].values()) for v in everything.values())
+        self.assertEqual(worst["receptions"], lowest)
+
+    def test_no_node_is_listed_twice(self):
+        """A small mesh can land two labels on one node; it must be named once, carrying both."""
+        indexes = [r["node"] for r in self.rows]
+        self.assertEqual(len(indexes), len(set(indexes)))
+
+    def test_every_row_says_how_many_nodes_it_speaks_for(self):
+        """So one node is never read as a population."""
+        for row in self.rows:
+            self.assertEqual(row["of_nodes"], len(self.report["hops_away"]["observed_per_node"]))
+
+    def test_the_units_are_in_the_key_names(self):
+        """Peers and receptions are different quantities, and a reader given `truth` beside
+        `observed` will compare them. The names have to stop that."""
+        for row in self.rows:
+            self.assertIn("truth_peers_at_hop", row)
+            self.assertIn("estimated_peers_at_hop", row)
+            self.assertIn("observed_receptions_at_hop", row)
+            self.assertNotIn("truth", row)  # the ambiguous name must be gone, not aliased
+            self.assertNotIn("observed", row)
+
+    def test_the_estimate_is_averaged_over_the_run_not_a_final_snapshot(self):
+        """A converged estimate and an oscillating one have the same last value."""
+        for row in self.rows:
+            self.assertGreater(row["estimate_samples"], 1, "only one sample is not an average")
+            self.assertIsNotNone(row["estimated_peers_at_hop"])
+
+    def test_the_estimate_is_absent_rather_than_faked_without_sampling(self):
+        """No series, nothing to average. None says so; a snapshot wearing the name would not."""
+        rows = run(hop_spread=True)["hops_away"]["typical_nodes"]
+        for row in rows:
+            self.assertIsNone(row["estimated_peers_at_hop"])
+            self.assertEqual(row["estimate_samples"], 0)
+
+    def test_the_recommendation_comes_with_the_state_it_was_derived_from(self):
+        """A suggestion off a full table with a raised denominator is a different claim from the same
+        number off a table with room in it - TRAPS.md's shape of a request and a result recorded as
+        one number."""
+        for row in self.rows:
+            self.assertIsNotNone(row["suggested_hop"])
+            self.assertIsNotNone(row["table_fill_percent"])
+            self.assertIsNotNone(row["filtering_denominator"])
+            self.assertLessEqual(row["table_fill_percent"], 100)
+
+    def test_truth_has_no_zero_bucket_and_observed_does(self):
+        """Not a discrepancy: a node is not its own peer, but a direct reception has travelled no
+        hops. Asserted so that 'fixing' one of them later has to be deliberate."""
+        for row in self.rows:
+            self.assertNotIn("0", row["truth_peers_at_hop"] or {})
 
 
 if __name__ == "__main__":

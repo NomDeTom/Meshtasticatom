@@ -560,6 +560,11 @@ class Campaign:
         # Cumulative mesh counters read at each bin boundary and differenced afterwards. Sampled on a
         # timer rather than counted per event, so the loss attribution costs the hot path nothing.
         self.counter_samples = []
+        # Running sums of each node's own hop histogram, so the reported one is an average over the
+        # run rather than whatever the last roll happened to hold. Summed rather than kept per sample:
+        # a per-bin array per node is O(nodes x bins) and only ever read as a mean, so O(nodes) does.
+        self.hop_hist_sums = {}
+        self.hop_hist_samples = {}
         self.hop_stats = {}
         # Per node, how many hops each text it received had actually travelled. The firmware keeps the
         # same quantity per peer as NodeInfoLite.hops_away, so this is the simulator's view of the field
@@ -1764,6 +1769,22 @@ class Campaign:
                     "chutil_max": round(utils[-1], 2) if utils else 0.0,
                 }
             )
+            # The estimator's own view, summed so the report can divide it back to a mean. This is
+            # the module's *scaled* histogram - counts divided by its own filtering_denominator -
+            # because that is the array the recommendation walk actually reads, and an unscaled one
+            # would not be the histogram the device works from.
+            for node in self.mesh.nodes:
+                scaling = node.hop_scaling
+                if scaling is None:
+                    continue
+                total = self.hop_hist_sums.setdefault(
+                    node.index, [0.0] * len(scaling.last_scaled_per_hop)
+                )
+                for hop, count in enumerate(scaling.last_scaled_per_hop):
+                    total[hop] += count
+                self.hop_hist_samples[node.index] = (
+                    self.hop_hist_samples.get(node.index, 0) + 1
+                )
             if self.mesh.now + self.bin_ms <= self.duration_ms:
                 self.mesh.at(self.mesh.now + self.bin_ms, sample)
 
@@ -2366,6 +2387,10 @@ class Campaign:
             if d:
                 topo[str(i)] = {str(k): v for k, v in sorted(d.items())}
 
+        # A handful of named nodes rather than all of them or none. The per-node histograms above are
+        # 60 to 500 entries and nobody reads them, which is why this exists; picking is the work.
+        typical = self._typical_nodes(observed, topo)
+
         # Mesh-wide rollups, so a sweep has something scalar to compare without unpacking 60 nodes.
         agg = {}
         for h in self.hops_away_hist.values():
@@ -2380,7 +2405,107 @@ class Campaign:
                 str(k): round(v / total, 4) for k, v in sorted(agg.items())
             },
             "mesh_mean_hops": round(sum(k * v for k, v in agg.items()) / total, 2),
+            "typical_nodes": typical,
         }
+
+    def _typical_nodes(self, observed, topo):
+        """A few nodes worth actually printing, each labelled with what it stands for.
+
+        **Not the mean node.** §7.3's standing instruction is to prefer the worst node to the mean, and
+        the docstring on the report above says which node the archive argument is about: the one whose
+        observed histogram is empty above two hops while the topology says six were reachable. So the
+        selection is by *observed reach* - how many receptions a node actually saw - at the tenth
+        percentile, the median and the ninetieth, plus the outright worst and best. Each row says how
+        many nodes sit in its neighbourhood, so a single node is never mistaken for a population.
+
+        Three histograms per node, and **two of the three are in different units** - which is easy to
+        miss and produces a confident wrong reading, so the keys carry the unit:
+
+          truth_peers_at_hop        how many *nodes* sit at each hop distance, from the topology
+          estimated_peers_at_hop    how many *nodes* the firmware module believes sit at each hop -
+                                    its own scaled histogram, averaged over the run
+          observed_receptions_at_hop  how many *receptions* arrived having travelled that many hops
+
+        The first two are comparable: belief against truth, in nodes, which is the comparison the hop
+        recommendation rests on. The third is a different quantity - a busy neighbour contributes many
+        receptions at one hop - so it must not be read as a third column of the same table. It is here
+        because "what did this node actually get" is the other half of the question, and because a node
+        whose receptions stop above two hops while the topology offers six is the node an archive is
+        for.
+
+        One consequence worth stating: `truth` has no zero bucket, because a node is not its own peer,
+        while `observed` does - a direct reception has travelled no hops. That is not a discrepancy.
+        """
+        ranked = sorted(
+            observed, key=lambda i: sum(observed[i]["counts"].values())
+        )
+        if not ranked:
+            return []
+        count = len(ranked)
+
+        def at(fraction):
+            return ranked[min(count - 1, int(fraction * count))]
+
+        picks = [
+            ("worst", ranked[0]),
+            ("p10", at(0.10)),
+            ("median", at(0.50)),
+            ("p90", at(0.90)),
+            ("best", ranked[-1]),
+        ]
+        seen, out = set(), []
+        for label, index in picks:
+            if index in seen:
+                # A small mesh can land two labels on one node. Say so rather than printing it twice.
+                out[-1]["stands_for"] += f", {label}"
+                continue
+            seen.add(index)
+            node = int(index)
+            samples = self.hop_hist_samples.get(node, 0)
+            sums = self.hop_hist_sums.get(node)
+            estimated = (
+                {str(hop): round(v / samples, 2) for hop, v in enumerate(sums) if v}
+                if sums and samples
+                else None
+            )
+            scaling = self.mesh.nodes[node].hop_scaling
+            out.append(
+                {
+                    "node": node,
+                    "stands_for": label,
+                    "receptions": sum(observed[index]["counts"].values()),
+                    "hop_limit": self.mesh.hop_limit_for(node),
+                    "degree": len(self.mesh.neighbours[node]),
+                    # Units in the names, deliberately. See the docstring: peers and receptions are
+                    # different quantities and a reader given `truth` beside `observed` will compare
+                    # them.
+                    "truth_peers_at_hop": topo.get(index),
+                    "observed_receptions_at_hop": observed[index]["counts"],
+                    "observed_mean_hops": observed[index]["mean_hops"],
+                    # None unless the series was sampled - the average needs samples to average.
+                    "estimated_peers_at_hop": estimated,
+                    "estimate_samples": samples,
+                    # What the module would tell the node to do, and the state the answer came from.
+                    # A recommendation from a full table with a raised denominator is a different
+                    # claim from the same number off a table with room in it.
+                    "suggested_hop": (
+                        scaling.last_suggested_hop if scaling is not None else None
+                    ),
+                    "table_fill_percent": (
+                        scaling.fill_percentage if scaling is not None else None
+                    ),
+                    "filtering_denominator": (
+                        scaling.filtering_denominator if scaling is not None else None
+                    ),
+                    "dropped_full": (
+                        scaling.dropped_full if scaling is not None else None
+                    ),
+                }
+            )
+        # How many nodes each pick speaks for, so nobody reads one node as a population.
+        for row in out:
+            row["of_nodes"] = count
+        return out
 
     def _series_report(self):
         """Reception and load per bin of simulated time, or None if the run did not ask for it.
