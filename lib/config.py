@@ -110,6 +110,21 @@ class Config:
                 "frequency_switching": False,
                 "wide_lora": False
             },
+            # Narrow-band EU 868 variant, from firmware develop RegionInfo
+            # regions[]: same band and limits as EU_868, but defaults to the
+            # 62.5 kHz NARROW_SLOW preset and uses channel slot 1.
+            "EU_N_868": {
+                "freq_start": 869.4e6,
+                "freq_end": 869.65e6,
+                "duty_cycle": 10,
+                "spacing": 0,
+                "power_limit": 27,
+                "audio_permitted": False,
+                "frequency_switching": False,
+                "wide_lora": False,
+                "default_modem_preset": "NARROW_SLOW",
+                "override_slot": 1
+            },
             "CN": {
                 "freq_start": 470.0e6,
                 "freq_end": 510.0e6,
@@ -428,12 +443,28 @@ class Config:
                 "sensitivity": -140.0,
                 "cad_threshold": -143.0
             },
-            # MeshCore's default radio settings, not a Meshtastic firmware preset.
-            # No Meshtastic preset pairs SF8 with 62.5 kHz, so modelling a MeshCore
-            # community network needs these spelled out. Sensitivity is the SF8
-            # demodulator limit (-10 dB SNR) against the 62.5 kHz thermal floor at
-            # NF 6 dB (-120.04 dBm); the CR4/8 variant adds the coding gain that
-            # the extra redundancy buys on a marginal link.
+            # Narrow-band presets, from firmware develop
+            # (src/mesh/MeshRadio.h::modemPresetToParams). Both 62.5 kHz at CR4/6;
+            # EU_N_868 defaults to NARROW_SLOW.
+            "NARROW_FAST": {
+                "bw": 62.5e3,
+                "cr": 6,
+                "sf": 7,
+                "sensitivity": -127.5,
+                "cad_threshold": -130.5
+            },
+            "NARROW_SLOW": {
+                "bw": 62.5e3,
+                "cr": 6,
+                "sf": 8,
+                "sensitivity": -130.0,
+                "cad_threshold": -133.0
+            },
+            # MeshCore runs the same SF8/62.5 kHz point as NARROW_SLOW but sweeps
+            # coding rate from 4/5 to 4/8, so both ends are provided for modelling
+            # MeshCore community networks. Sensitivity here follows this table's
+            # convention of depending only on SF and bandwidth; the coding rate
+            # earns its keep through the payload loss model, not the decode gate.
             "MESHCORE_CR45": {
                 "bw": 62.5e3,
                 "cr": 5,
@@ -445,8 +476,8 @@ class Config:
                 "bw": 62.5e3,
                 "cr": 8,
                 "sf": 8,
-                "sensitivity": -132.0,
-                "cad_threshold": -135.0
+                "sensitivity": -130.0,
+                "cad_threshold": -133.0
             }
         }
 

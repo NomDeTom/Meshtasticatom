@@ -424,6 +424,11 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         help="List Meshtastic modem presets and exit",
     )
     parser.add_argument(
+        "--region",
+        choices=sorted(conf.regions.keys()),
+        help="regulatory region to simulate (default: the region selected in config)",
+    )
+    parser.add_argument(
         "--modem-preset",
         choices=sorted(conf.MODEM_PRESETS.keys()),
         help="LoRa modem preset to simulate (default: %s)" % conf.MODEM_PRESET,
@@ -441,8 +446,28 @@ def parse_params(conf, args=None) -> [NodeConfig]:
     if parsed_arguments.list_presets or parsed_arguments.list_modem_presets:
         raise SystemExit(0)
 
+    if parsed_arguments.region is not None:
+        conf.REGION = conf.regions[parsed_arguments.region]
+        # PTX is derived from the region power limit at Config construction.
+        conf.PTX = conf.REGION["power_limit"]
+        # Narrow regions carry their own default preset and channel slot; a
+        # channel number left over from a wider region would land out of band.
+        default_preset = conf.REGION.get("default_modem_preset")
+        if default_preset is not None and parsed_arguments.modem_preset is None:
+            conf.MODEM_PRESET = default_preset
+        if "override_slot" in conf.REGION:
+            conf.CHANNEL_NUM = conf.REGION["override_slot"]
+
     if parsed_arguments.modem_preset is not None:
         conf.MODEM_PRESET = parsed_arguments.modem_preset
+
+    if parsed_arguments.region is not None or parsed_arguments.modem_preset is not None:
+        bandwidth = conf.MODEM_PRESETS[conf.MODEM_PRESET]["bw"]
+        # Keep the channel inside the region's band rather than trusting a slot
+        # number carried over from a different bandwidth.
+        max_slot = max(0, int((conf.REGION["freq_end"] - conf.REGION["freq_start"]) // bandwidth) - 1)
+        if conf.CHANNEL_NUM > max_slot:
+            conf.CHANNEL_NUM = max_slot
         # FREQ is derived from the preset bandwidth at Config construction, so
         # it has to be recomputed when the preset changes.
         conf.FREQ = (
