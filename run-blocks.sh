@@ -147,6 +147,12 @@ runner() {
 
 # RESULTS_REPO, if set, is a git checkout containing OUT_ROOT; each finished block is committed and
 # pushed to RESULTS_BRANCH there. Unset means results stay on disk only.
+#
+# Do NOT point this at a checkout of `sim-results` while a scheduled sweep may be running. That is
+# the branch every workflow publishes to (see .github/workflows/sim_collate.yml), so a local runner
+# and a CI collate job would be pushing to the same ref from two machines. The pull-rebase-retry
+# below and the matching loop in sim_collate.yml would probably settle it - neither is a lock, and
+# nothing coordinates them. Use a scratch branch, or wait for the sweep.
 RESULTS_REPO=${RESULTS_REPO:-}
 RESULTS_BRANCH=${RESULTS_BRANCH:-$(git -C "${RESULTS_REPO:-.}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}
 if [ -n "$RESULTS_REPO" ]; then
