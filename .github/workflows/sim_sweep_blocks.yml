@@ -147,8 +147,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      # No pip install: the transport is standard library only. Charts are the sole heavy
-      # dependency and a sweep in CI has nobody watching them.
+      # PyYAML only, for the packaged scenarios. Charts are the sole other dependency and a sweep
+      # in CI has nobody watching them, so matplotlib is left out and the run skips them.
+      - name: Install the scenario loader
+        run: pip install --quiet "PyYAML>=6.0"
+
       - name: ${{ matrix.block }}
         env:
           BLOCK: ${{ matrix.block }}

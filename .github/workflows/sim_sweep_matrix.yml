@@ -98,6 +98,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Required here, not optional: every cell of this matrix is --scenario batumi, which reads
+      # presets/batumi.yaml.
+      - name: Install the scenario loader
+        run: pip install --quiet "PyYAML>=6.0"
+
       - name: ${{ matrix.cell }}
         env:
           CELL: ${{ matrix.cell }}
