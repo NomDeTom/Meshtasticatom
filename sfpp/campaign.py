@@ -480,6 +480,7 @@ class Campaign:
             rebroadcast_mode=getattr(opts, "rebroadcast_mode", M.REBROADCAST_ALL),
             max_num_nodes=_hot_store_size(opts),
             warm_num_nodes=getattr(opts, "warm_num_nodes", None),
+            hop_target_nodes=getattr(opts, "hop_target_nodes", None),
             signature_policy=getattr(
                 opts, "signature_policy", M.SIGNATURE_POLICY_COMPATIBLE
             ),
@@ -527,6 +528,7 @@ class Campaign:
             archive_dms=getattr(opts, "archive_dms", False),
             position_throttle=opts.position_throttle,
             telemetry_throttle=opts.telemetry_throttle,
+            congestion_pivot=getattr(opts, "congestion_pivot", T.CONGESTION_PIVOT),
         )
         self.counters = Counters()
         # packet id -> (hops, latency_ms) for DMs that reached the node they were addressed to.
@@ -2666,6 +2668,21 @@ def build_parser():
         "--no-congestion-scaling",
         action="store_true",
         help="disable the firmware's node-count broadcast scaling (Default.h congestionScalingCoefficient)",
+    )
+    ap.add_argument(
+        "--hop-target-nodes",
+        type=int,
+        default=M.HopScaling.TARGET_AFFECTED_NODES,
+        help="how many nodes the hop recommendation aims to reach - HopScalingModule's literal 40. "
+        "A different mechanism from --congestion-pivot: this scales the hop limit, that scales the "
+        "broadcast interval",
+    )
+    ap.add_argument(
+        "--congestion-pivot",
+        type=int,
+        default=T.CONGESTION_PIVOT,
+        help="node count below which nothing throttles at all. The firmware's is 40, a literal in "
+        "Default.h; raising it lets a larger mesh keep its intervals",
     )
     ap.add_argument(
         "--congestion-input",

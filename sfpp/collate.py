@@ -97,10 +97,11 @@ SUCCESSES = ("text", "dm", "admin", "held")
 # What an arm costs, read beside whichever success it moved.
 COST = "text"
 
-# The arm a cell is a difference against, where a block declares one. `design.py` puts a silent
-# control in every cell so each later arm is a difference on the same mesh at the same seed; a block
-# sweep has no such cell and its arms are read against each other instead.
-CONTROL = "control"
+# The arm a cell is a difference against, where a block declares one. `design.py` puts a control in
+# every cell - the archive `off` arm, the mesh as the firmware runs it - so each later arm is a
+# difference on the same mesh at the same seed; a block sweep has no such cell and its arms are read
+# against each other instead. First name present wins, so a block may declare either.
+CONTROL = ("control", "off")
 
 # The price side of an arm. Several blocks - reconciliation strategy, signing, advert transport -
 # deliberately hold delivery flat and differ only in what they spend, and ranking those on delivery
@@ -249,7 +250,10 @@ def against_control(cells):
     reader wants, and a ratio of two reception fractions is not. The control keeps a row of its own
     reading zero, so the table shows what it was and not only what was subtracted.
     """
-    control = next((c for c in cells if c["value"] == CONTROL), None)
+    control = next(
+        (c for name in CONTROL for c in cells if c["value"] == name),
+        None,
+    )
     if control is None:
         return
     for cell in cells:

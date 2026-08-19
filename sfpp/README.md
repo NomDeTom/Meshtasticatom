@@ -171,6 +171,7 @@ under `--grid` carries the grid in its filename, which is the usual reason one i
 | `--hop-limit`                      | 3            | one limit for every node                                                                                                                                |
 | `--hop-spread` / `--no-hop-spread` | **on**       | per-node limits 3-7                                                                                                                                     |
 | `--hop-assign`                     | `centrality` | `centrality` is realistic (edge nodes raise theirs) but confounds hop limit with position; `random` is the control that isolates the limit's own effect |
+| `--hop-target-nodes`               | 40           | how many nodes the hop recommendation aims to reach - `HopScalingModule`'s `TARGET_AFFECTED_NODES`. Scales the **hop limit**; `--congestion-pivot` is the other, unrelated scaling and stretches the **interval**. The one-hop ceiling follows this, keeping the firmware's 40:80 ratio |
 
 ### 4.3 Radio and firmware behaviour
 
@@ -194,6 +195,7 @@ under `--grid` carries the grid in its filename, which is the usual reason one i
 | `--coding-rate-ladder`      | off          | raise the coding rate on each retransmission. Not in any release                                 |
 | `--extra-repeats`           | off          | tolerate a second heard copy before cancelling our own rebroadcast. Not in any release           |
 | `--congestion-mode`         | `adaptive`   | recompute the broadcast throttle per node from its own online count, or one mesh-wide value      |
+| `--congestion-pivot`        | 40           | node count below which nothing throttles at all - `Default.h`'s literal in `congestionScalingCoefficient`. Raising it lets a larger mesh keep its intervals. Scales the **interval**, not the reach |
 | `--no-phy-loss`             | off          | disable the empirical SNR-to-PER curve                                                           |
 
 **On `--profile`.** Each value is a **release series taken at its final release**, dated by walking

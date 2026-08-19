@@ -1,4 +1,4 @@
-"""One substrate, many arms, every one measured against the same control.
+"""Three axes crossed: how the archive is configured, what else could be spent instead, and where.
 
 `sweep.py` moves one flag at a time with the archive switched on in every cell, because `--protocol`
 is not in its BASE and the campaign default is `sr`. That answers "what does this variable do to a
@@ -6,30 +6,35 @@ mesh" and cannot answer "what is the archive worth", which is the question the d
 settle. A topology sweep run that way reports that a corridor delivers less than a hub - true, and a
 statement about mesh physics rather than about anything proposed here.
 
-So this module inverts the arrangement. A **substrate** - seed, topology, node count, area, hours,
-preset - is pinned and shared. Every cell begins with a **control** arm that sites the archives and
-leaves them silent, so each later arm is a difference against the same mesh carrying the same
-traffic at the same seed rather than a comparison between two runs that differ in ways nobody wrote
-down. Two families of arm sit on it:
+So this module crosses three axes and pins everything else:
 
-  * **archive** - the archive's own design parameters, where it goes and how many of it there are.
-    Crossed, because placement and count interact: a count above the router cap is the same run
-    twice under a role-bounded placement.
-  * **rivals** - one arm per mechanism that could be spent *instead of* the archive. An extra relay
-    of every text, favouriting routers, the coding-rate ladder, early flooding. Each is measured
-    against the same control the archive is, which is the only way to say whether the archive earns
-    its complexity against something simpler.
+  * **archive** - `off`, and every placement at every count. Crossed rather than swept because
+    placement and count interact: a count above the router cap is the same run twice under a
+    role-bounded placement.
+  * **rivals** - the routing and throttle settings that could be changed *instead of*, or as well
+    as, deploying an archive. An extra relay of every text, favouriting routers, the coding-rate
+    ladder, early flooding, raised hop limits, and both of the firmware's scaling constants.
+  * **mesh** - Batumi, and Batumi under the conditions a deployed mesh actually meets: scaled up,
+    part-way through a firmware upgrade, on a faster preset.
 
-**Adding a future idea is adding one line to RIVALS.** It then runs on the same seeds, the same
-topologies and against the same control as everything already measured, which is what makes a result
-from today and an idea tried in six months comparable at all.
+The mesh axis is what makes the other two mean anything. A cross on one mesh says "0.489 held here";
+the same cross on the same geometry scaled up and part-upgraded is what turns it into advice that
+names its conditions. Traffic is not on any axis - every cell carries the same load, because
+changing it changes every cell equally.
+
+Within each mesh, the cell at `rival=none, archive=off` is the reference every other cell in that
+mesh is a difference against. `hop-scaling-40` and `congestion-40` restate firmware constants, so
+each must reproduce `none` cell for cell; they are kept as arms because a cross that cannot
+reproduce its own baseline is wired wrong and this is the cheapest way to notice.
 
 Output is the shape `sweep.py` writes - each report carrying `block`, `arm` and `value` - so
-`collate.py` and `explorer.py` read these runs through the same path as the block sweeps.
+`collate.py` and `explorer.py` read these runs through the same path as the block sweeps. Each
+report also carries `mesh`, `rival` and `archive` as their own fields, so the cross can be
+re-tabulated along any axis without re-running anything.
 
 Usage, from the tree root:
     python3 -m sfpp.design --list
-    python3 -m sfpp.design --cell archive-corridor --seeds 7 11 13 --out runs/
+    python3 -m sfpp.design --cell batumi-hop-limit-15 --seeds 7 11 13 --out runs/
 """
 
 import argparse
@@ -41,23 +46,33 @@ import time
 from . import autochart as AC
 from .campaign import build_parser, run_once
 
-# The substrate. Everything here is held fixed across every cell and every arm in this module, and
-# changing any of it invalidates comparison with every result already stored - which is why it is one
-# list with a name rather than defaults scattered over the arms.
+# --- axis three: the mesh the cross is run on ----------------------------------------------------
 #
-# 24 hours because the diurnal cycle has to close; 60 nodes and 8 km because that is the mesh the
-# block sweeps were measured on and their results should remain readable beside these; LONG_FAST
-# because it is the default a deployed mesh runs. DMs and traceroutes are on so the addressed
-# measures have a denominator and the DM-dependent rivals are not inert.
-SUBSTRATE = [
+# Batumi is the zeroth case and is in every round, because it is the only real geometry in the tree
+# and a result that holds nowhere else is a result about synthetic meshes. The rest of this axis is
+# conditions applied to it: the same 92 nodes and the same ground, scaled up by mirroring, carrying
+# older firmware, or on a different preset. Holding the geometry while varying the condition is what
+# lets "3 archives, spread" be advice rather than an observation.
+#
+# A later round replaces these with meshes drawn from the run's seed. This one is Batumi.
+MESHES = [
+    ("batumi", ["--scenario", "batumi"]),
+    # Kaleidoscopic scale-up: the same place tiled into reflected copies, so size moves and the
+    # ground does not. Seam-spanning pairs fall outside the fitted budget - read
+    # pairs_beyond_calibration before reading anything else here.
+    ("batumi-x4", ["--scenario", "batumi", "--mirror", "4"]),
+    # A mesh part-way through upgrading, which is every real mesh.
+    ("batumi-legacy-25", ["--scenario", "batumi", "--legacy-fraction", "0.25", "--old-profile", "2.6"]),
+    ("batumi-legacy-50", ["--scenario", "batumi", "--legacy-fraction", "0.5", "--old-profile", "2.6"]),
+    # The fast end of the presets a deployed mesh runs, against the default the others use.
+    ("batumi-short-fast", ["--scenario", "batumi", "--preset", "SHORT_FAST"]),
+]
+
+# Traffic every cell carries, so the addressed measures have denominators and the DM-dependent
+# rivals are not inert. Not part of the cross: changing it changes every cell equally.
+TRAFFIC = [
     "--hours",
     "24",
-    "--nodes",
-    "60",
-    "--area",
-    "8000",
-    "--preset",
-    "LONG_FAST",
     "--hop-spread",
     "--dm-per-hour",
     "6",
@@ -70,49 +85,48 @@ SUBSTRATE = [
     "--no-charts",
 ]
 
-# The shapes every family is run over. A result that holds in one and not another is the finding;
-# a result measured in only one is a result about that shape.
-TOPOLOGIES = ["uniform", "clustered", "corridor", "hub"]
-
-# Where the archive can go, and how much of it there is. Crossed rather than swept separately
-# because the two interact: `routers` caps at the mesh's router count and repeats above it, so a
-# count arm read without its placement is two identical rows and a wrong conclusion.
+# --- axis one: the archive ----------------------------------------------------------------------
 PLACES = ["random-any", "spread", "beside-router"]
 SERVERS = [2, 3, 6]
 
-# What could be spent instead of the archive. Each entry is (label, extra flags) and runs with the
-# protocol off, so it is the mechanism on its own against the same control - not stacked on top of
-# a running archive, which is what the block sweeps measure and why R-repeats could not answer the
-# question its own comment poses.
+# --- axis two: what else could be changed --------------------------------------------------------
 #
-# To add an idea: append one line. It inherits the substrate, the seeds, the topologies and the
-# control, and becomes comparable with everything already here.
+# Each entry is (label, flags). `none` is the mesh as the firmware runs it. The rest are one change
+# each, never combined with one another - combining them is a later question and would square an
+# already square grid.
+#
+# To add an idea: append one line. It crosses against every archive configuration, on every mesh
+# already measured, against the same reference cell.
 RIVALS = [
-    ("control", ["--protocol", "none"]),
-    ("archive", ["--protocol", "sr"]),
-    ("extra-repeats", ["--protocol", "none", "--extra-repeats"]),
-    ("favourite-routers", ["--protocol", "none", "--favourite-routers"]),
-    ("coding-rate-ladder", ["--protocol", "none", "--coding-rate-ladder"]),
-    ("m4-early-flood", ["--protocol", "none", "--dm-mode", "m4-early-flood"]),
-    ("hop-limit-7", ["--protocol", "none", "--no-hop-spread", "--hop-limit", "7"]),
+    ("none", []),
+    ("extra-repeats", ["--extra-repeats"]),
+    ("favourite-routers", ["--favourite-routers"]),
+    ("coding-rate-ladder", ["--coding-rate-ladder"]),
+    ("m4-early-flood", ["--dm-mode", "m4-early-flood"]),
+    # Hop limits. The mesh runs per-node 3-7 by centrality; these put everyone on one ceiling, so
+    # each is "everyone at N" rather than "N more hops than before".
+    ("hop-limit-7", ["--no-hop-spread", "--hop-limit", "7"]),
+    ("hop-limit-15", ["--no-hop-spread", "--hop-limit", "15"]),
+    # Two different scalings, often confused. This one sets how many nodes the hop recommendation
+    # aims to reach - HopScalingModule's literal 40 - so it scales the hop limit.
+    ("hop-scaling-40", ["--hop-target-nodes", "40"]),
+    ("hop-scaling-60", ["--hop-target-nodes", "60"]),
+    ("hop-scaling-80", ["--hop-target-nodes", "80"]),
+    # And this one sets the node count above which the firmware starts stretching broadcast
+    # intervals - Default.h's literal 40 - so it scales the traffic rather than the reach.
+    ("congestion-40", ["--congestion-pivot", "40"]),
+    ("congestion-60", ["--congestion-pivot", "60"]),
+    ("congestion-80", ["--congestion-pivot", "80"]),
 ]
 
-
-def cells():
-    """{name: (family, topology)} - one job's worth of work per entry."""
-    out = {}
-    for topology in TOPOLOGIES:
-        out[f"archive-{topology}"] = ("archive", topology)
-        out[f"rivals-{topology}"] = ("rivals", topology)
-    return out
+# The two arms that restate a firmware default. Each must reproduce `none` cell for cell; a cross
+# that cannot reproduce its own baseline is wired wrong, and this is the cheapest way to notice.
+REPRODUCES_BASELINE = ("hop-scaling-40", "congestion-40")
 
 
-def arms(family):
-    """(label, flags) for each arm of a family, control first."""
-    if family == "rivals":
-        return list(RIVALS)
-    # The archive family: the same silent control, then every placement at every count.
-    return [("control", ["--protocol", "none"])] + [
+def archives():
+    """(label, flags) for each archive configuration, `off` first."""
+    return [("off", ["--protocol", "none"])] + [
         (
             f"{place} x{servers}",
             ["--protocol", "sr", "--place", place, "--servers", str(servers)],
@@ -121,23 +135,42 @@ def arms(family):
     ]
 
 
-def run_cell(name, family, topology, seeds, out_dir):
-    """Every arm of one family on one topology, at each seed, against the same control."""
+def cells():
+    """One job per (mesh, rival): that pair crossed against every archive configuration.
+
+    The mesh is the outer coordinate, so a round can be run mesh by mesh - Batumi first, and every
+    later mesh added without disturbing what is already measured.
+    """
+    return {
+        f"{mesh}-{rival}": (mesh, mesh_flags, rival, rival_flags)
+        for mesh, mesh_flags in MESHES
+        for rival, rival_flags in RIVALS
+    }
+
+
+def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir):
+    """One (mesh, rival) pair against every archive configuration, at each seed."""
     parser = build_parser()
     results = []
-    for label, flags in arms(family):
+    for archive, archive_flags in archives():
         for seed in seeds:
-            opts = parser.parse_args(SUBSTRATE + ["--topology", topology] + flags)
+            opts = parser.parse_args(TRAFFIC + mesh_flags + rival_flags + archive_flags)
             started = time.time()
             report = run_once(opts, seed)
             report["block"] = name
-            report["arm"] = family
-            report["value"] = label
-            report["grid"] = ["--topology", topology]
+            report["arm"] = "archive"
+            report["value"] = archive
+            # All three coordinates, so the cross can be re-tabulated along any axis later.
+            # `mesh_label`, not `mesh`: the campaign already writes `mesh` as the run's mesh
+            # statistics, and overwriting that dict with a name costs the digest its node count.
+            report["mesh_label"] = mesh
+            report["rival"] = rival
+            report["archive"] = archive
+            report["grid"] = mesh_flags + rival_flags
             results.append(report)
             reach = (report.get("baseline") or {}).get("text_reception_mean")
             print(
-                f"  {name} {label} seed={seed} {time.time() - started:.0f}s"
+                f"  {name} {archive} seed={seed} {time.time() - started:.0f}s"
                 + (f" reach {reach:.3f}" if reach is not None else ""),
                 flush=True,
             )
@@ -153,31 +186,35 @@ def run_cell(name, family, topology, seeds, out_dir):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        description="one substrate, every arm against the same control"
-    )
-    ap.add_argument("--cell", help="one entry from --list; a job's worth of work")
-    ap.add_argument(
-        "--list", action="store_true", help="print the cells and what each covers"
-    )
+    ap = argparse.ArgumentParser(description="the archive crossed against what else could be spent")
+    ap.add_argument("--cell", help="one cell from --list; a job's worth of work")
+    ap.add_argument("--list", action="store_true", help="print the cells and what a round costs")
+    ap.add_argument("--mesh", help="with --list, print only this mesh's cells")
     ap.add_argument("--seeds", nargs="+", type=int, default=[7, 11, 13])
     ap.add_argument("--out", default="runs")
     opts = ap.parse_args(argv)
 
     known = cells()
     if opts.list:
-        for name, (family, topology) in known.items():
-            n = len(arms(family)) * len(opts.seeds)
-            print(f"{name:22} {family:8} {topology:10} {n:3} runs per invocation")
-        print(f"\n{len(known)} cells, {len(opts.seeds)} seeds each")
-        print(f"substrate: {' '.join(SUBSTRATE)}")
+        per_cell = len(archives()) * len(opts.seeds)
+        shown = [
+            label for label, (mesh, _, _, _) in known.items() if opts.mesh in (None, mesh)
+        ]
+        if not shown:
+            return ap.error(f"unknown mesh {opts.mesh!r}; one of {', '.join(m for m, _ in MESHES)}")
+        for label in shown:
+            print(f"{label:28} {per_cell:3} runs per invocation")
+        print(
+            f"\n{len(MESHES)} meshes x {len(RIVALS)} rivals = {len(known)} cells,"
+            f" each x {len(archives())} archive configurations x {len(opts.seeds)} seeds"
+        )
+        print(f"= {len(shown) * per_cell} runs for what is listed above")
         return 0
     if not opts.cell:
         return ap.error("give --cell or --list")
     if opts.cell not in known:
         return ap.error(f"unknown cell {opts.cell!r}; --list prints them")
-    family, topology = known[opts.cell]
-    run_cell(opts.cell, family, topology, opts.seeds, opts.out)
+    run_cell(opts.cell, *known[opts.cell], opts.seeds, opts.out)
     return 0
 
 
