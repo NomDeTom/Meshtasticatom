@@ -713,3 +713,38 @@ class LicenceOnThePage(unittest.TestCase):
 
     def test_the_upstream_chain_survives(self):
         self.assertIn("LoRaSim", self.page)
+
+
+class PriceOfAnArm(unittest.TestCase):
+    """An arm that holds delivery flat and moves what it spends has done something."""
+
+    def _block(self, **second):
+        return C.summarise_block([report(value="a"), report(value="b", **second)])
+
+    def test_a_flat_arm_that_moves_bytes_is_priced(self):
+        # D-resolve: enum advertises with a fifth of sketch's bytes and delivers the same.
+        block = self._block(sfpp__advert_bytes=2538)
+        self.assertIsNone(block["moved"])
+        self.assertEqual(block["cost"]["metric"], "advert_bytes")
+        self.assertAlmostEqual(block["cost"]["ratio"], 12555 / 2538, places=6)
+
+    def test_the_largest_ratio_wins(self):
+        block = self._block(sfpp__advert_bytes=12555 * 2, sfpp__sr_bytes=36212 * 5)
+        self.assertEqual(block["cost"]["metric"], "sr_bytes")
+
+    def test_an_arm_that_costs_nothing_extra_is_not_priced(self):
+        self.assertIsNone(self._block()["cost"])
+
+    def test_a_zero_counter_is_not_a_ratio(self):
+        # Dividing by a cell that spent nothing would report an infinite price.
+        self.assertIsNone(self._block(sfpp__advert_bytes=0)["cost"])
+
+    def test_the_report_says_what_a_flat_block_moved(self):
+        run = write_run(
+            os.path.join(tempfile.mkdtemp(), "r"),
+            {"B-arm": [report(value="a"), report(value="b", sfpp__advert_bytes=2538)]},
+        )
+        md = C.markdown(C.collate(run))
+        self.assertIn("Moved no delivery measure", md)
+        self.assertIn("advert_bytes", md)
+        self.assertNotIn("moved no delivery measure: `B-arm`.", md)
