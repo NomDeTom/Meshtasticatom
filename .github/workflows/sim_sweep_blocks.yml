@@ -1,0 +1,189 @@
+# The mechanism sweep: every block sfpp.sweep declares, one fresh random seed base and one landform
+# drawn for the whole night. Each block is its own job because sweep.py has no internal parallelism -
+# a single job running all 87 in sequence is about six hours of simulator time, which is the job
+# ceiling, and one slow block would take the run down with it.
+#
+# This asks what a mechanism does, one arm at a time against a synthetic mesh. The companion
+# question - what happens over real ground, at several presets, with controls - is sim_sweep_matrix.
+# Both write into the same archive and the same rolling page.
+name: Sim Sweep (blocks)
+
+on:
+  schedule:
+    # 02:10 UTC. Not on the hour: GitHub delays cron under load, and the top of the hour is where
+    # every scheduled workflow on the platform queues at once.
+    - cron: 10 2 * * *
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Ground under the mesh. `random` draws one; `none` is the flat world
+        type: choice
+        required: false
+        default: random
+        options: [random, none, flat, rolling, ridge, valleys, coastal, alpine]
+      seed_base:
+        description: Replay an earlier run by giving its seed base. Empty draws a new one
+        type: string
+        required: false
+        default: ""
+      blocks:
+        description: Space-separated block names. Empty means every block sweep.py declares
+        type: string
+        required: false
+        default: ""
+      seeds:
+        description: Seeds per cell. One is the nightly default; the archive accumulates the rest
+        type: string
+        required: false
+        default: "1"
+
+permissions: {}
+
+# One sweep at a time. Two runs would each push a directory to the results branch and the second
+# would spend its collate job resolving a conflict it has no way to resolve.
+concurrency:
+  group: sim-sweep-blocks
+  cancel-in-progress: false
+
+env:
+  RESULTS_BRANCH: sim-results
+
+jobs:
+  plan:
+    name: Draw the run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.draw.outputs.matrix }}
+      blocks: ${{ steps.draw.outputs.blocks }}
+      seed_base: ${{ steps.draw.outputs.seed_base }}
+      scenario: ${{ steps.draw.outputs.scenario }}
+      grid: ${{ steps.draw.outputs.grid }}
+      run_id: ${{ steps.draw.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Draw a seed base, a landform, and the block list
+        id: draw
+        shell: bash
+        # Dispatch inputs are free text and reach python through the environment only, never spliced
+        # into a shell or a python source line.
+        env:
+          IN_SCENARIO: ${{ inputs.scenario }}
+          IN_SEED_BASE: ${{ inputs.seed_base }}
+          IN_BLOCKS: ${{ inputs.blocks }}
+        run: |
+          set -euo pipefail
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import datetime, json, os, secrets, sys
+          from sfpp.sweep import BLOCKS
+
+          # Landforms only. `map` fetches from the public map and `batumi` decides its own node
+          # count, which the blocks that sweep --nodes contradict. Real geometry is the matrix
+          # workflow's job, where the grid is built around it.
+          LANDFORMS = ["flat", "rolling", "ridge", "valleys", "coastal", "alpine"]
+
+          asked = (os.environ.get("IN_SCENARIO") or "random").strip() or "random"
+          if asked == "random":
+              scenario = secrets.choice(LANDFORMS)
+          elif asked == "none":
+              scenario = ""
+          else:
+              scenario = asked
+          if scenario and scenario not in LANDFORMS:
+              sys.exit(f"unknown landform {scenario!r}; have {', '.join(LANDFORMS)}")
+
+          # A whole run shares one seed base, so every block in it saw the same draw and the run is
+          # replayable from a single number. sweep.py would otherwise draw its own per invocation,
+          # which with one job per block means 87 unrelated draws and nothing to replay.
+          seed_base = (os.environ.get("IN_SEED_BASE") or "").strip()
+          if not seed_base:
+              seed_base = str(secrets.randbelow(9_000_000) + 1_000_000)
+          if not seed_base.isdigit():
+              sys.exit(f"seed base must be a number, got {seed_base!r}")
+
+          asked_blocks = (os.environ.get("IN_BLOCKS") or "").split()
+          unknown = [b for b in asked_blocks if b not in BLOCKS]
+          if unknown:
+              sys.exit(f"unknown block(s): {', '.join(unknown)}")
+          blocks = asked_blocks or sorted(BLOCKS)
+
+          print(f"matrix={json.dumps(blocks)}")
+          print(f"blocks={' '.join(blocks)}")
+          print(f"seed_base={seed_base}")
+          print(f"scenario={scenario}")
+          print(f"grid={'--scenario ' + scenario if scenario else ''}")
+          print(f"run_id=blocks-{datetime.date.today().isoformat()}-{seed_base}")
+          PY
+          cat "$GITHUB_OUTPUT"
+
+  sweep:
+    name: ${{ matrix.block }}
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      # Below the plan's concurrency allowance, so a sweep never occupies every runner the account
+      # has and blocks another workflow behind 87 queued simulator jobs.
+      max-parallel: 12
+      matrix:
+        block: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      # Each job gets its own scenario cache. Nothing here writes a mirrored raster, but two jobs
+      # racing to write the same derived CSV is the kind of thing that fails once a month.
+      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.block }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No pip install: the transport is standard library only. Charts are the sole heavy
+      # dependency and a sweep in CI has nobody watching them.
+      - name: ${{ matrix.block }}
+        env:
+          BLOCK: ${{ matrix.block }}
+          SEEDS: ${{ inputs.seeds || '1' }}
+          SEED_BASE: ${{ needs.plan.outputs.seed_base }}
+          GRID: ${{ needs.plan.outputs.grid }}
+        run: |
+          set -euo pipefail
+          args=(--block "$BLOCK" --seeds "$SEEDS" --seed-base "$SEED_BASE" --out out)
+          if [ -n "$GRID" ]; then args+=(--grid "$GRID"); fi
+          python3 -u -m sfpp.sweep "${args[@]}"
+
+      - uses: actions/upload-artifact@v4
+        if: always() # a block that failed halfway still wrote the cells it finished
+        with:
+          name: block-${{ matrix.block }}
+          path: out
+          if-no-files-found: warn
+          # The raw data - every cell's full report and its text statistics, about 17 MB a night.
+          # The results branch gets the digest only: git keeps every blob it has ever seen, so
+          # committing the raw nightly would add several GB a year that no later deletion reclaims.
+          # 90 days is the longest a public repository offers, and the window in which a question
+          # about a specific cell can still be answered from the numbers rather than by re-running.
+          retention-days: 90
+
+  collate:
+    name: Collate and publish
+    needs: [plan, sweep]
+    if: ${{ !cancelled() }} # a run where some blocks failed is still worth collating - the digest names them
+    uses: ./.github/workflows/sim_collate.yml
+    permissions:
+      contents: write
+    with:
+      run_id: ${{ needs.plan.outputs.run_id }}
+      seed_base: ${{ needs.plan.outputs.seed_base }}
+      scenario: ${{ needs.plan.outputs.scenario }}
+      expect: ${{ needs.plan.outputs.blocks }}
+      artifact_pattern: block-*
