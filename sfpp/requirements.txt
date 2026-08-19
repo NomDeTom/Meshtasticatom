@@ -1,12 +1,22 @@
-# The simulator itself runs on the standard library. `python3 -m sfpp.campaign --no-charts` and
-# `python3 -m unittest discover -s sfpp -t . -p 'test_*.py'` need nothing installed at all: the three
-# vendored modules it imports (lib.config, lib.phy, lib.radio_loss) are pure stdlib too.
+# One required dependency, two optional ones.
 #
-# Both entries below are optional, and the code degrades rather than fails without them:
-# a run without matplotlib writes its JSON and skips the charts; the test gate falls back to
+# PyYAML is required for any run that loads a packaged scenario - `--scenario batumi` reads
+# presets/batumi.yaml, and terrain.py imports yaml lazily inside preset_scenario(), so a flat or
+# landform run never touches it and an environment without PyYAML looks fine until the first real
+# geometry. This file said "nothing installed at all" until CI proved otherwise: the transport suite
+# passed on a developer machine with PyYAML as a system package and failed on a clean runner with
+# three errors, all on the preset path.
+#
+# The vendored modules SF++ imports (lib.clutter, lib.config, lib.link_model, lib.map_input,
+# lib.osm_clutter, lib.phy, lib.radio_loss, lib.srtm, lib.terrain) are pure standard library.
+PyYAML>=6.0
+
+# Optional. The code degrades rather than fails without either: a run without matplotlib writes its
+# JSON and its text report and skips the charts, which is what CI does; the test gate falls back to
 # unittest when pytest is absent.
 matplotlib>=3.5   # charts (autochart.py, figures3.py, diagram.py)
 pytest>=7         # nicer test runner; unittest runs the same suite
 
 # The vendored tree's own tooling - its interactive simulator, protobuf plumbing and dataset
-# fetchers - needs more than this. See meshtasticator/requirements.txt; nothing under sfpp/ uses it.
+# fetchers - needs more than this. See requirements.txt at the repository root; nothing under sfpp/
+# uses it.

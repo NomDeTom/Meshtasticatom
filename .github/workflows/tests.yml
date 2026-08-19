@@ -41,9 +41,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      # No install step. The transport and its tests are standard library only, and the three
-      # vendored modules they import (lib.config, lib.phy, lib.radio_loss) are too. Charts are the
-      # only reason matplotlib is ever needed and CI never draws them.
+      # PyYAML and nothing else. terrain.py imports it lazily inside preset_scenario(), so a flat
+      # run never touches it and a machine with PyYAML installed system-wide looks stdlib-only -
+      # which is exactly how this job first went red, with three errors on the preset path. Charts
+      # are the only reason matplotlib is ever wanted and CI never draws them.
+      - name: Install the scenario loader
+        run: pip install --quiet "PyYAML>=6.0"
+
       - name: Run the transport suite
         run: python3 -m unittest discover -s sfpp -t . -p 'test_*.py'
 
