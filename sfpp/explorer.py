@@ -352,7 +352,7 @@ def render_html(runs, blocks, board, for_pages=False):
         "</div>",
         '<div class="attribution-block" id="attribution" hidden>',
         "<p><b>What this is.</b> Output of the SF++ set-reconciliation simulator in "
-        '<a href="https://github.com/NomDeTom/Meshtasticator">NomDeTom/Meshtasticator</a>, '
+        '<a href="https://github.com/NomDeTom/Meshtasticatom">NomDeTom/Meshtasticatom</a>, '
         "built from the run digests on its <code>sim-results</code> branch by a scheduled job. "
         "Nothing on this page is hand-written or hand-edited.</p>",
         "<p><b>What it is not.</b> Not a measurement of a real network. The radio model, terrain and "
@@ -367,7 +367,7 @@ def render_html(runs, blocks, board, for_pages=False):
         # Meshtasticator is CC BY 4.0 and parts of its radio model descend from LoRaSim, so the
         # attribution chain has to reach back to both papers.
         "<p><b>Licence.</b> This page is output of the simulator in "
-        '<a href="https://github.com/NomDeTom/Meshtasticator">NomDeTom/Meshtasticator</a>, which is '
+        '<a href="https://github.com/NomDeTom/Meshtasticatom">NomDeTom/Meshtasticatom</a>, which is '
         'distributed under <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> because '
         "parts of it are transcribed from Meshtastic firmware. A program's output is not the "
         "program: this page describes a simulation and is free to read and quote. The simulator's "
