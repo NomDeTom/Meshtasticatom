@@ -360,6 +360,7 @@ rest of the mesh keeps believing routes through a node that has gone. Not yet ex
 | `--out`       | -       | JSON path. The report lands in `reports/` and the charts in `figures/` beside it |
 | `--label`     | -       | free text copied into the report, for telling two runs apart afterwards |
 | `--no-charts` | off     | skip chart rendering. The JSON and the text report are written either way |
+| `--reception-bin-s` | 0 | bin reception and load into windows of this many **simulated** seconds and keep the series, so a diurnal cycle is readable rather than averaged away. 3600 suits a multi-day run; 0 disables it |
 | `--mesh-map`  | off     | draw an SVG map of this run's mesh beside the JSON. **Off by default because it is one file per run** - a Batumi map is about 250 kB, and a swept round is hundreds of runs. Needs `--out` |
 
 ---
@@ -904,6 +905,42 @@ stretch metrics where present - each footered with the transport commit, seed an
 figure cannot be read against the wrong code.
 
 ---
+
+### 7.4a Reception over time - `--reception-bin-s`
+
+Every other delivery figure in the report is a whole-run total, and a total cannot tell a mesh that
+delivered steadily from one that delivered well for a day and then stopped. The sweeps run 72
+simulated hours so that three diurnal cycles are in the data - and a cycle is only readable if
+something samples inside it.
+
+`--reception-bin-s 3600` fills `report["series"]` with one row per hour: per class the `originated`
+and `receptions` counts and the `rate` between them, plus `hour_of_day` so a diurnal shape can be read
+without working out where `--start-hour` put the run. Beside it, `load` carries the per-bin difference
+of the mesh counters - transmissions, receptions, `lost_to_collision`, `lost_to_phy`, `queue_drops`,
+airtime - and the channel-utilisation distribution sampled at that moment.
+
+Measured on a 72 h, 40-node, `--diurnal commuter` run: text originations run 34/hour at 08:00 down to
+2-3/hour at 02:00-04:00, and `lost_to_collision` tracks it from 5456 to 1444. That is the 17:1 curve
+§4.4 describes, visible rather than averaged away.
+
+**Three things to know before quoting a row.**
+
+- **Read `rate` against its own `originated`, never across bins alone.** Traffic is not flat, so a
+  quiet bin has a noisy rate: the 03:00 bin above reads 0.88 on three packets. The denominator is in
+  every row for exactly this reason.
+- **Bins are cut by *reception* time, not origination.** Over a bin far wider than the latency - an
+  hour against seconds - the two agree except for packets straddling a boundary. **The first and last
+  bins are the ones to distrust.** Tracking an origin time per packet would mean a slot on `Packet`
+  and a live dict of every id in the run, which is not worth it for an edge effect two bins wide.
+- **`rate` is the same quantity as `by_class.reception_rate`**, partitioned by time rather than
+  recomputed - so a row and the whole-run figure can be read against each other.
+
+The load counters are sampled on a timer, not counted per event: the loss counters are per reception
+*opportunity*, so one broadcast heard by fifty nodes produces fifty of them, and incrementing a
+per-bin structure on each would put a dict write in the busiest path in the simulator to produce a
+number that is a subtraction of two totals. Channel utilisation is sampled rather than differenced
+because it is a percentage at a moment - and sampled *during* the run because `AirTime`'s ring covers
+sixty seconds, so a single read at the end returns zero.
 
 ### 7.5 The mesh map - `--mesh-map`
 

@@ -341,6 +341,11 @@ class Generator:
             []
         )  # message_hash in origination order; the chain counter follows it
         self.originated = {c.name: 0 for c in mix}
+        # The denominator for reception-over-time. Kept here rather than derived later because only
+        # the generator knows when it composed something; `bin_ms` of 0 leaves it entirely inert, so a
+        # run that does not ask for the series does not pay for it.
+        self.bin_ms = 0.0
+        self.originated_bins = {}
         self.archive_dms = archive_dms
         # DM outcomes. `dm_sent` is packet id -> (sender, target, sent_at); the campaign resolves
         # each against whether the target ever saw it, so success is measured at the intended
@@ -527,6 +532,7 @@ class Generator:
                     self.objects[obj.message_hash] = obj
                     self.text_order.append(obj.message_hash)
                 self.originated[cls.name] += 1
+                self._note_origination(cls.name)
                 return
             if cls.archived:
                 packet = self.mesh.originate(
@@ -541,8 +547,16 @@ class Generator:
             else:
                 self.mesh.originate(node, cls.portnum, size, kind=cls.name)
             self.originated[cls.name] += 1
+            self._note_origination(cls.name)
 
         self.mesh.at(when, emit)
+
+    def _note_origination(self, name):
+        """Which time bin this packet was composed in. Inert unless `bin_ms` was set."""
+        if not self.bin_ms:
+            return
+        slot = self.originated_bins.setdefault(int(self.mesh.now // self.bin_ms), {})
+        slot[name] = slot.get(name, 0) + 1
 
     def _make_object(self, node, packet_id, size, destination=BROADCAST):
         """The object the archive would hold: ciphertext stands in at the same length.
