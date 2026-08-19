@@ -12,6 +12,7 @@ full ray tracer, but it captures the important Batumi-mesh case where hills and
 ridges matter more than flat-earth distance alone.
 """
 
+import heapq
 import math
 
 
@@ -82,10 +83,11 @@ class TerrainGrid:
         weighted_sum = 0.0
         weight_total = 0.0
 
-        nearest = sorted(
+        nearest = heapq.nsmallest(
+            8,
             ((math.hypot(x - sx, y - sy), elevation) for sx, sy, elevation in self.samples),
             key=lambda item: item[0],
-        )[:8]
+        )
 
         for distance, elevation in nearest:
             if distance < 0.01:
