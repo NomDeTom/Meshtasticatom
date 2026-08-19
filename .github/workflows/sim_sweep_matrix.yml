@@ -1,0 +1,129 @@
+# The place-and-radio matrix: Batumi, three presets, two scales, three placements, three archive
+# counts, five seeds, with a no-archive baseline per seed per scale.
+#
+# Weekly rather than nightly. It is the heavier of the two sweeps - the link build is O(n^2) with a
+# terrain profile and a clutter path walk per pair, so an x4 cell spends most of its time before the
+# simulation starts - and it answers slower-moving questions than the mechanism sweep does: whether a
+# preset ordering survives scaling, and whether any deliberate placement beats picking nodes at
+# random.
+#
+# One job per (preset, scale). Runs are independent processes with no shared state, so this
+# parallelises perfectly; the only shared thing is the scenario cache, and each job gets its own.
+name: Sim Sweep (matrix)
+
+on:
+  schedule:
+    # 03:40 UTC on Sundays, clear of the nightly block sweep.
+    - cron: 40 3 * * 0
+  workflow_dispatch:
+    inputs:
+      seeds:
+        description: Space-separated seeds. Five is the default; fewer for a quick look
+        type: string
+        required: false
+        default: 7 11 13 17 23
+      cells:
+        description: Space-separated cell names from `python3 -m sfpp.matrix --list`. Empty means all
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: sim-sweep-matrix
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Draw the run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.draw.outputs.matrix }}
+      cells: ${{ steps.draw.outputs.cells }}
+      run_id: ${{ steps.draw.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve the cell list
+        id: draw
+        env:
+          IN_CELLS: ${{ inputs.cells }}
+        run: |
+          set -euo pipefail
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import datetime, json, os, sys
+          from sfpp.matrix import cells
+
+          known = cells()
+          asked = (os.environ.get("IN_CELLS") or "").split()
+          unknown = [c for c in asked if c not in known]
+          if unknown:
+              sys.exit(f"unknown cell(s): {', '.join(unknown)}")
+          chosen = asked or sorted(known)
+          print(f"matrix={json.dumps(chosen)}")
+          print(f"cells={' '.join(chosen)}")
+          # Seeds are fixed here rather than drawn. The matrix is a paired comparison across
+          # presets and placements, and pairing is what makes it readable at five seeds instead of
+          # fifty; a fresh draw each week would compare this week's mesh with last week's.
+          print(f"run_id=matrix-{datetime.date.today().isoformat()}")
+          PY
+
+  matrix:
+    name: ${{ matrix.cell }}
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        cell: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      # `--mirror` writes a mirrored clutter CSV into the cache. Two jobs racing to write the same
+      # one is worth avoiding, and a per-job cache costs nothing but a rebuild.
+      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: ${{ matrix.cell }}
+        env:
+          CELL: ${{ matrix.cell }}
+          SEEDS: ${{ inputs.seeds || '7 11 13 17 23' }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086  # seeds are a deliberate word list
+          python3 -u -m sfpp.matrix --cell "$CELL" --seeds $SEEDS --out out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: matrix-${{ matrix.cell }}
+          path: out
+          if-no-files-found: warn
+          retention-days: 90
+
+  collate:
+    name: Collate and publish
+    needs: [plan, matrix]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/sim_collate.yml
+    permissions:
+      contents: write
+    with:
+      run_id: ${{ needs.plan.outputs.run_id }}
+      scenario: batumi
+      expect: ${{ needs.plan.outputs.cells }}
+      artifact_pattern: matrix-*

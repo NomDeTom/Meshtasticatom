@@ -1,0 +1,166 @@
+# Shared tail of both sweeps: take whatever the run's jobs uploaded, reduce it to a digest and a
+# trend report, publish those to the data branch, and let the standing gates decide the run's colour.
+#
+# One copy, called by both, because the two sweeps must produce the same digest shape - the rolling
+# explorer reads them through one path and a second implementation would drift from the first
+# quietly and be noticed only as a gap in the page.
+name: Sim Collate
+
+on:
+  workflow_call:
+    inputs:
+      run_id:
+        description: Names the run in the archive and on the page
+        type: string
+        required: true
+      seed_base:
+        description: Recorded so the run can be replayed exactly
+        type: string
+        required: false
+        default: ""
+      scenario:
+        description: The ground the run asked for, recorded beside what the reports observed
+        type: string
+        required: false
+        default: ""
+      expect:
+        description: Space-separated names the run asked for, so one that produced nothing is named
+        type: string
+        required: false
+        default: ""
+      artifact_pattern:
+        description: Which artifacts of this run hold the block JSONs
+        type: string
+        required: true
+
+env:
+  RESULTS_BRANCH: sim-results
+
+jobs:
+  collate:
+    name: Collate and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the simulator
+        uses: actions/checkout@v4
+        with:
+          path: src
+          persist-credentials: false
+
+      - name: Check out the repository for the results branch
+        # Credentials persist here and only here: this is the checkout that pushes. The ref is the
+        # default one - the results branch is selected next, because on the first run it does not
+        # exist yet.
+        uses: actions/checkout@v4
+        with:
+          path: results
+          fetch-depth: 1
+
+      - name: Select or start the results branch
+        working-directory: results
+        run: |
+          set -euo pipefail
+          if git fetch --depth 1 origin "$RESULTS_BRANCH" 2>/dev/null; then
+            git checkout -B "$RESULTS_BRANCH" FETCH_HEAD
+            echo "results branch $RESULTS_BRANCH at $(git rev-parse --short HEAD)"
+          else
+            # Orphan: this branch carries run data, not code. Nothing in its history is a commit
+            # anyone runs, and it must never be merged into a code branch.
+            git checkout --orphan "$RESULTS_BRANCH"
+            git rm -rqf . >/dev/null 2>&1 || true
+            echo "started $RESULTS_BRANCH as an orphan - this is the first run"
+          fi
+          mkdir -p runs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download this run's output
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ inputs.artifact_pattern }}
+          path: incoming
+          merge-multiple: true
+
+      - name: Collate
+        id: collate
+        working-directory: src
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          SEED_BASE: ${{ inputs.seed_base }}
+          SCENARIO: ${{ inputs.scenario }}
+          EXPECT: ${{ inputs.expect }}
+        run: |
+          set -euo pipefail
+          dest="$GITHUB_WORKSPACE/results/runs/$RUN_ID"
+          mkdir -p "$dest"
+          # Raw block JSONs stay in the artifact; only the digest is written into the checkout that
+          # gets committed. See the retention note on the sweep's upload step.
+          args=(--runs "$GITHUB_WORKSPACE/incoming" --out "$dest" --run-id "$RUN_ID")
+          [ -n "$SEED_BASE" ] && args+=(--seed-base "$SEED_BASE")
+          [ -n "$SCENARIO" ] && args+=(--scenario "$SCENARIO")
+          [ -n "$EXPECT" ] && args+=(--expect "$EXPECT")
+          python3 -m sfpp.collate "${args[@]}"
+          # The gates decide this workflow's colour, but only after the results are committed: a run
+          # that found a silent loss is the one run whose data must not be lost. The digest reaches
+          # python through the environment, not through the script text.
+          DEST="$dest" python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os
+          gate = json.load(open(os.path.join(os.environ["DEST"], "summary.json")))["gate"]
+          print(f"ok={str(gate['ok']).lower()}")
+          print(f"failures={len(gate['failures'])}")
+          print(f"missing={gate['blocks_missing']}")
+          PY
+
+      - name: Publish to the results branch
+        working-directory: results
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A runs
+          if git diff --cached --quiet; then
+            echo "nothing new to publish"
+            exit 0
+          fi
+          git commit -q -m "runs: $RUN_ID"
+          # Concurrent pushes should not happen - each sweep holds its own concurrency group - but a
+          # retry costs less than a lost run.
+          for attempt in 1 2 3 4; do
+            git pull --rebase -q origin "$RESULTS_BRANCH" 2>/dev/null || true
+            if git push -q origin "HEAD:$RESULTS_BRANCH"; then
+              echo "published $RUN_ID"
+              exit 0
+            fi
+            sleep $((attempt * 4))
+          done
+          echo "::error title=Results not published::the run collated but could not be pushed to $RESULTS_BRANCH"
+          exit 1
+
+      - name: Job summary
+        if: always()
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          trend="results/runs/$RUN_ID/trend.md"
+          if [ -f "$trend" ]; then
+            # The step summary is capped at 1 MiB; a full trend is far below that, but a future
+            # block set need not be.
+            head -c 900000 "$trend" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No trend report was produced - the collate step did not get that far." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail the run if a standing gate failed
+        # Last, deliberately: a silent loss or an impossible utilisation falsifies the run, so it
+        # goes red - but only once its data is on the results branch where it can be read.
+        if: ${{ steps.collate.outputs.ok == 'false' }}
+        run: |
+          echo "::error title=Fatal gate::${{ steps.collate.outputs.failures }} cell(s) failed a design-falsifying or physically-impossible check. See the job summary."
+          exit 1

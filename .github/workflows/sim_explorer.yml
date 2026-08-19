@@ -1,0 +1,152 @@
+# Rolls every sweep the results branch holds - mechanism blocks and place-and-radio matrix alike -
+# into one page, and rewrites it in place.
+#
+# Separate from the sweeps that produce the runs, and scheduled rather than chained, for two
+# reasons: a sweep that fails halfway still leaves runs worth rolling up, and the page has to be
+# rebuildable after an old run is pruned or a digest corrected without re-running any simulation.
+name: Sim Results Explorer
+
+on:
+  schedule:
+    # 06:20 UTC, comfortably after the nightly sweep that starts at 02:10 has finished writing.
+    - cron: 20 6 * * *
+  workflow_dispatch:
+    inputs:
+      window:
+        description: Roll up only the most recent N runs. Empty means every run in the branch
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: sim-explorer
+  cancel-in-progress: true
+
+env:
+  RESULTS_BRANCH: sim-results
+
+jobs:
+  explorer:
+    name: Rebuild the explorer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the simulator
+        uses: actions/checkout@v4
+        with:
+          path: src
+          persist-credentials: false
+
+      - name: Check out the results branch
+        # Credentials persist here and only here: this is the checkout that pushes.
+        uses: actions/checkout@v4
+        with:
+          ref: sim-results
+          path: results
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Roll every run into the page
+        working-directory: src
+        env:
+          WINDOW: ${{ inputs.window }}
+        run: |
+          set -euo pipefail
+          args=(--archive "$GITHUB_WORKSPACE/results/runs" --out "$GITHUB_WORKSPACE/results")
+          if [ -n "$WINDOW" ]; then args+=(--window "$WINDOW"); fi
+          python3 -m sfpp.explorer "${args[@]}"
+
+      - name: Publish
+        working-directory: results
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A index.html INDEX.md
+          if git diff --cached --quiet; then
+            echo "explorer unchanged - no new runs since the last rebuild"
+            exit 0
+          fi
+          git commit -q -m "explorer: roll up $(find runs -mindepth 1 -maxdepth 1 -type d | wc -l) run(s)"
+          for attempt in 1 2 3 4; do
+            git pull --rebase -q origin "$RESULTS_BRANCH" 2>/dev/null || true
+            if git push -q origin "HEAD:$RESULTS_BRANCH"; then
+              echo "explorer published"
+              exit 0
+            fi
+            sleep $((attempt * 4))
+          done
+          echo "::error title=Explorer not published::rebuilt but could not push to $RESULTS_BRANCH"
+          exit 1
+
+      - name: Build the copy for the public site
+        # A second build rather than a copy of the first: the published page carries the site's
+        # back-to-index action, and its per-run links have to be absolute. `runs/` lives on this
+        # repository's data branch and does not exist on the site, so a relative link would 404 for
+        # every run on the page.
+        working-directory: src
+        env:
+          WINDOW: ${{ inputs.window }}
+        run: |
+          set -euo pipefail
+          args=(
+            --archive "$GITHUB_WORKSPACE/results/runs"
+            --out "$GITHUB_WORKSPACE/site"
+            --name meshtasticator-explorer.html
+            --for-pages
+            --link-base "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${RESULTS_BRANCH}/runs"
+          )
+          if [ -n "$WINDOW" ]; then args+=(--window "$WINDOW"); fi
+          python3 -m sfpp.explorer "${args[@]}"
+
+      - name: Publish to the site
+        # Cross-repository, so GITHUB_TOKEN cannot do it - that token is scoped to this repository
+        # alone. PAGES_TOKEN must be a token with contents:write on the site repository. Without it
+        # this step says so and stops; the copy on the data branch is already published either way,
+        # so a missing secret costs the public page, not the run.
+        env:
+          PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
+          PAGES_REPO: ${{ vars.PAGES_REPO || 'NomDeTom/nomdetom.github.io' }}
+          PAGES_BRANCH: ${{ vars.PAGES_BRANCH || 'main' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PAGES_TOKEN:-}" ]; then
+            echo "::notice title=Site copy not published::PAGES_TOKEN is not set, so the page was not pushed to $PAGES_REPO. The explorer on the $RESULTS_BRANCH branch is up to date."
+            exit 0
+          fi
+          remote="https://x-access-token:${PAGES_TOKEN}@github.com/${PAGES_REPO}.git"
+          git clone --depth 1 --branch "$PAGES_BRANCH" "$remote" pages
+          cp site/meshtasticator-explorer.html pages/meshtasticator-explorer.html
+          cd pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # One file, by name. The site's index is hand-curated and this job does not touch it.
+          git add meshtasticator-explorer.html
+          if git diff --cached --quiet; then
+            echo "site copy unchanged"
+            exit 0
+          fi
+          git commit -q -m "meshtasticator-explorer: rebuild from the sweep archive"
+          for attempt in 1 2 3 4; do
+            if git push -q origin "HEAD:$PAGES_BRANCH"; then
+              echo "published to $PAGES_REPO"
+              exit 0
+            fi
+            git pull --rebase -q origin "$PAGES_BRANCH" || true
+            sleep $((attempt * 4))
+          done
+          echo "::error title=Site copy not pushed::built but could not push to $PAGES_REPO"
+          exit 1
+
+      - name: Job summary
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f results/INDEX.md ]; then
+            head -c 900000 results/INDEX.md >> "$GITHUB_STEP_SUMMARY"
+          fi

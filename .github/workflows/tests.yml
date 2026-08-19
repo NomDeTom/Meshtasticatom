@@ -28,3 +28,70 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+
+  sfpp:
+    name: SF++ transport
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No install step. The transport and its tests are standard library only, and the three
+      # vendored modules they import (lib.config, lib.phy, lib.radio_loss) are too. Charts are the
+      # only reason matplotlib is ever needed and CI never draws them.
+      - name: Run the transport suite
+        run: python3 -m unittest discover -s sfpp -t . -p 'test_*.py'
+
+      - name: A flat run is deterministic
+        # The permanent gate. Two runs at one seed with no scenario must be identical in every
+        # number: draws are hashed on (seed, constant, window) rather than pulled from a sequential
+        # stream, so this holds across adding and removing draws. It has proved a change inert four
+        # times in this tree's history, and it is the check that catches what nobody predicted.
+        run: |
+          set -euo pipefail
+          for i in 1 2; do
+            python3 -m sfpp.campaign --hours 2 --nodes 30 --seed 4242 --protocol sr \
+              --no-charts --out "/tmp/det$i/run.json" >/dev/null
+          done
+          python3 - <<'PY'
+          import hashlib, json, sys
+
+          def fingerprint(path):
+              report = json.load(open(path))
+              report = report[0] if isinstance(report, list) else report
+              # Neither of these is something the simulation decided: wall_seconds is how long this
+              # runner took, and `out` is where the caller asked for the file. Everything else -
+              # every option and every measurement - must match, and comparing the options is half
+              # the gate: it proves the two runs were configured identically before their numbers
+              # are compared at all.
+              report.pop("wall_seconds", None)
+              report.get("opts", {}).pop("out", None)
+              return hashlib.sha256(
+                  json.dumps(report, sort_keys=True).encode()
+              ).hexdigest()
+
+          a, b = (fingerprint(f"/tmp/det{i}/run.json") for i in (1, 2))
+          print(f"fingerprint {a[:16]}")
+          if a != b:
+              sys.exit(
+                  "two runs at seed 4242 disagree: something in the flat path depends on "
+                  "wall-clock, iteration order, or an unseeded draw"
+              )
+          PY
+
+      - name: The standing gates hold on a smoke run
+        # Runs the gates collate applies nightly against a real report, so a change that starts
+        # producing an impossible channel utilisation or a scenario with no ground is caught here
+        # rather than by the next scheduled sweep.
+        run: |
+          set -euo pipefail
+          python3 -m sfpp.sweep --block E-signed --seeds 1 --seed-base 4242 \
+            --grid "--scenario ridge" --out /tmp/smoke >/dev/null
+          python3 -m sfpp.collate --runs /tmp/smoke --out /tmp/smoke --run-id ci-smoke \
+            --scenario ridge --fail-on-gate
+          head -c 200000 /tmp/smoke/trend.md >> "$GITHUB_STEP_SUMMARY"
