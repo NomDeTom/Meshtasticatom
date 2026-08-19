@@ -3071,6 +3071,13 @@ def build_parser():
         action="store_true",
         help="skip the charts a run renders beside its JSON",
     )
+    ap.add_argument(
+        "--mesh-map",
+        action="store_true",
+        help="draw an SVG map of this run's mesh beside the JSON: positions, roles, archives, and "
+        "the links a little fading would remove. Off by default because it is one file per run and "
+        "a swept round is hundreds; needs --out",
+    )
     return ap
 
 
@@ -3081,6 +3088,21 @@ def run_once(opts, seed):
         # Here rather than in main(): sweep.py calls run_once directly and writes its own JSON, so
         # stamping the commit further out left every swept result - which is all of them - unstamped.
         report["transport"] = AC.transport_pin()
+        # The mesh map, if asked for. Here for the same reason and one more: it needs the live mesh -
+        # positions, roles, the rssi matrix - and none of that is in the report, so it cannot be drawn
+        # afterwards from saved JSON the way every other figure can.
+        if getattr(opts, "mesh_map", False) and opts.out:
+            from .meshmap import mesh_svg
+
+            path = os.path.join(
+                os.path.dirname(os.path.abspath(opts.out)),
+                "figures",
+                os.path.basename(opts.out).replace(".json", "") + f"-mesh-{seed}.svg",
+            )
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            report["mesh_map"] = mesh_svg(campaign, path)
+            report["mesh_map"]["path"] = os.path.basename(path)
+            print(f"wrote {path}")
         return report
     finally:
         campaign.close()

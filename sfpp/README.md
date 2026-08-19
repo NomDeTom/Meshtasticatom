@@ -122,7 +122,8 @@ A run leaves three things beside each other, and needs no post-processing step t
 | `figures.py`      | `-m sfpp.figures`      | the earlier rounds' block figures (reach, cadence, resolve, capacity, loss, place) |
 | `figures3.py`     | `-m sfpp.figures3`     | the campaign's set-piece figures (mesh shapes, protocol comparison, coverage gap) |
 | `experiment.py`   | `-m sfpp.experiment`   | one-off comparisons that are not worth a named block                             |
-| `diagram.py`      | `-m sfpp.diagram`      | draws a mesh's link graph, for checking a topology rather than a result          |
+| `diagram.py`      | `-m sfpp.diagram`      | draws a *synthetic* mesh's link graph, for checking a topology rather than a result |
+| `meshmap.py`      | (`--mesh-map`)         | draws the mesh a **run actually had**: positions, roles, archives, fragile links |
 | `check_oracle.py` | `-m sfpp.check_oracle` | compiles `PinSketch.cpp` and diffs it against `pinsketch.py`                      |
 | `knowledge.py`    | (library)              | per-node NodeDB state, partitions, stale beliefs                                  |
 | `analytic/`       | `-m sfpp.analytic.*`   | pre-transport closed-form and Monte-Carlo models, kept as a cross-check           |
@@ -359,6 +360,7 @@ rest of the mesh keeps believing routes through a node that has gone. Not yet ex
 | `--out`       | -       | JSON path. The report lands in `reports/` and the charts in `figures/` beside it |
 | `--label`     | -       | free text copied into the report, for telling two runs apart afterwards |
 | `--no-charts` | off     | skip chart rendering. The JSON and the text report are written either way |
+| `--mesh-map`  | off     | draw an SVG map of this run's mesh beside the JSON. **Off by default because it is one file per run** - a Batumi map is about 250 kB, and a swept round is hundreds of runs. Needs `--out` |
 
 ---
 
@@ -903,7 +905,32 @@ figure cannot be read against the wrong code.
 
 ---
 
-### 7.5 The digest, and the rolling page
+### 7.5 The mesh map - `--mesh-map`
+
+An SVG of the mesh a run actually had, written beside the JSON. Hand-written, no plotting dependency,
+so it works wherever the simulator does. `diagram.py` does not replace it and is not replaced by it:
+that one builds a synthetic topology to check what a placement does to a shape, this one draws the
+real thing, which needs four things the other has no concept of.
+
+| It shows | Because |
+| --- | --- |
+| **Role** as the mark, ordered by how much the node relays - filled square ROUTER, hollow square ROUTER_LATE, diamond CLIENT_BASE, dot CLIENT, hollow dot CLIENT_MUTE | A role is a rule about relaying, so that is what the shapes should order by. Only the roles the mesh actually has reach the legend, each with its count |
+| **An archive as a ring around the role mark**, not instead of it | An archive on a router and an archive on a muted client are different deployments. A map drawing both as one red dot cannot say which you are looking at |
+| **The `--protocol none` control as a dashed ring** | Same nodes, same places, no archive. The control has to be visible as a control |
+| **Fragile links in red**, over every other link faint | Two passes, because one is unreadable: 2000 links at equal weight is a grey rectangle, and drawing only the weak ones loses the shape. `fragile` is the same under-5 dB margin `link_quality` uses, so the map and the report agree on the word |
+| **One scale for both axes** | A corridor or a chain scaled per-axis is a picture of a different shape, and shape is the whole point |
+
+**The one deliberate lie, and the map says so on its face.** Co-located nodes are fanned out onto a
+small circle around their true position, so they can be seen and their roles read. On Batumi that is
+43 of 92 nodes (§5.1h); plotted literally it is 92 nodes drawn as 55 dots with a third of the mesh
+invisible. The footer names the count that was moved. A count badge on one dot would have been honest
+about position and useless about roles, which is most of what the map is for.
+
+`report["mesh_map"]` records what the picture claims - nodes, links drawn, fragile drawn, links
+skipped past the cap, the role histogram, stacked count and extent - so a figure can be checked
+against the run rather than trusted because it looks like a mesh.
+
+### 7.6 The digest, and the rolling page
 
 `collate.py` reduces a run to `summary.json` (the machine-readable digest) and `trend.md` (the page a
 person opens). `explorer.py` rolls every digest in the archive into one HTML page. Only the digests are
