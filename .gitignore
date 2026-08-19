@@ -48,3 +48,11 @@ nodeLanguageServer/**
 nodeLanguageServer.*/**
 dist/**
 program
+
+# SF++ simulator: derived scenario data and run output. `cache/` holds downloaded SRTM tiles,
+# rasterised clutter and mirrored geometry - all regenerable, none of it worth versioning. `runs/`
+# and `site/` are what a sweep and the explorer write locally; the scheduled jobs publish digests to
+# the sim-results branch instead.
+cache/
+runs/
+site/
