@@ -80,6 +80,7 @@ def index_by_block(runs):
                     "scenario": run.get("scenario_requested") or "flat",
                     "seed_base": run.get("seed_base"),
                     "cells": {c["value"]: c["metrics"] for c in b["cells"]},
+                    "cost": b.get("cost"),
                     "flags": b.get("flags", []),
                 }
             )
@@ -111,21 +112,31 @@ def leaderboard(blocks):
         costs = [
             s for s in (spread_of(r, COST) for r in entry["runs"]) if s is not None
         ]
-        if not spreads:
+        price = next(
+            (r["cost"] for r in reversed(entry["runs"]) if r.get("cost")), None
+        )
+        if not spreads and not price:
             continue
         rows.append(
             {
                 "block": name,
                 "arm": entry["arm"],
                 "measure": measure,
-                "spread": statistics.mean(spreads),
+                "spread": statistics.mean(spreads) if spreads else None,
                 # Whether the effect is stable run to run, or an artefact of one seed.
                 "spread_sd": statistics.stdev(spreads) if len(spreads) > 1 else None,
                 "cost": statistics.mean(costs) if costs else None,
+                # The price side, from the most recent run that priced it. A block that holds
+                # delivery flat and moves a byte counter fivefold is a result, not an absence.
+                "price": next(
+                    (r["cost"] for r in reversed(entry["runs"]) if r.get("cost")), None
+                ),
                 "runs": len(spreads),
             }
         )
-    return sorted(rows, key=lambda r: r["spread"], reverse=True)
+    return sorted(
+        rows, key=lambda r: (r["spread"] is not None, r["spread"] or 0), reverse=True
+    )
 
 
 def series(entry, key):
@@ -173,6 +184,12 @@ def _fmt(v, places=3):
     if places == 0:
         return f"{v:,.0f}"
     return f"{v:.{places}f}"
+
+
+def _price(row):
+    """Render the largest cost ratio across the arm, as `5.7x advert_bytes`, or a dash."""
+    cost = row.get("price")
+    return f"{cost['ratio']:.2g}x {cost['metric']}" if cost else "·"
 
 
 def _esc(v):
@@ -414,14 +431,14 @@ def render_html(runs, blocks, board, for_pages=False):
         "beside it means the block decides its measure by spending the mesh's own broadcast reach.</p>",
         '<div class="panel scroll"><table><thead><tr>'
         "<th>block</th><th>arm</th><th>measure</th><th>spread</th><th>run-to-run sd</th>"
-        "<th>text spread</th><th>runs</th></tr></thead><tbody>",
+        "<th>text spread</th><th>price</th><th>runs</th></tr></thead><tbody>",
     ]
     for row in board:
         out.append(
             f'<tr><td class="mono">{_esc(row["block"])}</td><td>{_esc(row["arm"])}</td>'
             f"<td><b>{_esc(row['measure'])}</b></td>"
             f"<td>{_fmt(row['spread'])}</td><td>{_fmt(row['spread_sd'])}</td>"
-            f"<td>{_fmt(row['cost'])}</td><td>{row['runs']}</td></tr>"
+            f"<td>{_fmt(row['cost'])}</td><td>{_price(row)}</td><td>{row['runs']}</td></tr>"
         )
     out.append("</tbody></table></div>")
 
@@ -538,13 +555,13 @@ def render_markdown(runs, blocks, board):
         "",
         "## What moves a delivery measure",
         "",
-        "| block | arm | measure | spread | run-to-run sd | text spread | runs |",
-        "| --- | --- | --- | --: | --: | --: | --: |",
+        "| block | arm | measure | spread | run-to-run sd | text spread | price | runs |",
+        "| --- | --- | --- | --: | --: | --: | --- | --: |",
     ]
     for row in board:
         out.append(
             f"| `{row['block']}` | {row['arm']} | **{row['measure']}** | {_fmt(row['spread'])} | "
-            f"{_fmt(row['spread_sd'])} | {_fmt(row['cost'])} | {row['runs']} |"
+            f"{_fmt(row['spread_sd'])} | {_fmt(row['cost'])} | {_price(row)} | {row['runs']} |"
         )
     out += [
         "",

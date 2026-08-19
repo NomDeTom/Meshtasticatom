@@ -97,6 +97,14 @@ SUCCESSES = ("text", "dm", "admin", "held")
 # What an arm costs, read beside whichever success it moved.
 COST = "text"
 
+# The price side of an arm. Several blocks - reconciliation strategy, signing, advert transport -
+# deliberately hold delivery flat and differ only in what they spend, and ranking those on delivery
+# alone reports them as having done nothing. `D-resolve` is the case that made this obvious: enum
+# advertises with a fifth of sketch's advert bytes and then pays two thirds more in total traffic,
+# while held moves by 0.004. Cost is read as a ratio rather than a difference because these span
+# orders of magnitude and "5.7x" is the readable figure where "11877 bytes" is not.
+COSTS = ("advert_bytes", "sr_bytes", "sr_airtime", "bytes_on_air")
+
 # How many observations a success needs before an arm may be ranked on it. Broadcast reach is
 # measured over every node of every broadcast and always clears this; DM and admin have their own
 # small denominators, and one admin probe an hour over two hours is two sessions - where a single
@@ -218,6 +226,15 @@ def cells_of(reports):
         cell["sd"] = {k: v for k, v in spread.items() if v is not None}
         cells.append(cell)
     return cells
+
+
+def _ratio(cells, key):
+    """How many times over the largest cell exceeds the smallest, or None if that cannot be read."""
+    values = [c["metrics"].get(key) for c in cells]
+    present = [v for v in values if v is not None and v > 0]
+    if len(present) < 2 or len(present) != len(values):
+        return None
+    return max(present) / min(present)
 
 
 def _effect(cells, key):
@@ -383,6 +400,7 @@ def summarise_block(reports):
         "mirror": (first.get("opts") or {}).get("mirror"),
         "effect": {},
         "moved": None,
+        "cost": None,
         "flags": [],
         "fatal": [],
     }
@@ -390,16 +408,30 @@ def summarise_block(reports):
         eff = _effect(cells, key)
         if eff:
             block["effect"][key] = {"low": eff[0], "high": eff[1], "spread": eff[2]}
+    # What the arm costs, whatever it does to delivery. Reported for every block, because a flat
+    # delivery row with a 5.7x byte ratio is a result rather than an absence of one.
+    priced = [(k, _ratio(cells, k)) for k in COSTS]
+    priced = [(k, r) for k, r in priced if r is not None and r > 1.0001]
+    if priced:
+        # Not `metric, ratio = ...`: that binds a local named `metric` for the whole function and
+        # shadows the module-level metric() this function calls a few lines above.
+        dearest = max(priced, key=lambda kv: kv[1])
+        block["cost"] = {"metric": dearest[0], "ratio": dearest[1]}
+
     # Which success this arm actually moves. Ranking every block by `held` would rate an arm that
     # halves DM success as inert - but a measure whose denominator is too small to mean anything
     # must not win either, or the leaderboard fills with two-session admin noise.
     block["thin"] = sorted(
         k for k in SUCCESSES if k in block["effect"] and not _has_denominator(cells, k)
     )
+    # A spread of zero is not a movement. Without this, a block whose cells are identical in every
+    # delivery measure still reported `moved: text, spread 0.000` - which reads as a finding about
+    # text and is the opposite of one. E-signed is that block: signing changes bytes and nothing
+    # else, and it belongs under "moved no delivery measure" with its price beside it.
     moved = [
         (k, v["spread"])
         for k, v in block["effect"].items()
-        if k in SUCCESSES and k not in block["thin"]
+        if k in SUCCESSES and k not in block["thin"] and v["spread"] > INERT_EPSILON
     ]
     if moved:
         block["moved"] = max(moved, key=lambda kv: kv[1])[0]
@@ -485,6 +517,12 @@ def _arrow(cells, key):
     return "up" if present[-1] > present[0] else "down"
 
 
+def _price(block):
+    """Render the largest cost ratio across the arm, as `5.7x advert_bytes`, or a dash."""
+    cost = block.get("cost")
+    return f"{cost['ratio']:.2g}x {cost['metric']}" if cost else "-"
+
+
 def markdown(summary):
     run_scenario = summary.get("scenario_requested") or "flat"
     gates = summary["gate"]
@@ -551,8 +589,8 @@ def markdown(summary):
         "which one this block travels in. `text` is the broadcast reach in the same cells, so an arm "
         "buying its measure while `text` falls is paying in the currency the mesh exists to spend.",
         "",
-        "| block | arm | moved | low → high | spread | text | dir | cells |",
-        "| --- | --- | --- | --- | --: | --- | :-: | --: |",
+        "| block | arm | moved | low → high | spread | text | price | dir | cells |",
+        "| --- | --- | --- | --- | --: | --- | --- | :-: | --: |",
     ]
     for b in ranked:
         eff = b["effect"][b["moved"]]
@@ -561,6 +599,7 @@ def markdown(summary):
             f"| `{b['block']}` | {b['arm']} | **{b['moved']}** | "
             f"{_fmt(eff['low'])} → {_fmt(eff['high'])} | {_fmt(eff['spread'])} | "
             f"{_fmt(cost['low']) + ' → ' + _fmt(cost['high']) if cost else '-'} | "
+            f"{_price(b)} | "
             f"{_arrow(b['cells'], b['moved'])} | {len(b['cells'])} |"
         )
     thin = sorted({m for b in summary["blocks"] for m in b.get("thin", [])})
@@ -575,10 +614,19 @@ def markdown(summary):
     if flat:
         out += [
             "",
-            f"{len(flat)} block(s) moved no delivery measure: "
-            + ", ".join(f"`{b['block']}`" for b in flat)
-            + ".",
+            "### Moved no delivery measure",
+            "",
+            "Not the same as having done nothing: several arms hold delivery flat by design and "
+            "differ in what they spend. Three ways of reconciling the same two sets had better "
+            "agree on what is held; where they differ is the price.",
+            "",
+            "| block | arm | price | cells |",
+            "| --- | --- | --- | --: |",
         ]
+        for b in flat:
+            out.append(
+                f"| `{b['block']}` | {b['arm']} | {_price(b)} | {len(b['cells'])} |"
+            )
 
     out += ["", "## Every block", ""]
     for b in summary["blocks"]:
