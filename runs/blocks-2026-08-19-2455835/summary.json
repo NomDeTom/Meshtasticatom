@@ -1,0 +1,316 @@
+{
+ "blocks": [
+  {
+   "arm": "resolve",
+   "block": "D-resolve",
+   "cells": [
+    {
+     "metrics": {
+      "admin": null,
+      "admin_sessions": null,
+      "advert_bytes": 14415,
+      "adverts": 93,
+      "airutil_max": 8.2595,
+      "airutil_p90": 5.2426,
+      "audit_disagrees": 0,
+      "bystander_pickups": 1014,
+      "bytes_on_air": 12685288,
+      "chutil_max": 37.4991,
+      "chutil_p90": 35.9887,
+      "decode_failures": 0,
+      "degree": 7.383333333333334,
+      "demand": 1.813,
+      "dm": null,
+      "dm_composed": null,
+      "dm_no_key": null,
+      "dm_no_peer": null,
+      "held": 0.8573,
+      "held_min": 0.8568,
+      "misdecodes": 0,
+      "missed_beyond_hops": 0.1274,
+      "missed_within_reach": 0.2405,
+      "moved": 398,
+      "nodes": 60,
+      "pairs_beyond_calibration": 0,
+      "queue_drops": 54,
+      "reach_ceiling": 0.8726,
+      "servers_placed": 3,
+      "servers_requested": 3,
+      "silent_losses": 0,
+      "sr_airtime": 0.033,
+      "sr_bytes": 52311,
+      "text": 0.6325,
+      "text_worst": 0.0,
+      "transmissions": 135581,
+      "union": 0.861
+     },
+     "sd": {},
+     "seeds": [
+      2455835
+     ],
+     "value": "sketch"
+    },
+    {
+     "metrics": {
+      "admin": null,
+      "admin_sessions": null,
+      "advert_bytes": 2538,
+      "adverts": 94,
+      "airutil_max": 8.5285,
+      "airutil_p90": 4.9776,
+      "audit_disagrees": 0,
+      "bystander_pickups": 1046,
+      "bytes_on_air": 12518917,
+      "chutil_max": 37.3238,
+      "chutil_p90": 35.4158,
+      "decode_failures": 0,
+      "degree": 7.383333333333334,
+      "demand": 1.799,
+      "dm": null,
+      "dm_composed": null,
+      "dm_no_key": null,
+      "dm_no_peer": null,
+      "held": 0.861,
+      "held_min": 0.8517,
+      "misdecodes": 0,
+      "missed_beyond_hops": 0.1274,
+      "missed_within_reach": 0.2375,
+      "moved": 383,
+      "nodes": 60,
+      "pairs_beyond_calibration": 0,
+      "queue_drops": 198,
+      "reach_ceiling": 0.8726,
+      "servers_placed": 3,
+      "servers_requested": 3,
+      "silent_losses": 0,
+      "sr_airtime": 0.0286,
+      "sr_bytes": 87267,
+      "text": 0.6355,
+      "text_worst": 0.0,
+      "transmissions": 136347,
+      "union": 0.8736
+     },
+     "sd": {},
+     "seeds": [
+      2455835
+     ],
+     "value": "enum"
+    },
+    {
+     "metrics": {
+      "admin": null,
+      "admin_sessions": null,
+      "advert_bytes": 14415,
+      "adverts": 93,
+      "airutil_max": 8.2595,
+      "airutil_p90": 5.2426,
+      "audit_disagrees": 0,
+      "bystander_pickups": 1014,
+      "bytes_on_air": 12685288,
+      "chutil_max": 37.4991,
+      "chutil_p90": 35.9887,
+      "decode_failures": 0,
+      "degree": 7.383333333333334,
+      "demand": 1.813,
+      "dm": null,
+      "dm_composed": null,
+      "dm_no_key": null,
+      "dm_no_peer": null,
+      "held": 0.8573,
+      "held_min": 0.8568,
+      "misdecodes": 0,
+      "missed_beyond_hops": 0.1274,
+      "missed_within_reach": 0.2405,
+      "moved": 398,
+      "nodes": 60,
+      "pairs_beyond_calibration": 0,
+      "queue_drops": 54,
+      "reach_ceiling": 0.8726,
+      "servers_placed": 3,
+      "servers_requested": 3,
+      "silent_losses": 0,
+      "sr_airtime": 0.033,
+      "sr_bytes": 52311,
+      "text": 0.6325,
+      "text_worst": 0.0,
+      "transmissions": 135581,
+      "union": 0.861
+     },
+     "sd": {},
+     "seeds": [
+      2455835
+     ],
+     "value": "hybrid"
+    }
+   ],
+   "effect": {
+    "held": {
+     "high": 0.861,
+     "low": 0.8573,
+     "spread": 0.0037000000000000366
+    },
+    "text": {
+     "high": 0.6355,
+     "low": 0.6325,
+     "spread": 0.0030000000000000027
+    }
+   },
+   "fatal": [],
+   "flags": [],
+   "grid": [
+    "--scenario",
+    "ridge"
+   ],
+   "mirror": 1,
+   "moved": "held",
+   "nodes": 60,
+   "scenario": "ridge",
+   "thin": [],
+   "transport": "a803f49",
+   "wall_seconds": 205.0
+  },
+  {
+   "arm": "signed",
+   "block": "E-signed",
+   "cells": [
+    {
+     "metrics": {
+      "admin": null,
+      "admin_sessions": null,
+      "advert_bytes": 14415,
+      "adverts": 93,
+      "airutil_max": 8.2595,
+      "airutil_p90": 5.2426,
+      "audit_disagrees": 0,
+      "bystander_pickups": 1014,
+      "bytes_on_air": 12685288,
+      "chutil_max": 37.4991,
+      "chutil_p90": 35.9887,
+      "decode_failures": 0,
+      "degree": 7.383333333333334,
+      "demand": 1.813,
+      "dm": null,
+      "dm_composed": null,
+      "dm_no_key": null,
+      "dm_no_peer": null,
+      "held": 0.8573,
+      "held_min": 0.8568,
+      "misdecodes": 0,
+      "missed_beyond_hops": 0.1274,
+      "missed_within_reach": 0.2405,
+      "moved": 398,
+      "nodes": 60,
+      "pairs_beyond_calibration": 0,
+      "queue_drops": 54,
+      "reach_ceiling": 0.8726,
+      "servers_placed": 3,
+      "servers_requested": 3,
+      "silent_losses": 0,
+      "sr_airtime": 0.033,
+      "sr_bytes": 52311,
+      "text": 0.6325,
+      "text_worst": 0.0,
+      "transmissions": 135581,
+      "union": 0.861
+     },
+     "sd": {},
+     "seeds": [
+      2455835
+     ],
+     "value": "False"
+    },
+    {
+     "metrics": {
+      "admin": null,
+      "admin_sessions": null,
+      "advert_bytes": 20553,
+      "adverts": 93,
+      "airutil_max": 8.2595,
+      "airutil_p90": 5.2426,
+      "audit_disagrees": 0,
+      "bystander_pickups": 1014,
+      "bytes_on_air": 12685288,
+      "chutil_max": 37.4991,
+      "chutil_p90": 35.9887,
+      "decode_failures": 0,
+      "degree": 7.383333333333334,
+      "demand": 1.813,
+      "dm": null,
+      "dm_composed": null,
+      "dm_no_key": null,
+      "dm_no_peer": null,
+      "held": 0.8573,
+      "held_min": 0.8568,
+      "misdecodes": 0,
+      "missed_beyond_hops": 0.1274,
+      "missed_within_reach": 0.2405,
+      "moved": 398,
+      "nodes": 60,
+      "pairs_beyond_calibration": 0,
+      "queue_drops": 54,
+      "reach_ceiling": 0.8726,
+      "servers_placed": 3,
+      "servers_requested": 3,
+      "silent_losses": 0,
+      "sr_airtime": 0.033,
+      "sr_bytes": 58449,
+      "text": 0.6325,
+      "text_worst": 0.0,
+      "transmissions": 135581,
+      "union": 0.861
+     },
+     "sd": {},
+     "seeds": [
+      2455835
+     ],
+     "value": "True"
+    }
+   ],
+   "effect": {
+    "held": {
+     "high": 0.8573,
+     "low": 0.8573,
+     "spread": 0.0
+    },
+    "text": {
+     "high": 0.6325,
+     "low": 0.6325,
+     "spread": 0.0
+    }
+   },
+   "fatal": [],
+   "flags": [],
+   "grid": [
+    "--scenario",
+    "ridge"
+   ],
+   "mirror": 1,
+   "moved": "text",
+   "nodes": 60,
+   "scenario": "ridge",
+   "thin": [],
+   "transport": "a803f49",
+   "wall_seconds": 172.1
+  }
+ ],
+ "gate": {
+  "blocks_missing": 0,
+  "blocks_run": 2,
+  "failures": [],
+  "ok": true,
+  "warnings": []
+ },
+ "generated": "2026-08-19T15:23:42+00:00",
+ "missing_blocks": [],
+ "run_id": "blocks-2026-08-19-2455835",
+ "scenario_observed": [
+  "ridge"
+ ],
+ "scenario_requested": "ridge",
+ "seed_base": "2455835",
+ "seeds": [
+  2455835
+ ],
+ "transport": "a803f49",
+ "wall_seconds": 377.1
+}
