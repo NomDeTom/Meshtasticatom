@@ -133,7 +133,14 @@ QUEUE_DROP_WARN = 0.10
 # Not measurements: `opts` restates the arm's own setting, `seed` names the draw, and `wall_seconds`
 # is how long this machine took - it differs between two identical cells and would make every block
 # look live.
-NOT_A_MEASUREMENT = ("opts", "seed", "wall_seconds")
+#
+# `value` is here for the same reason as `opts`, and it was missing: it *is* the arm's setting, and on
+# an arm whose values are numbers it is also a number, so `_inert` counted it as a measurement that
+# distinguished the cells and could never report the block inert. That silently disabled the check for
+# **40 of the 87 blocks** - every arm swept over numbers, `E-capacity` and `G-servers` and `F-loss`
+# among them - while leaving it working for the string-valued ones, which is why it went unnoticed.
+# README §8 calls this check one of the two worth keeping permanently; it was half a check.
+NOT_A_MEASUREMENT = ("opts", "seed", "wall_seconds", "value")
 
 # How far a block's runtime may drift from its own history before the digest says so. TRAPS.md #7 is
 # a terrain index that was slower than the sort it replaced, and its entry reads "the data to compare

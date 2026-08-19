@@ -1,11 +1,11 @@
-# Ten ways this simulator produced a confident wrong number
+# Eleven ways this simulator produced a confident wrong number
 
 Companion to [README.md](README.md), which is the operating manual. This is the other half: not how
 to run the thing, but how it has lied. All ten are fixed. They are written down because the
 **shapes** recur, and because someone extending this tree can assert against them rather than
 rediscover them one at a time.
 
-Every entry ends with the check that would have caught it, and where that check lives now. Eight are
+Every entry ends with the check that would have caught it, and where that check lives now. Nine are
 enforced automatically on every scheduled run; two are not, and are marked.
 
 ## The defects
@@ -141,6 +141,31 @@ predicted, and both run on every push in `.github/workflows/tests.yml`:
   `(seed, constant, window)` rather than pulled from a sequential stream, so this holds across
   adding and removing draws, and a paired before/after at one seed is a valid comparison. It has
   proved a change inert four separate times.
+
+## 11. The inert-arm check was half a check
+
+Found 2026-08-19, while confirming that the new per-run outputs had not disturbed the digest - which is
+to say, by accident, like most of the entries above.
+
+`_inert` compares every number in the reports and reports an arm whose cells are identical. `value` -
+**the arm's own setting** - was not on the excluded list beside `opts`, and on an arm swept over numbers
+`value` is itself a number. So it always distinguished the cells, and **no numeric-valued block could
+ever be reported inert: 40 of the 87.** `E-capacity`, `E-width`, `G-servers`, `F-loss`, `F-hoplimit`,
+`J-window` and thirty-four more.
+
+It kept working for string-valued arms, which is why it survived: `D-cadence` was protected and
+`E-capacity` was not, and nothing distinguishes those two in any output. README §8 calls this one of the
+two checks worth keeping permanently, and §10.4's whole point is that a flag needing an enabler
+produces well-formed identical rows - the failure this check exists to catch, unguarded for half the
+sweep.
+
+> **Assert** that an arm swept over numbers can still be reported inert, and that one with a real
+> difference still is not.
+> **Enforced**: `value` is in `NOT_A_MEASUREMENT`, with a test in each direction.
+
+The shape is one already on the list - "a request and a result recorded as one number" - with the twist
+that here the request was mistaken for the result *by the checker*. Worth asking of any comparison in
+this tree: is anything on both sides of it?
 
 ## What is still open
 
