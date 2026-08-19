@@ -128,6 +128,16 @@ A run leaves three things beside each other, and needs no post-processing step t
 | `analytic/`       | `-m sfpp.analytic.*`   | pre-transport closed-form and Monte-Carlo models, kept as a cross-check           |
 | `run-blocks.sh`   | `./run-blocks.sh`      | detached runner: `setsid`, a lock, a manifest, and a test gate                    |
 
+**Two scripts in the tree are not part of any of this, and their numbers are not about this
+transport.** Both drive the vendored `lib/discrete_event_sim.py` - upstream's own simulator, roughly
+2.1-era, which §1 notes is never called from `sfpp/`. Neither is wired into CI, and a figure from
+either describes a code path no scheduled sweep and no gate exercises:
+
+| Script                     | What it is                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `utils/time-discrete-sim.py` | a `timeit` wall-clock benchmark of the **vendored** simulator. For a timing figure about this transport, read `wall_seconds` in any report, or `seconds_per_sim_hour` in a digest |
+| `batchSim.py`              | upstream's repetitions-and-plots harness (3-30 nodes, Tk + matplotlib, interactive). Measures the same metric family `campaign.py` reports in far more depth, over the older physics |
+
 **Both `campaign.py` and `sweep.py` write their own JSON, statistics report and charts.** That is
 deliberate: an unattended or remote run has to leave a complete, readable result behind without
 anyone remembering a second command, and its stdout is not always kept. `report.py` and `analyse.py`
