@@ -11,10 +11,12 @@
 # lib.osm_clutter, lib.phy, lib.radio_loss, lib.srtm, lib.terrain) are pure standard library.
 PyYAML>=6.0
 
-# Optional. The code degrades rather than fails without either: a run without matplotlib writes its
-# JSON and its text report and skips the charts, which is what CI does; the test gate falls back to
-# unittest when pytest is absent.
-matplotlib>=3.5   # charts (autochart.py, figures3.py, diagram.py)
+# Optional, and neither is needed for a scheduled run. The charts a run draws for itself are SVG
+# written by autochart.py with no dependency at all, so CI gets them; matplotlib is only for the
+# hand-run figure tools. The test gate falls back to unittest when pytest is absent.
+matplotlib>=3.5   # the hand-run figure tools: figures.py, figures3.py, diagram.py,
+                  # knowledge.render(). The charts a run draws for itself are SVG written by
+                  # autochart.py with no dependency, so an unattended run gets them too.
 pytest>=7         # nicer test runner; unittest runs the same suite
 
 # The vendored tree's own tooling - its interactive simulator, protobuf plumbing and dataset
