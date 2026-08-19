@@ -972,6 +972,15 @@ Measured on a 72 h, 40-node, `--diurnal commuter` run: text originations run 34/
 - **`rate` is the same quantity as `by_class.reception_rate`**, partitioned by time rather than
   recomputed - so a row and the whole-run figure can be read against each other.
 
+**The chart is the form to read it in.** A run with a series renders `<name>-series.svg` beside the
+JSON - two panels sharing an x axis, because they answer different questions and the pair is the
+answer: reception rate per class, and channel utilisation with collisions over the same bins. A
+reception dip during a utilisation peak is congestion; the same dip in a quiet hour is not. **22:00 to
+06:00 is shaded**, which is what tells "the mesh got quieter" from "it was 4am". Gaps are not bridged -
+a bin with no denominator has no rate, and a line through it would be a trend through an hour with no
+measurement in it. Collisions share the percentage axis scaled to their own peak, and the legend
+carries that peak so the line cannot be read as a percentage.
+
 The load counters are sampled on a timer, not counted per event: the loss counters are per reception
 *opportunity*, so one broadcast heard by fifty nodes produces fifty of them, and incrementing a
 per-bin structure on each would put a dict write in the busiest path in the simulator to produce a
