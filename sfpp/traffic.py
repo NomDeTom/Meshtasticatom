@@ -153,15 +153,29 @@ SMALL_MESH_SPEEDUP = ((10, 0.6), (20, 0.7), (30, 0.8))
 UTILISATION_PIVOT_PERCENT = 40.0
 UTILISATION_PIVOT_NODES = 40
 
+# The node count at which the firmware starts throttling at all - Default.h, where it is the literal
+# 40 in `numOnlineNodes > 40`. Below it every profile leaves the interval alone. Exposed as a knob
+# rather than left as a constant because "should the throttle start sooner or later" is a question
+# about deployment advice, and answering it needs the pivot moved rather than described.
+CONGESTION_PIVOT = 40
+
 
 def congestion_coefficient(
-    node_count, sf, bw_hz, event_mode=False, model="sf_bw", preset="LONG_FAST"
+    node_count,
+    sf,
+    bw_hz,
+    event_mode=False,
+    model="sf_bw",
+    preset="LONG_FAST",
+    pivot=CONGESTION_PIVOT,
 ):
     """The firmware's own broadcast-interval scaling, Default.h congestionScalingCoefficient.
 
     A multiplier on every periodic broadcast interval. Three models, one per era:
 
-    - `flat` (2.4): 1.0 to 40 nodes, then 0.075 per extra node whatever the preset.
+    `pivot` is the node count below which no profile throttles at all, 40 in the firmware.
+
+    - `flat` (2.4): 1.0 to the pivot, then 0.075 per extra node whatever the preset.
     - `preset` (2.5, 2.6): a per-preset factor, no throttle at all on SHORT_FAST or SHORT_TURBO, and
       a coefficient *below* 1.0 up to 30 nodes - a small mesh is deliberately made chattier.
     - `sf_bw` (2.7, 2.8): 2^SF / (BW_kHz * divisor), which on LONG_FAST is 0.08192 per node, so a
@@ -172,7 +186,7 @@ def congestion_coefficient(
         for bound, coefficient in SMALL_MESH_SPEEDUP:
             if node_count <= bound:
                 return coefficient
-    if node_count <= 40:
+    if node_count <= pivot:
         return 1.0
     if model == "flat":
         throttling_factor = PRESET_THROTTLING_DEFAULT
@@ -185,7 +199,7 @@ def congestion_coefficient(
     else:
         divisor = 25.0 if event_mode else 100.0
         throttling_factor = (2.0**sf) / ((bw_hz / 1000.0) * divisor)
-    return 1.0 + (node_count - 40) * throttling_factor
+    return 1.0 + (node_count - pivot) * throttling_factor
 
 
 def observed_senders(mesh, window_ms=7200_000.0):
@@ -236,6 +250,7 @@ class Generator:
         diurnal="flat",
         archive_dms=False,
         start_hour=8.0,
+        congestion_pivot=CONGESTION_PIVOT,
     ):
         self.mesh = mesh
         self.rng = rng
@@ -267,6 +282,9 @@ class Generator:
         # input could buy. `utilisation` scales on measured channel busy-ness instead of a node count,
         # which is what the throttle actually cares about and cannot be bounded by memory.
         self.congestion_input = congestion_input
+        # Where the throttle starts. The firmware's 40 is a constant; moving it is the only way to
+        # ask whether a mesh should begin throttling sooner or later than it does.
+        self.congestion_pivot = congestion_pivot
         # The coefficient falls below 1 on the 2.5 and 2.6 models, which speed a small mesh up.
         # Thinning needs a candidate rate at least as high as anything later selected from it, so
         # candidates are generated against the most permissive coefficient the model can produce.
@@ -293,6 +311,7 @@ class Generator:
                 self.sf,
                 self.bw,
                 model=self.congestion_model,
+                pivot=self.congestion_pivot,
                 preset=self.preset_name,
             )
             if congestion_scaling
@@ -400,6 +419,7 @@ class Generator:
             self.bw,
             model=node.profile.congestion_model,
             preset=self.preset_name,
+            pivot=self.congestion_pivot,
             event_mode=node.profile.event_relay_hop_limit is not None,
         )
 

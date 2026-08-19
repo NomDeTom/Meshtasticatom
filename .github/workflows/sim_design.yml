@@ -1,0 +1,202 @@
+# The three-axis cross: what the archive is configured as, against what else could be spent instead,
+# on each of the meshes the round is run over. `sfpp.design` holds the grid; this runs it.
+#
+# Separate from the two sweeps because it asks a different question. `sim_sweep_blocks` moves one
+# flag at a time with the archive switched on in every cell, so it answers "what does this variable
+# do to a mesh" and cannot answer "what is the archive worth" - the archive is never off. This
+# workflow puts the archive on one axis, everything that could be deployed instead of it on another,
+# and the mesh on a third, so every difference is read against the same mesh at the same seed.
+#
+# One job per (mesh, rival) cell, which is 13 jobs for a single mesh and 65 for a full round. A cell
+# is the archive's ten configurations at each seed, run in sequence inside the job - the archive
+# configurations have to sit in one job because they are what the cell is a difference across, and a
+# cell split over runners is a cell whose control might have come from a different draw.
+name: Sim Design (cross)
+
+on:
+  schedule:
+    # Sunday 03:40 UTC. Weekly rather than nightly: a full round is 65 jobs of an hour or more, and
+    # the two nightly sweeps already have the runners between 02:10 and 06:20.
+    - cron: 40 3 * * 0
+  workflow_dispatch:
+    inputs:
+      mesh:
+        description: Which mesh's cells to run. `all` is the full round
+        type: choice
+        required: false
+        default: all
+        options: [all, batumi, batumi-x4, batumi-legacy-25, batumi-legacy-50, batumi-short-fast]
+      rivals:
+        description: Space-separated rival names. Empty means every rival the design declares
+        type: string
+        required: false
+        default: ""
+      seed_base:
+        description: Replay an earlier round by giving its seed base. Empty draws a new one
+        type: string
+        required: false
+        default: ""
+      seed_count:
+        description: Seeds per cell. Every cell in the round uses the same ones
+        type: string
+        required: false
+        default: "3"
+
+permissions: {}
+
+# One round at a time, for the same reason the sweeps take one each: two rounds would both push a
+# directory to the results branch and the second would spend its collate job resolving a conflict.
+concurrency:
+  group: sim-design
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Draw the round
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.draw.outputs.matrix }}
+      cells: ${{ steps.draw.outputs.cells }}
+      seeds: ${{ steps.draw.outputs.seeds }}
+      seed_base: ${{ steps.draw.outputs.seed_base }}
+      run_id: ${{ steps.draw.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Draw a seed base and the cell list
+        id: draw
+        shell: bash
+        # Dispatch inputs are free text and reach python through the environment only, never spliced
+        # into a shell or a python source line.
+        env:
+          IN_MESH: ${{ inputs.mesh }}
+          IN_RIVALS: ${{ inputs.rivals }}
+          IN_SEED_BASE: ${{ inputs.seed_base }}
+          IN_SEED_COUNT: ${{ inputs.seed_count }}
+        run: |
+          set -euo pipefail
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import datetime, json, os, secrets, sys
+          from sfpp.design import MESHES, RIVALS, cells
+
+          known = cells()
+          meshes = [m for m, _ in MESHES]
+          rivals = [r for r, _ in RIVALS]
+
+          asked_mesh = (os.environ.get("IN_MESH") or "all").strip() or "all"
+          if asked_mesh not in ("all", *meshes):
+              sys.exit(f"unknown mesh {asked_mesh!r}; have all, {', '.join(meshes)}")
+
+          asked_rivals = (os.environ.get("IN_RIVALS") or "").split()
+          unknown = [r for r in asked_rivals if r not in rivals]
+          if unknown:
+              sys.exit(f"unknown rival(s): {', '.join(unknown)}")
+          want_rivals = asked_rivals or rivals
+
+          chosen = [
+              name
+              for name, (mesh, _, rival, _) in known.items()
+              if asked_mesh in ("all", mesh) and rival in want_rivals
+          ]
+          if not chosen:
+              sys.exit("that mesh and rival selection is empty")
+
+          # One seed base for the whole round, so every cell in it saw the same draw and the round
+          # replays from a single number. Cells drawing their own would make the mesh axis
+          # incomparable - the point of holding the geometry is holding the draw with it.
+          seed_base = (os.environ.get("IN_SEED_BASE") or "").strip()
+          if not seed_base:
+              seed_base = str(secrets.randbelow(9_000_000) + 1_000_000)
+          if not seed_base.isdigit():
+              sys.exit(f"seed base must be a number, got {seed_base!r}")
+
+          count = (os.environ.get("IN_SEED_COUNT") or "3").strip()
+          if not count.isdigit() or not 1 <= int(count) <= 10:
+              sys.exit(f"seed count must be 1-10, got {count!r}")
+          seeds = [int(seed_base) + i for i in range(int(count))]
+
+          print(f"matrix={json.dumps(chosen)}")
+          print(f"cells={' '.join(chosen)}")
+          print(f"seeds={' '.join(str(s) for s in seeds)}")
+          print(f"seed_base={seed_base}")
+          print(f"run_id=design-{datetime.date.today().isoformat()}-{seed_base}")
+          PY
+          cat "$GITHUB_OUTPUT"
+
+  cross:
+    name: ${{ matrix.cell }}
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # A cell is ten archive configurations at each seed. On Batumi that is a couple of minutes a
+    # run; the mirrored mesh is four times the nodes and several times the airtime, and it is the
+    # one this ceiling is set for.
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      # Below the account's concurrency allowance, so a round never occupies every runner and
+      # leaves another workflow queued behind 65 simulator jobs.
+      max-parallel: 12
+      matrix:
+        cell: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      # Each job gets its own scenario cache. Every cell in a round reads the same Batumi rasters,
+      # and two jobs racing to write the same derived CSV is the kind of thing that fails once a
+      # month and is never reproducible.
+      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # PyYAML only, for the packaged scenarios - Batumi is one, so this is not optional here.
+      # Charts are the sole other dependency and a round in CI has nobody watching them, so
+      # matplotlib is left out and the runs skip them.
+      - name: Install the scenario loader
+        run: pip install --quiet "PyYAML>=6.0"
+
+      - name: ${{ matrix.cell }}
+        env:
+          CELL: ${{ matrix.cell }}
+          SEEDS: ${{ needs.plan.outputs.seeds }}
+        run: |
+          set -euo pipefail
+          # SEEDS is a space-separated list this workflow generated, not a dispatch input.
+          # shellcheck disable=SC2086
+          python3 -u -m sfpp.design --cell "$CELL" --seeds $SEEDS --out out
+
+      - uses: actions/upload-artifact@v4
+        if: always() # a cell that failed halfway still wrote the archive configurations it finished
+        with:
+          name: design-${{ matrix.cell }}
+          path: out
+          if-no-files-found: warn
+          # The raw data: every cell's full report. The results branch gets the digest only, because
+          # git keeps every blob it has ever seen and committing the raw round would add several GB
+          # a year that no later deletion reclaims. 90 days is the longest a public repository
+          # offers, and the window in which a question about one cell can still be answered from the
+          # numbers rather than by re-running the round.
+          retention-days: 90
+
+  collate:
+    name: Collate and publish
+    needs: [plan, cross]
+    if: ${{ !cancelled() }} # a round where some cells failed is still worth collating - the digest names them
+    uses: ./.github/workflows/sim_collate.yml
+    permissions:
+      contents: write
+    with:
+      run_id: ${{ needs.plan.outputs.run_id }}
+      seed_base: ${{ needs.plan.outputs.seed_base }}
+      scenario: batumi
+      expect: ${{ needs.plan.outputs.cells }}
+      artifact_pattern: design-*

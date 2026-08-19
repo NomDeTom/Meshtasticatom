@@ -989,6 +989,8 @@ class HopScaling:
 
     __slots__ = (
         "hash_seed",
+        "target_affected_nodes",
+        "max_target_nodes",
         "entries",
         "sampling_denominator",
         "filtering_denominator",
@@ -1003,8 +1005,21 @@ class HopScaling:
         "dropped_full",
     )
 
-    def __init__(self, hash_seed=0):
+    def __init__(self, hash_seed=0, target_nodes=None, max_target_nodes=None):
         self.hash_seed = hash_seed & 0xFFFF
+        # The coverage the recommendation aims at, and the ceiling the one-hop extension may not
+        # push it past. Both are literals in HopScalingModule; they are instance attributes here so
+        # a run can ask what the mesh would do if the firmware aimed at more or fewer nodes, which
+        # is a deployment question rather than a description of one. The ceiling follows the target
+        # unless it is set outright, keeping the firmware's 40:80 ratio.
+        self.target_affected_nodes = (
+            self.TARGET_AFFECTED_NODES if target_nodes is None else int(target_nodes)
+        )
+        self.max_target_nodes = (
+            self.target_affected_nodes * 2
+            if max_target_nodes is None
+            else int(max_target_nodes)
+        )
         # hash -> [hops_away, seen bitmap], in insertion order, capped at CAPACITY.
         self.entries = {}
         self.sampling_denominator = self.DENOM_MIN
@@ -1139,9 +1154,10 @@ class HopScaling:
     def _walk(self, per_hop, total):
         """The recommendation: the first hop that reaches enough nodes, plus one if it is cheap.
 
-        `enough` is 40 nodes after scaling by the filtering denominator. The extension to the next
-        hop is allowed when the nodes it would add still leave the total inside a budget that runs
-        from 40 to 80, scaled by how politely the mesh is behaving.
+        `enough` is `target_affected_nodes` after scaling by the filtering denominator - 40 in the
+        firmware. The extension to the next hop is allowed when the nodes it would add still leave
+        the total inside a budget running from that target to `max_target_nodes`, scaled by how
+        politely the mesh is behaving.
         """
         if total <= 0:
             return self.MAX_HOP
@@ -1149,14 +1165,14 @@ class HopScaling:
         cumulative = 0
         for hop in range(self.MAX_HOP + 1):
             cumulative += per_hop[hop] * self.filtering_denominator
-            if cumulative >= self.TARGET_AFFECTED_NODES:
+            if cumulative >= self.target_affected_nodes:
                 suggested = hop
                 break
         if suggested < self.MAX_HOP:
             at_next = per_hop[suggested + 1] * self.filtering_denominator
-            gap = self.MAX_TARGET_NODES - self.TARGET_AFFECTED_NODES
+            gap = self.max_target_nodes - self.target_affected_nodes
             if (cumulative + at_next) * self.POLITENESS_DENOM <= (
-                self.TARGET_AFFECTED_NODES * self.POLITENESS_DENOM
+                self.target_affected_nodes * self.POLITENESS_DENOM
                 + gap * self.polite_numer
             ):
                 suggested += 1
@@ -4967,6 +4983,7 @@ def build(
     rebroadcast_mode=REBROADCAST_ALL,
     max_num_nodes=None,
     warm_num_nodes=None,
+    hop_target_nodes=None,
     signature_policy=SIGNATURE_POLICY_COMPATIBLE,
     platform_mix="uniform",
     siting_mix="uniform",
@@ -5061,7 +5078,10 @@ def build(
         if node.profile.hop_scaling:
             # A per-node hash seed, so two nodes do not collide on the same pair of peers. The
             # firmware seeds it randomly at first boot and persists it.
-            node.hop_scaling = HopScaling(hash_seed=rng.randrange(0, 1 << 16))
+            node.hop_scaling = HopScaling(
+                hash_seed=rng.randrange(0, 1 << 16),
+                target_nodes=hop_target_nodes,
+            )
     mesh = Mesh(
         conf,
         nodes,
