@@ -1013,6 +1013,13 @@ about position and useless about roles, which is most of what the map is for.
 skipped past the cap, the role histogram, stacked count and extent - so a figure can be checked
 against the run rather than trusted because it looks like a mesh.
 
+**It needs `--out`, which means it comes from a direct `campaign` invocation and not from a sweep.**
+`sweep.py`, `matrix.py` and `design.py` write their own JSON and pass no `--out` to the run, so
+`--mesh-map` is inert inside all three. That is consistent with the weight argument above - hundreds of
+maps a round is the trap the results branch already avoids for raw JSON - but it is a limitation rather
+than a policy: getting maps out of a sweep would need the sweep to name a path per cell. The file is
+named by seed, so one `--out` directory holds one map per seed.
+
 ### 7.6 The digest, and the rolling page
 
 `collate.py` reduces a run to `summary.json` (the machine-readable digest) and `trend.md` (the page a
