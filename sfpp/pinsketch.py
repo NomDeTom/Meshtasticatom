@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Transcribed from Meshtastic firmware (GPL-3.0): src/modules/Native/PinSketch.cpp
+# See NOTICE at the repository root.
 """PinSketch over GF(2^32), ported from src/modules/Native/PinSketch.cpp.
 
 This is a transcription, not a reimplementation: it exists so the simulator's sketches are the

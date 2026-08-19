@@ -366,10 +366,13 @@ def render_html(runs, blocks, board, for_pages=False):
         # The licence follows the code that produced the page rather than the site's usual one:
         # Meshtasticator is CC BY 4.0 and parts of its radio model descend from LoRaSim, so the
         # attribution chain has to reach back to both papers.
-        "<p><b>Licence.</b> This page is output of "
-        '<a href="https://github.com/NomDeTom/Meshtasticator">Meshtasticator</a> and is shared '
-        "under the same terms: "
-        '<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. '
+        "<p><b>Licence.</b> This page is output of the simulator in "
+        '<a href="https://github.com/NomDeTom/Meshtasticator">NomDeTom/Meshtasticator</a>, which is '
+        'distributed under <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> because '
+        "parts of it are transcribed from Meshtastic firmware. A program's output is not the "
+        "program: this page describes a simulation and is free to read and quote. The simulator's "
+        'Meshtasticator half remains <a href="https://creativecommons.org/licenses/by/4.0/">CC BY '
+        "4.0</a>, attribution preserved. "
         "Part of that simulator's source is based on Spinsante, Gioacchini and Scalise, "
         "<i>A novel experimental-based tool for the design of LoRa networks</i> (MetroInd4.0&amp;IoT, "
         "2019), which stems from Bor, Roedig, Voigt and Alonso, <i>Do LoRa Low-Power Wide-Area "

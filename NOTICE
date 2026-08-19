@@ -1,0 +1,49 @@
+# Licensing and provenance
+
+This repository combines work under two licences. The combined work is distributed under the
+**GNU General Public License, version 3** (see `LICENSE`), and the attribution required by the
+Creative Commons licence below is preserved rather than replaced.
+
+## Why GPL-3.0
+
+`sfpp/` contains transcriptions of Meshtastic firmware source, which is GPL-3.0:
+
+| File | Relationship |
+| --- | --- |
+| `sfpp/pinsketch.py` | Transcription of `src/modules/Native/PinSketch.cpp`. Deliberately not a reimplementation: the simulator's sketches have to be the bytes the firmware puts on the air, and `sfpp/check_oracle.py` compiles the firmware's own source and diffs the two, case for case |
+| `sfpp/sketchindex.py` | Port of `src/modules/Native/SketchIndex.cpp` |
+| `sfpp/oracle.cpp` | Compiles the firmware's `PinSketch.cpp` directly, so the oracle is the shipping code rather than a copy of it |
+
+Other modules under `sfpp/` cite firmware files for constants and behaviour - `MeshRadio.h`'s
+`modemPresetToParams`, `RadioInterface.cpp` region-to-preset mapping, `NextHopRouter.cpp:297`,
+`AdminModule.h`'s `kOutstandingAdminRequestMs`, `Default.h`'s congestion scaling, `NodeDB.cpp`'s
+tiers. Those are descriptions of behaviour rather than copies of expression, and are cited so a
+reader can check the model against the thing it models.
+
+Meshtastic firmware: https://github.com/meshtastic/firmware
+
+## Creative Commons work in this tree
+
+Everything outside `sfpp/` - `lib/`, `presets/`, `loraMesh.py`, `batchSim.py`, `interactiveSim.py`,
+`utils/`, `tests/` - is Meshtasticator, licensed **CC BY 4.0**:
+
+> https://creativecommons.org/licenses/by/4.0/
+
+Part of that source is based on Spinsante, Gioacchini and Scalise, *A novel experimental-based tool
+for the design of LoRa networks* (MetroInd4.0&IoT, 2019), which stems from Bor, Roedig, Voigt and
+Alonso, *Do LoRa Low-Power Wide-Area Networks Scale?* (MSWiM '16) and the LoRaSim library.
+
+The terrain, land-cover clutter, capture-aware physics, fitted link model and dynamic coding-rate
+and TX-power policies are from Komzpa's Meshtasticator branch (PR #77, itself stacking powersjcb's
+PR #33), merged with `meshtastic/Meshtasticator` master at `d1f64afc0`.
+
+CC BY 4.0 carries no share-alike condition, so this material may be redistributed as part of a
+GPL-3.0 work provided attribution is preserved - which is what this file exists to do. Contributions
+to `lib/` that are not derived from the firmware remain Meshtasticator's work and are suitable for
+sending upstream under its own licence; the four `lib/` fixes that arrived with the simulator are
+kept as separate commits for exactly that reason.
+
+## What the output is
+
+A run's JSON, its text report and the explorer page are output of the program, not part of it. They
+describe a simulation and carry no measurement of any real network.

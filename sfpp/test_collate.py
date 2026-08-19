@@ -681,3 +681,35 @@ class PublishedCopy(unittest.TestCase):
             page = f.read()
         self.assertNotIn(self.tmp.name, page)
         self.assertNotIn("/home/", page)
+
+
+class LicenceOnThePage(unittest.TestCase):
+    """The page states the licence of the code that produced it, not the site's usual one."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        archive = os.path.join(self.tmp.name, "runs")
+        run = write_run(os.path.join(archive, "r1"), {"B-arm": [report()]})
+        quietly(C.main, ["--runs", run, "--run-id", "r1"])
+        out = os.path.join(self.tmp.name, "site")
+        quietly(
+            E.main,
+            ["--archive", archive, "--out", out, "--name", "p.html", "--for-pages"],
+        )
+        with open(os.path.join(out, "p.html")) as f:
+            self.page = f.read()
+
+    def test_it_names_both_licences(self):
+        # GPL-3.0 for the simulator, because parts of it are transcribed from the firmware; CC BY
+        # 4.0 for the Meshtasticator half, whose attribution has to survive either way.
+        self.assertIn("GPL-3.0", self.page)
+        self.assertIn("CC BY 4.0", self.page)
+
+    def test_it_says_output_is_not_the_program(self):
+        # A GPL program's output is not covered by the GPL, and a reader quoting a figure from this
+        # page should not have to work that out for themselves.
+        self.assertIn("output is not the", self.page)
+
+    def test_the_upstream_chain_survives(self):
+        self.assertIn("LoRaSim", self.page)

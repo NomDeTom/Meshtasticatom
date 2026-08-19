@@ -86,9 +86,16 @@ Furthermore, since the simulator has an 'oracle view' of the network, it allows 
 Unit tests can be executed by running `python3 -m unittest` from the root of the repo. Don't forget to activate your virtual env before running tests.
 
 ## License
-Part of the source code is based on the work in [1], which eventually stems from [2]. The LoRaSim library from [2] can be found [here](https://www.lancaster.ac.uk/scc/sites/lora/lorasim.html).
+This fork is distributed under the [GNU General Public License v3](LICENSE), because `sfpp/`
+contains transcriptions of Meshtastic firmware source, which is GPL-3.0. See [NOTICE](NOTICE) for
+which files those are and why.
 
-This work is licensed under a [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/). 
+Everything outside `sfpp/` is Meshtasticator, licensed under a
+[Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/),
+and that attribution is preserved rather than replaced - CC BY 4.0 carries no share-alike condition,
+so it may be redistributed as part of a GPL-3.0 work. Part of that source is based on the work in
+[1], which eventually stems from [2]. The LoRaSim library from [2] can be found
+[here](https://www.lancaster.ac.uk/scc/sites/lora/lorasim.html). 
 
 ## References
 1. [S. Spinsante, L. Gioacchini and L. Scalise, "A novel experimental-based tool for the design of LoRa networks," 2019 II Workshop on Metrology for Industry 4.0 and IoT (MetroInd4.0&IoT), 2019, pp. 317-322, doi: 10.1109/METROI4.2019.8792833.](https://ieeexplore.ieee.org/document/8792833)
