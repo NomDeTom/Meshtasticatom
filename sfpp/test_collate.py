@@ -145,6 +145,25 @@ class Inert(unittest.TestCase):
         }
         self.assertTrue(C._inert(grouped))
 
+    def test_a_numeric_arm_can_be_reported_inert(self):
+        """The blind spot that disabled this check for 40 of the 87 blocks.
+
+        `value` is the arm's own setting, and on an arm swept over numbers it is also a number - so it
+        counted as a measurement that distinguished the cells, and no numeric-valued block could ever
+        be called inert. It worked for string-valued arms, which is why nobody noticed: `D-cadence`
+        was protected and `E-capacity` was not.
+        """
+        self.assertTrue(C._inert({1: [report(value=1)], 2: [report(value=2)]}))
+
+    def test_a_numeric_arm_with_a_real_difference_is_still_not_inert(self):
+        """The other direction, or the fix above would just switch the check off."""
+        self.assertFalse(
+            C._inert({1: [report(value=1, held=0.80)], 2: [report(value=2, held=0.50)]})
+        )
+
+    def test_the_arms_own_value_is_not_evidence_that_it_did_something(self):
+        self.assertIn("value", C.NOT_A_MEASUREMENT)
+
     def test_a_single_value_is_never_inert(self):
         self.assertFalse(C._inert({"only": [report()]}))
 
@@ -299,6 +318,16 @@ class Timing(unittest.TestCase):
     def rate_of(self, summary, block="B-arm"):
         return next(b for b in summary["blocks"] if b["block"] == block)["seconds_per_sim_hour"]
 
+    def drift(self, summary):
+        """Only the timing kinds. These fixtures are two identical cells, so they are legitimately
+        inert too - and asserting on the whole warning list would make every test here fail for the
+        wrong reason the moment any other check started firing."""
+        return {
+            kind: counts
+            for kind, counts in (summary["gate"]["warnings_by_kind"] or {}).items()
+            if kind in ("slower", "faster")
+        }
+
     def test_the_rate_is_wall_clock_over_simulated_hours(self):
         summary = C.collate(self.run_at(120.0, 24))
         # Two cells, 120 s each over 24 simulated hours each: 240 / 48.
@@ -328,7 +357,7 @@ class Timing(unittest.TestCase):
         summary = C.collate(
             self.run_at(150.0, 24, name="noise"), history_dir=self.archive([5.0, 5.2, 4.9])
         )
-        self.assertEqual(summary["gate"]["warnings"], [])
+        self.assertEqual(self.drift(summary), {})
 
     def test_changing_hours_alone_does_not_read_as_a_regression(self):
         """The interaction that would have made this gate useless.
@@ -342,19 +371,19 @@ class Timing(unittest.TestCase):
         # Three times the simulated hours, three times the wall clock: the same machine, same speed.
         summary = C.collate(self.run_at(360.0, 72, name="longer"), history_dir=history)
         self.assertAlmostEqual(self.rate_of(summary), 5.0)
-        self.assertEqual(summary["gate"]["warnings"], [])
+        self.assertEqual(self.drift(summary), {})
 
     def test_a_block_new_to_the_archive_is_not_compared(self):
         summary = C.collate(
             self.run_at(9000.0, 24, name="new"), history_dir=self.archive([5.0], block="B-other")
         )
-        self.assertEqual(summary["gate"]["warnings"], [])
+        self.assertEqual(self.drift(summary), {})
 
     def test_one_prior_run_is_not_enough_history(self):
         summary = C.collate(
             self.run_at(9000.0, 24, name="thin"), history_dir=self.archive([5.0])
         )
-        self.assertEqual(summary["gate"]["warnings"], [])
+        self.assertEqual(self.drift(summary), {})
 
     def test_a_run_is_not_compared_against_itself(self):
         """A re-collate of the run in flight would otherwise find its own digest and never drift."""
@@ -378,11 +407,11 @@ class Timing(unittest.TestCase):
         )
         summary = C.collate(run, history_dir=self.archive([5.0, 5.2, 4.9]))
         self.assertIsNone(self.rate_of(summary))
-        self.assertEqual(summary["gate"]["warnings"], [])
+        self.assertEqual(self.drift(summary), {})
 
     def test_no_archive_means_no_comparison(self):
         summary = C.collate(self.run_at(9000.0, 24, name="noarchive"))
-        self.assertEqual(summary["gate"]["warnings"], [])
+        self.assertEqual(self.drift(summary), {})
 
     def test_an_unreadable_digest_does_not_stop_the_comparison(self):
         root = self.archive([5.0, 5.2, 4.9])
