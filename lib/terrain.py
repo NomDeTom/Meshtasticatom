@@ -13,6 +13,7 @@ ridges matter more than flat-earth distance alone.
 """
 
 import heapq
+import itertools
 import math
 
 
@@ -56,8 +57,14 @@ def xy_to_latlon(x, y, origin_lat, origin_lon):
 class TerrainGrid:
     """Small scattered terrain sample grid with inverse-distance interpolation."""
 
+    # Grids are compared by this token in the terrain loss cache key. Object
+    # ids can be reused after garbage collection, so a recycled address must
+    # not revive cache entries computed against an earlier grid.
+    _cache_token_counter = itertools.count(1)
+
     def __init__(self, samples):
         self.samples = samples
+        self.cache_token = next(TerrainGrid._cache_token_counter)
 
     @classmethod
     def from_rows(cls, rows):
@@ -197,7 +204,7 @@ def terrain_obstruction_loss(conf, tx_point, rx_point, freq):
         round(rx_point.y, 2),
         round(rx_point.z, 2),
         round(freq, 0),
-        id(getattr(conf, "TERRAIN_GRID", None)),
+        getattr(grid, "cache_token", id(grid)),
         conf.GEO_ORIGIN_LAT,
         conf.GEO_ORIGIN_LON,
         conf.TERRAIN_PROFILE_SAMPLES,
