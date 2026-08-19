@@ -393,6 +393,35 @@ class Timing(unittest.TestCase):
         summary = C.collate(self.run_at(1200.0, 24, name="broken"), history_dir=root)
         self.assertTrue(any("slower" in w for w in summary["gate"]["warnings"]))
 
+    def test_a_drift_flag_is_a_sentence_not_a_pair(self):
+        """The bug the page build died on, and it died in integration rather than here.
+
+        `check_timing` runs after `summarise_block` has already flattened its flags to sentences, so
+        appending a (kind, text) pair there left a tuple in a list of strings. JSON made it a list,
+        `explorer.py` put the flags in a set, and the whole rollup raised `unhashable type: 'list'`.
+        Every flag must be a plain string by the time it reaches the digest.
+        """
+        summary = C.collate(
+            self.run_at(1200.0, 24, name="strflag"), history_dir=self.archive([5.0, 5.2, 4.9])
+        )
+        for block in summary["blocks"]:
+            for flag in block["flags"]:
+                self.assertIsInstance(flag, str, flag)
+        # And it survives the JSON round trip the archive actually does.
+        for block in json.loads(json.dumps(summary))["blocks"]:
+            self.assertTrue(all(isinstance(f, str) for f in block["flags"]))
+
+    def test_a_drift_flag_is_counted_in_the_kinds(self):
+        """The other half of the same bug: the kind never reached `flag_kinds`, so the gate added to
+        catch a runtime regression was itself invisible to the page that groups by kind."""
+        summary = C.collate(
+            self.run_at(1200.0, 24, name="kindflag"), history_dir=self.archive([5.0, 5.2, 4.9])
+        )
+        self.assertIn("slower", summary["gate"]["warnings_by_kind"])
+        self.assertEqual(
+            summary["gate"]["warnings_by_kind"]["slower"], {"flags": 1, "blocks": 1}
+        )
+
     def test_the_trend_report_names_a_drifted_block(self):
         md = C.markdown(
             C.collate(self.run_at(1200.0, 24, name="md"), history_dir=self.archive([5.0, 5.2, 4.9]))
@@ -587,6 +616,130 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class Tabs(unittest.TestCase):
+    """The schedule and run-health panels, and the tab shell around them."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def archive(self, runs):
+        """{run_id: digest} on disk, the way collate leaves an archive."""
+        root = os.path.join(self.tmp.name, "arch")
+        for rid, digest in runs.items():
+            d = os.path.join(root, rid)
+            os.makedirs(d, exist_ok=True)
+            digest.setdefault("run_id", rid)
+            with open(os.path.join(d, "summary.json"), "w") as f:
+                json.dump(digest, f)
+        runs = E.load_archive(root)
+        # `_href` is stamped by main(), not by load_archive - the link base differs between the copy
+        # on the data branch and the published one. Mirrored here so render_html is exercised the way
+        # it is actually called.
+        for r in runs:
+            r["_href"] = r["_name"]
+        return runs
+
+    def digest(self, block="B-arm", **over):
+        d = {
+            "blocks": [
+                {
+                    "block": block,
+                    "arm": "arm",
+                    "cells": [],
+                    "wall_seconds": 120.0,
+                    "seconds_per_sim_hour": 5.0,
+                    "flags": [],
+                    "flag_kinds": {},
+                }
+            ],
+            "gate": {"ok": True, "blocks_run": 1, "blocks_missing": 0, "warnings": []},
+            "wall_seconds": 120.0,
+        }
+        d.update(over)
+        return d
+
+    def test_the_schedule_separates_never_run_from_not_in_the_latest_run(self):
+        """The distinction the tab exists for. A weekly cell absent from tonight's run is not
+        outstanding work; a cell that has never run once is."""
+        runs = self.archive({"r1": self.digest("A"), "r2": self.digest("B")})
+        sched = E.schedule(runs, {"surface": {"A": "ran once.", "B": "ran once.", "C": "never."}})
+        rows = {r["cell"]: r for r in sched["surfaces"][0]["rows"]}
+        self.assertEqual(rows["A"]["runs"], 1)
+        self.assertFalse(rows["A"]["in_latest"])  # ran, but not in the latest run
+        self.assertTrue(rows["B"]["in_latest"])
+        self.assertEqual(rows["C"]["runs"], 0)  # the one that is actually outstanding
+        self.assertEqual(sched["surfaces"][0]["never_run"], 1)
+        self.assertEqual(sched["surfaces"][0]["ever_run"], 2)
+
+    def test_a_cell_in_the_archive_that_nothing_declares_is_named(self):
+        """A renamed or retired cell whose results are still in the branch. Not an error - but it is
+        why an ever-run count can exceed the declared one, and silence there reads as a miscount."""
+        runs = self.archive({"r1": self.digest("retired-cell")})
+        sched = E.schedule(runs, {"surface": {"current": "declared."}})
+        self.assertEqual(sched["undeclared"], ["retired-cell"])
+
+    def test_the_declared_side_survives_having_no_producers(self):
+        """An archive read on a machine without the simulator. The honest answer is no declared side,
+        not a traceback - which is how collate.describe() already guards the same import."""
+        sched = E.schedule(self.archive({"r1": self.digest()}), {})
+        self.assertEqual(sched["surfaces"], [])
+
+    def test_every_declared_surface_is_reachable(self):
+        """The real producers, so a renamed module shows up here rather than as an empty tab."""
+        self.assertEqual(sorted(E.declared_surfaces()), ["blocks", "design", "matrix"])
+
+    def test_run_health_reports_duration_both_ways(self):
+        """A total and a rate. The total decides whether a job fits its ceiling; only the rate is
+        comparable between runs of different length."""
+        health = E.run_health(self.archive({"r1": self.digest()}))
+        self.assertEqual(health[0]["wall_seconds"], 120.0)
+        self.assertEqual(health[0]["median_rate"], 5.0)
+
+    def test_run_health_carries_the_flag_kinds_and_the_drift(self):
+        digest = self.digest()
+        digest["blocks"][0]["flag_kinds"] = {"inert": 1}
+        digest["blocks"][0]["timing"] = {
+            "seconds_per_sim_hour": 30.0,
+            "median": 5.0,
+            "ratio": 6.0,
+            "runs_compared": 3,
+        }
+        digest["gate"]["warnings_by_kind"] = {"inert": {"flags": 1, "blocks": 1}}
+        health = E.run_health(self.archive({"r1": digest}))
+        self.assertEqual(health[0]["by_kind"], {"inert": {"flags": 1, "blocks": 1}})
+        self.assertEqual(health[0]["drifted"][0]["ratio"], 6.0)
+
+    def test_the_page_has_a_panel_for_every_tab(self):
+        runs = self.archive({"r1": self.digest()})
+        html = E.render_html(runs, E.index_by_block(runs), E.leaderboard(E.index_by_block(runs)))
+        for tab in ("trend", "blocks", "schedule", "health", "runs"):
+            self.assertIn(f'data-tab="{tab}" role="tab"', html, tab)
+            self.assertIn(f'class="tab-panel" data-tab="{tab}"', html, tab)
+        self.assertEqual(html.count('<section class="tab-panel"'), html.count("</section>"))
+
+    def test_the_page_stays_readable_without_javascript(self):
+        """The panels carry `hidden` so the first paint shows one tab rather than all five, which
+        means the UA's own [hidden] rule has to be overridden for the no-JS case - otherwise the
+        page is four hidden panels and an inert nav."""
+        runs = self.archive({"r1": self.digest()})
+        html = E.render_html(runs, E.index_by_block(runs), E.leaderboard(E.index_by_block(runs)))
+        override = html.find(".tab-panel[hidden] { display: block; }")
+        gated = html.find("body.tabbed .tab-panel[hidden] { display: none; }")
+        self.assertGreater(override, 0)
+        self.assertLess(override, gated, "the gated rule must come after the override")
+        # And nothing but the script may add the class that does the hiding.
+        self.assertIn("classList.add('tabbed')", html)
+
+    def test_the_page_is_still_self_contained(self):
+        """No CDN, no fetch, no external script - it is served from a git branch and read as a file."""
+        runs = self.archive({"r1": self.digest()})
+        html = E.render_html(runs, E.index_by_block(runs), E.leaderboard(E.index_by_block(runs)))
+        self.assertNotIn("fetch(", html)
+        self.assertNotIn("<script src", html)
+        self.assertNotIn("<link rel=\"stylesheet\"", html)
+
+
 class ScenarioTruth(unittest.TestCase):
     """A landform the run asked for but no block recorded must be visible as such."""
 
@@ -628,15 +781,22 @@ class NewGates(unittest.TestCase):
     """
 
     def _flags(self, **overrides):
-        fatal, warn = C.check_cell(report(**overrides), "arm=1")
-        return fatal, warn
+        """(fatal, warn) as (kind, sentence) pairs, which is check_cell's contract."""
+        return C.check_cell(report(**overrides), "arm=1")
+
+    def kinds(self, entries):
+        return [kind for kind, _ in entries]
+
+    def sentences(self, entries):
+        return [text for _, text in entries]
 
     def test_a_node_cannot_exceed_100_percent_channel_utilisation(self):
         # A receiver charging itself for every transmitter it collided with ran this to 184%.
         fatal, _ = self._flags(
             traffic__node_channel_util_percent={"p90": 90.0, "max": 184.0}
         )
-        self.assertTrue(any("physically impossible" in f for f in fatal))
+        self.assertEqual(self.kinds(fatal), ["chutil-impossible"])
+        self.assertTrue(any("physically impossible" in f for f in self.sentences(fatal)))
 
     def test_demand_above_one_is_not_a_failure(self):
         # Aggregate demand legitimately exceeds 1.0 and says nothing about local headroom. Gating on
@@ -648,7 +808,8 @@ class NewGates(unittest.TestCase):
     def test_a_scenario_that_recorded_no_ground_is_fatal(self):
         # The Scenario with no nodes was falsy, so the run came out flat under an alpine label.
         fatal, _ = self._flags(opts={"scenario": "alpine"}, ground=None)
-        self.assertTrue(any("recorded no ground" in f for f in fatal))
+        self.assertEqual(self.kinds(fatal), ["no-ground"])
+        self.assertTrue(any("recorded no ground" in f for f in self.sentences(fatal)))
 
     def test_a_scenario_that_applied_no_terrain_warns(self):
         fatal, warn = self._flags(
@@ -656,17 +817,22 @@ class NewGates(unittest.TestCase):
             ground={"terrain_applied": False, "fixed_geometry": False},
         )
         self.assertEqual(fatal, [])
-        self.assertTrue(any("applied no terrain" in w for w in warn))
+        self.assertEqual(self.kinds(warn), ["no-terrain"])
+        self.assertTrue(any("applied no terrain" in w for w in self.sentences(warn)))
 
     def test_the_at_rest_audit_disagreeing_is_fatal(self):
         fatal, _ = self._flags(sfpp__audit_checksum_agrees_sets_differ=2)
-        self.assertTrue(any("at-rest audit" in f for f in fatal))
+        self.assertEqual(self.kinds(fatal), ["audit-disagrees"])
+        self.assertTrue(any("at-rest audit" in f for f in self.sentences(fatal)))
 
     def test_a_capped_placement_is_named(self):
         # `routers` and `beside-router` cap at the router count, so a sweep over 2-6 servers can
         # produce three real rows and two repeats of the fourth.
         _, warn = self._flags(sfpp__servers_requested=6, sfpp__servers_placed=4)
-        self.assertTrue(any("6 archives requested, 4 placed" in w for w in warn))
+        self.assertEqual(self.kinds(warn), ["placement-capped"])
+        self.assertTrue(
+            any("6 archives requested, 4 placed" in w for w in self.sentences(warn))
+        )
 
     def test_pairs_outside_the_fit_envelope_are_named(self):
         _, warn = self._flags(
@@ -677,11 +843,48 @@ class NewGates(unittest.TestCase):
                 "terrain_applied": True,
             }
         )
-        self.assertTrue(any("beyond the fit" in w for w in warn))
+        self.assertEqual(self.kinds(warn), ["beyond-envelope"])
+        self.assertTrue(any("beyond the fit" in w for w in self.sentences(warn)))
 
     def test_a_clean_cell_raises_nothing(self):
         fatal, warn = self._flags()
         self.assertEqual((fatal, warn), ([], []))
+
+    def test_every_kind_this_module_can_raise_is_in_the_vocabulary(self):
+        """A check that invents a kind is a flag the run-health page silently will not group.
+
+        Exercised through the reports that trigger each gate rather than by reading the source, so a
+        new check with an unlisted kind fails here the first time it fires.
+        """
+        triggers = [
+            {"traffic__node_channel_util_percent": {"p90": 9.0, "max": 184.0}},
+            {"opts": {"scenario": "alpine"}, "ground": None},
+            {
+                "opts": {"scenario": "alpine"},
+                "ground": {"terrain_applied": False, "fixed_geometry": False},
+            },
+            {"sfpp__silent_losses": 3},
+            {"sfpp__audit_checksum_agrees_sets_differ": 2},
+            {
+                "ground": {
+                    "link_calibration_loaded": True,
+                    "pairs_beyond_calibration": 812,
+                    "calibration_envelope_m": 23200,
+                    "terrain_applied": True,
+                }
+            },
+            {"sfpp__servers_requested": 6, "sfpp__servers_placed": 4},
+            {"traffic__transmissions": 100, "traffic__queue_drops": 40},
+            {"sfpp__misdecodes": 2},
+            {"sfpp__decode_failures": 5},
+        ]
+        raised = set()
+        for override in triggers:
+            fatal, warn = self._flags(**override)
+            raised.update(self.kinds(fatal) + self.kinds(warn))
+        self.assertEqual(sorted(raised - set(C.FLAG_KINDS)), [])
+        # And every one of those gates actually fired, or the assertion above proves nothing.
+        self.assertGreaterEqual(len(raised), 9)
 
 
 class FourSuccesses(unittest.TestCase):

@@ -149,7 +149,30 @@ The two `figures*.py` tools are the exception - they draw from blocks pinned by 
 under `--grid` carries the grid in its filename, which is the usual reason one is not found.
 
 `python3 -m sfpp.sweep --list` prints the named blocks. `python3 -m sfpp.design --list` prints the
-cells of the cross.
+cells of the cross. `python3 -m sfpp.matrix --list` prints the matrix cells and, since each carries a
+sentence, what each one covers.
+
+### 3.1 The four sweep surfaces, and what each is for
+
+Four things declare cells, they answer different questions, and a result from one does not substitute
+for a result from another. Every cell of all four carries a one-sentence description, enforced by a
+test - `sweep.DESCRIPTIONS` for the blocks, `design.describes()` and `matrix.describes()` composed
+from their coordinates. A cell without one cannot be added.
+
+| Surface | Cells | Scheduled | Asks |
+| --- | --: | --- | --- |
+| `sweep.py` blocks | 87 | nightly 02:10 UTC, one job per block | **What does one mechanism do?** One arm moves, the archive is on in every cell, against a synthetic mesh with a landform drawn for the night. Cannot say what the archive is worth, because it is never off |
+| `matrix.py` cells | 6 | weekly Sun 03:40 UTC, one job per (cell, seed) | **Does a preset ordering survive scaling, and does any deliberate placement beat chance?** Three presets x two scales over real Batumi ground, crossed against placement and count, with a no-archive baseline per seed |
+| `design.py` cells | 65 | weekly Sun 04:40 UTC, one job per (cell, seed) | **Is the archive worth it, against what else you could spend instead?** Five meshes x thirteen rivals, each crossed against the archive off and at every placement and count - so every number is a difference against the same mesh at the same seed |
+| `explorer.py` | - | nightly 06:20 UTC | Rolls every run in the archive into one page. Runs no simulation |
+
+**Durations differ and are not an oversight.** The blocks sweep runs 36 simulated hours, the matrix and
+the cross 72. Seventy-two is `campaign.py`'s own default and the minimum that shows a diurnal effect as
+an effect: `--diurnal commuter` is a 17:1 peak-to-trough curve, so a 24 h run samples it exactly once
+and cannot tell a time-of-day result from wherever `--start-hour` landed. The slower build-ups need it
+too - the hop-scaling loop needs time to converge at all (§10.4), and `held` measured while the first
+buckets are still filling is not the same number as the same mesh once reconciliation has run a few
+bucket-close cycles.
 
 **`sweep.py` and `design.py` answer different questions and neither substitutes for the other.** A
 block sweep moves one flag at a time with the archive switched on in every cell - `--protocol` is not
@@ -879,6 +902,44 @@ stretch metrics where present - each footered with the transport commit, seed an
 figure cannot be read against the wrong code.
 
 ---
+
+### 7.5 The digest, and the rolling page
+
+`collate.py` reduces a run to `summary.json` (the machine-readable digest) and `trend.md` (the page a
+person opens). `explorer.py` rolls every digest in the archive into one HTML page. Only the digests are
+read, never the block JSONs, so the archive can drop the raw runs without losing its history.
+
+Per block, beyond the metrics, the digest carries:
+
+| Field | Is |
+| --- | --- |
+| `wall_seconds` | what this block's cells actually spent. Decides whether a job fits its `timeout-minutes` |
+| `seconds_per_sim_hour` | the same, per **simulated** hour. **The only form comparable between two runs**, because the total moves whenever the seed count or `--hours` does. This is what the drift check gates on |
+| `timing` | `{seconds_per_sim_hour, median, ratio, runs_compared}` against this block's own history, when `--history` is given and the block has at least two prior runs |
+| `flags` / `fatal` | the warnings and failures, as sentences |
+| `flag_kinds` / `fatal_kinds` | the same, counted by kind from `FLAG_KINDS`. Carried from the point each check fires rather than recovered by re-reading the sentence, so rewording a warning cannot silently un-group it |
+| `explains` | what the cell covers, from whichever of the four surfaces declares it |
+
+`--history <dir of run dirs>` turns on the runtime comparison. It is **warn-only in both directions**:
+a hosted runner is shared hardware and a 30-40% swing between two identical runs is ordinary, so the
+threshold is 2x; and a block that got *faster* by that much has not been optimised - a fragmented mesh,
+an arm that stopped being read, or traffic that stopped being generated all cost less to simulate. This
+is the check TRAPS.md #7 asks for and did not have.
+
+The page has five tabs:
+
+| Tab | Shows |
+| --- | --- |
+| **Trend** | which variables move a delivery measure at all, largest first |
+| **Every block** | one panel per block, its cells across every run, with sparklines |
+| **Schedule** | every declared cell against what the archive holds. **Two readings of "still to do" and they disagree by design**: the blocks sweep touches all 87 nightly, while the weekly surfaces touch a cell once a week, so *not in the latest run* means something for the first and nothing for the others. `never` is the column that means outstanding work. Cells in the archive that nothing declares - a renamed or retired cell - are named separately |
+| **Run health** | per run: duration both ways, flags grouped by kind, blocks missing, and any block whose runtime drifted against its own history |
+| **Runs** | one row per run, with a link to its `trend.md` |
+
+The page stays a single self-contained file - no CDN, no fonts, no fetch - because it is served from a
+git branch and has to work as a local file. The tabs are progressive enhancement: with JavaScript off
+every panel stays visible and the page is one long document, which is also what printing and grepping
+it want.
 
 ## 8. Two checks that would have caught real bugs on day one
 

@@ -5,8 +5,8 @@ to run the thing, but how it has lied. All ten are fixed. They are written down 
 **shapes** recur, and because someone extending this tree can assert against them rather than
 rediscover them one at a time.
 
-Every entry ends with the check that would have caught it, and where that check lives now. Seven are
-enforced automatically on every scheduled run; three are not, and are marked.
+Every entry ends with the check that would have caught it, and where that check lives now. Eight are
+enforced automatically on every scheduled run; two are not, and are marked.
 
 ## The defects
 
@@ -69,9 +69,14 @@ that repeated the fourth, indistinguishable once only the *requested* count was 
 42-point preset, where widening rings over sparse buckets costs more than scanning all 42. 1.48 s of
 a 5.19 s build.
 
-> **Assert** nothing - a build-time budget in CI would have shown it.
-> **Not enforced.** Run duration is recorded per cell (`wall_seconds`) and the digest sums it, so
-> the data to compare against a previous run exists; nothing compares it yet.
+> **Assert** a block's runtime against its own history.
+> **Enforced**: `collate.check_timing`, when `--history` points at the archive - which the scheduled
+> runs now pass. Compared as **wall-clock seconds per simulated hour**, never as the raw `wall_seconds`
+> sum: the sum moves whenever the seed count or `--hours` moves, so gating on it would have flagged
+> every block in the archive the night the sweeps went from 2 h and 24 h to 72, and taught everyone to
+> ignore the gate before it ever caught anything. Warn-only, at 2x, in **both** directions - a block
+> that got four times faster has not been optimised, and a fragmented mesh or an arm that stopped being
+> read both cost less to simulate.
 
 **8. Tiling destroyed the clutter raster's regularity.** A reflection fixes the tile boundary, so
 adjacent tiles each contribute the same column. Duplicate coordinates break
