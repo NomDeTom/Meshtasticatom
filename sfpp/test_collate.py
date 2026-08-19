@@ -635,7 +635,7 @@ class PublishedCopy(unittest.TestCase):
 
     def test_report_links_point_at_the_archive_absolutely(self):
         # `runs/` exists on the data branch, not on the site. A relative link would 404 there.
-        base = "https://github.com/NomDeTom/Meshtasticator/blob/sim-results/runs"
+        base = "https://github.com/NomDeTom/Meshtasticatom/blob/sim-results/runs"
         out = self._build("--name", "e.html", "--link-base", base)
         with open(os.path.join(out, "e.html")) as f:
             page = f.read()

@@ -857,6 +857,11 @@ figure cannot be read against the wrong code.
 
 ## 8. Two checks that would have caught real bugs on day one
 
+The full list is [TRAPS.md](TRAPS.md) - ten defects that each produced a plausible wrong number,
+with the assertion that would have caught each and where that assertion lives now. These two are
+here because they were in the JSON all along and were read past for three rounds.
+
+
 Both of these are in the JSON and both were ignored for three rounds:
 
 - **`queue_drops` against `transmissions`.** A backoff cap was discarding about two thirds of all
