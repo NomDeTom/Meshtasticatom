@@ -100,7 +100,7 @@ A run leaves three things beside each other, and needs no post-processing step t
 ```
 /tmp/r/run.json            the full report
 /tmp/r/reports/run.txt     the per-portnum statistics, text marked and first
-/tmp/r/figures/run.png     the charts, footered with commit, seed and duration
+/tmp/r/figures/run.svg     the charts, footered with commit, seed and duration
 ```
 
 ---
