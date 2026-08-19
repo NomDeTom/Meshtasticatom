@@ -538,9 +538,7 @@ class LastByteResolution(unittest.TestCase):
         """resolveLastByte returns a status, not just a node: NONE and AMBIGUOUS differ."""
         mesh = small_mesh()
         byte = mesh.nodes[3].relay_byte
-        self.assertEqual(
-            mesh.resolve_last_byte(0, byte), (M.RESOLUTION_NONE, None)
-        )
+        self.assertEqual(mesh.resolve_last_byte(0, byte), (M.RESOLUTION_NONE, None))
         heard(mesh, 0, 3)
         self.assertEqual(mesh.resolve_last_byte(0, byte), (M.RESOLUTION_UNIQUE, 3))
         mesh.nodes[4].node_num = (mesh.nodes[4].node_num & ~0xFF) | byte
@@ -1292,7 +1290,9 @@ class HopScalingEstimator(unittest.TestCase):
             1,
             "overflow coarsens the sample rather than dropping the newest",
         )
-        self.assertGreaterEqual(module.filtering_denominator, module.sampling_denominator)
+        self.assertGreaterEqual(
+            module.filtering_denominator, module.sampling_denominator
+        )
 
     def test_recency_is_a_thirteen_hour_bitmap(self):
         module = self.module()
@@ -1407,7 +1407,12 @@ class Traceroute(unittest.TestCase):
 
     def request(self, mesh, src=0, dst=5, route=None, request_id=0, relay=None):
         packet = M.Packet(
-            11, src, M.TRACEROUTE_PORTNUM, 12, hop_limit=4, destination=dst,
+            11,
+            src,
+            M.TRACEROUTE_PORTNUM,
+            12,
+            hop_limit=4,
+            destination=dst,
             request_id=request_id,
         )
         packet.hop_start = 4
@@ -1448,9 +1453,13 @@ class Traceroute(unittest.TestCase):
     def test_nobody_else_replies(self):
         mesh = small_mesh(nodes=8)
         request = self.request(mesh, src=0, dst=5, route=[3])
-        self.assertIsNone(mesh._perhaps_traceroute_reply(3, request), "a relay is not the addressee")
+        self.assertIsNone(
+            mesh._perhaps_traceroute_reply(3, request), "a relay is not the addressee"
+        )
         already = self.request(mesh, src=0, dst=5, route=[3], request_id=99)
-        self.assertIsNone(mesh._perhaps_traceroute_reply(5, already), "a reply is not re-answered")
+        self.assertIsNone(
+            mesh._perhaps_traceroute_reply(5, already), "a reply is not re-answered"
+        )
 
     def test_a_node_in_the_route_learns_everything_beyond_it(self):
         """A->B->C->D: B learns C as the next hop for C and for D."""
@@ -1513,7 +1522,12 @@ class Traceroute(unittest.TestCase):
         self.assertEqual(mesh.stats["traceroute_uncorroborated"], 0)
 
     def test_no_series_before_2_7_learns_from_a_traceroute(self):
-        for version, learns in (("2.5", False), ("2.6", False), ("2.7", True), ("2.8", True)):
+        for version, learns in (
+            ("2.5", False),
+            ("2.6", False),
+            ("2.7", True),
+            ("2.8", True),
+        ):
             self.assertEqual(M.Profile(version).traceroute_learning, learns, version)
             self.assertEqual(
                 M.Profile(version).traceroute_corroboration, version == "2.8", version
@@ -1598,7 +1612,9 @@ class Acknowledgements(unittest.TestCase):
         direct = M.Packet(2, 3, 1, 40, hop_limit=0)
         direct.hop_start = 0
         self.assertEqual(
-            mesh.hop_limit_for_response(0, direct), 0, "a direct request is answered directly"
+            mesh.hop_limit_for_response(0, direct),
+            0,
+            "a direct request is answered directly",
         )
 
     def test_an_ack_is_priority_ack_and_two_bytes(self):
@@ -1829,9 +1845,7 @@ class ExtraRepeats(unittest.TestCase):
 
     def test_without_the_module_the_exact_neighbour_count_is_used(self):
         """An older release has no estimator, so the hot store answers instead."""
-        mesh = small_mesh(
-            nodes=20, profile=M.Profile("2.7", extra_repeats=True)
-        )
+        mesh = small_mesh(nodes=20, profile=M.Profile("2.7", extra_repeats=True))
         for node in mesh.nodes:
             node.util_ring = [0.0] * len(node.util_ring)
             node.tx_ring = [0.0] * len(node.tx_ring)
@@ -1902,7 +1916,9 @@ class PacketSigning(unittest.TestCase):
     def test_strict_drops_unsigned_traffic_outright(self):
         mesh = small_mesh(nodes=6)
         mesh.nodes[0].signature_policy = M.SIGNATURE_POLICY_STRICT
-        self.assertFalse(mesh._signature_policy_admits(0, self._packet(mesh, signed=False)))
+        self.assertFalse(
+            mesh._signature_policy_admits(0, self._packet(mesh, signed=False))
+        )
         self.assertEqual(mesh.stats["dropped_unsigned_strict"], 1)
 
     def test_a_signed_nodeinfo_bootstraps_its_own_key(self):
@@ -1918,7 +1934,9 @@ class PacketSigning(unittest.TestCase):
         mesh = small_mesh(nodes=6)
         mesh.nodes[0].signature_policy = M.SIGNATURE_POLICY_BALANCED
         plain = self._packet(mesh, signed=False)
-        self.assertTrue(mesh._signature_policy_admits(0, plain), "not a known signer yet")
+        self.assertTrue(
+            mesh._signature_policy_admits(0, plain), "not a known signer yet"
+        )
         record = heard(mesh, 0, 3)
         record.has_key = True
         self.assertTrue(mesh._signature_policy_admits(0, self._packet(mesh)))
@@ -1933,7 +1951,9 @@ class PacketSigning(unittest.TestCase):
         record = heard(mesh, 0, 3)
         record.has_key = True
         record.xeddsa_signed = True
-        self.assertFalse(mesh._signature_policy_admits(0, self._packet(mesh, signed=False)))
+        self.assertFalse(
+            mesh._signature_policy_admits(0, self._packet(mesh, signed=False))
+        )
         big = self._packet(mesh, signed=False, length=200)
         self.assertTrue(mesh._signature_policy_admits(0, big))
 
@@ -1942,7 +1962,9 @@ class PacketSigning(unittest.TestCase):
         record = heard(mesh, 0, 3)
         record.has_key = True
         record.xeddsa_signed = True
-        self.assertTrue(mesh._signature_policy_admits(0, self._packet(mesh, signed=False)))
+        self.assertTrue(
+            mesh._signature_policy_admits(0, self._packet(mesh, signed=False))
+        )
         self.assertEqual(mesh.stats["dropped_downgrade"], 0)
 
     def test_a_pki_dm_passes_every_policy_unread(self):
@@ -1968,13 +1990,17 @@ class TracerouteLegs(unittest.TestCase):
         request.route = [1, 2]
         request.route_back = None
         mesh._record_traceroute_hop(3, request)
-        self.assertEqual(request.route, [1, 2, 3], "an outbound relay extends the forward path")
+        self.assertEqual(
+            request.route, [1, 2, 3], "an outbound relay extends the forward path"
+        )
 
         reply = M.Packet(2, 5, M.TRACEROUTE_PORTNUM, 20, destination=0, request_id=1)
         reply.route = [1, 2, 3]
         reply.route_back = []
         mesh._record_traceroute_hop(4, reply)
-        self.assertEqual(reply.route, [1, 2, 3], "the forward path is what the request measured")
+        self.assertEqual(
+            reply.route, [1, 2, 3], "the forward path is what the request measured"
+        )
         self.assertEqual(reply.route_back, [4], "the way home is recorded separately")
 
     def test_both_legs_are_charged_for_airtime(self):
@@ -2002,7 +2028,9 @@ class AsymmetricGain(unittest.TestCase):
 
     @staticmethod
     def _hears(mesh, i):
-        return sum(1 for j in range(len(mesh.nodes)) if j != i and i in mesh.neighbours[j])
+        return sum(
+            1 for j in range(len(mesh.nodes)) if j != i and i in mesh.neighbours[j]
+        )
 
     def test_an_amplifier_is_heard_where_it_cannot_hear(self):
         mesh = small_mesh(nodes=30, seed=7, area=6000.0)
@@ -2034,7 +2062,8 @@ class Propagation(unittest.TestCase):
 
     def test_a_rebuild_moves_nothing_it_was_not_asked_to(self):
         """The bug this guards: _build_links redrew every pair's skew, so fitting one amplifier
-        re-randomised the whole mesh and consumed the RNG the traffic generator shares."""
+        re-randomised the whole mesh and consumed the RNG the traffic generator shares.
+        """
         mesh = small_mesh(nodes=30, seed=7, area=6000.0)
         before = [row[:] for row in mesh.rssi]
         mesh.tx_gain[0] += 15.0
@@ -2051,7 +2080,9 @@ class Propagation(unittest.TestCase):
         mesh = small_mesh(nodes=20, seed=7, area=6000.0)
         state = mesh.rng.getstate()
         mesh._build_links()
-        self.assertEqual(mesh.rng.getstate(), state, "a rebuild must not touch the RNG stream")
+        self.assertEqual(
+            mesh.rng.getstate(), state, "a rebuild must not touch the RNG stream"
+        )
 
     def test_stretch_keeps_the_arrangement_and_scales_the_distances(self):
         pts = [(0.0, 0.0), (100.0, 0.0), (0.0, 100.0)]
@@ -2080,22 +2111,33 @@ class Propagation(unittest.TestCase):
         census = mesh.stretch_census()
         self.assertGreater(census["lost_to_cliff_share"], census["marginal_now_share"])
         self.assertEqual(
-            census["links_at_stretch_1"], census["still_links"] + census["lost_to_cliff"]
+            census["links_at_stretch_1"],
+            census["still_links"] + census["lost_to_cliff"],
         )
 
     def test_the_stretch_census_denominator_does_not_move(self):
         conf = M.make_config()
         counts = set()
         for factor in (1.0, 1.5, 2.0, 3.0):
-            mesh = M.build(conf, 40, 8000.0, random.Random(5), hop_limit=3, stretch=factor)
+            mesh = M.build(
+                conf, 40, 8000.0, random.Random(5), hop_limit=3, stretch=factor
+            )
             counts.add(mesh.stretch_census()["links_at_stretch_1"])
-        self.assertEqual(len(counts), 1, "the reference link set must be stretch-invariant")
+        self.assertEqual(
+            len(counts), 1, "the reference link set must be stretch-invariant"
+        )
 
     def test_a_longer_packet_meets_a_worse_temporal_excursion(self):
         """The whole point of the temporal profile: judged on the worst excursion its airtime spans."""
         field = M.NoiseField(3, temporal=True, sigma_db=3.0, tau_ms=500.0)
-        short = [field.excursion_db(0, (0, 0), t * 71.0, t * 71.0 + 175.0) for t in range(300)]
-        long_ = [field.excursion_db(0, (0, 0), t * 71.0, t * 71.0 + 21000.0) for t in range(300)]
+        short = [
+            field.excursion_db(0, (0, 0), t * 71.0, t * 71.0 + 175.0)
+            for t in range(300)
+        ]
+        long_ = [
+            field.excursion_db(0, (0, 0), t * 71.0, t * 71.0 + 21000.0)
+            for t in range(300)
+        ]
         self.assertGreater(sum(long_) / len(long_), sum(short) / len(short) + 2.0)
 
     def test_the_noise_field_draws_no_randomness_and_repeats(self):
@@ -2108,12 +2150,19 @@ class Propagation(unittest.TestCase):
             )
 
     def test_periodic_interference_catches_long_frames_and_spares_short_ones(self):
-        field = M.NoiseField(1, periodic=True, pulse_interval_ms=10000.0, pulse_ms=200.0)
-        share = lambda span: sum(  # noqa: E731
-            field.wiped(t * 37.0, t * 37.0 + span) for t in range(2000)
-        ) / 2000.0
+        field = M.NoiseField(
+            1, periodic=True, pulse_interval_ms=10000.0, pulse_ms=200.0
+        )
+        share = (
+            lambda span: sum(  # noqa: E731
+                field.wiped(t * 37.0, t * 37.0 + span) for t in range(2000)
+            )
+            / 2000.0
+        )
         self.assertLess(share(175.0), 0.08)  # SHORT_TURBO at a full payload
-        self.assertEqual(share(11670.0), 1.0)  # LONG_MODERATE cannot dodge a 10 s period
+        self.assertEqual(
+            share(11670.0), 1.0
+        )  # LONG_MODERATE cannot dodge a 10 s period
         self.assertGreater(share(3623.0), share(351.0))  # LONG_FAST over SHORT_FAST
 
     def test_a_duct_brings_pairs_into_range_that_are_not_links(self):
@@ -2138,7 +2187,9 @@ class Propagation(unittest.TestCase):
                 if rate
                 else None
             )
-            mesh = M.build(conf, 30, 9000.0, random.Random(8), hop_limit=3, ducting=duct)
+            mesh = M.build(
+                conf, 30, 9000.0, random.Random(8), hop_limit=3, ducting=duct
+            )
             for step in range(120):
                 mesh.originate(step % 30, 1, 60, kind="text")
                 mesh.run(mesh.now + 4000.0)
@@ -2158,7 +2209,9 @@ class FirmwarePresets(unittest.TestCase):
             if name in M.FIRMWARE_PRESETS or name in M.EXTRA_PRESETS:
                 continue
             self.assertAlmostEqual(
-                p["sensitivity"], M.derived_sensitivity(p["bw"], p["sf"]), delta=0.05,
+                p["sensitivity"],
+                M.derived_sensitivity(p["bw"], p["sf"]),
+                delta=0.05,
                 msg=f"{name} does not fall out of kTB + 6 dB NF + the SF limit",
             )
 
@@ -2177,7 +2230,13 @@ class FirmwarePresets(unittest.TestCase):
 
     def test_the_overlap_window_covers_the_longest_frame_at_every_preset(self):
         """A frame still in flight past the window is dropped from the interferer scan."""
-        for name in ("SHORT_TURBO", "LONG_FAST", "LONG_MODERATE", "LONG_SLOW", "VERY_LONG_SLOW"):
+        for name in (
+            "SHORT_TURBO",
+            "LONG_FAST",
+            "LONG_MODERATE",
+            "LONG_SLOW",
+            "VERY_LONG_SLOW",
+        ):
             conf = M.make_config(preset=name)
             mesh = M.build(conf, 8, 4000.0, random.Random(1), hop_limit=3)
             longest = mesh.airtime_ms(M.MAX_PAYLOAD_BYTES)
@@ -2202,9 +2261,7 @@ class FirmwarePresets(unittest.TestCase):
         for name, at_least in (("LONG_SLOW", 20000.0), ("VERY_LONG_SLOW", 35000.0)):
             conf.MODEM_PRESET = name
             p = conf.current_preset
-            air = M.Mesh.airtime_ms(
-                type("X", (), {"conf": conf})(), 237, p["cr"]
-            )
+            air = M.Mesh.airtime_ms(type("X", (), {"conf": conf})(), 237, p["cr"])
             self.assertGreater(air, at_least, f"{name} at a full payload")
 
 
@@ -2229,7 +2286,8 @@ class ToolingContract(unittest.TestCase):
         top_level = [
             line
             for line in source.splitlines()
-            if line.startswith("import matplotlib") or line.startswith("from matplotlib")
+            if line.startswith("import matplotlib")
+            or line.startswith("from matplotlib")
         ]
         self.assertEqual(top_level, [], "matplotlib must be imported inside a function")
 
@@ -2263,7 +2321,11 @@ print(",".join(failed))
         sim = pathlib.Path(__file__).resolve().parents[1]
         env = dict(os.environ, PYTHONPATH=f"{sim}:{sim / 'meshtasticator'}")
         out = subprocess.run(
-            [sys.executable, "-c", probe], capture_output=True, text=True, env=env, cwd=sim
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=sim,
         )
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(
@@ -2280,11 +2342,16 @@ print(",".join(failed))
         tree = ast.parse(pathlib.Path(sweep.__file__).read_text())
         keys = []
         for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "BLOCKS":
+            if (
+                isinstance(node, ast.Assign)
+                and getattr(node.targets[0], "id", "") == "BLOCKS"
+            ):
                 keys = [k.value for k in node.value.keys]
         self.assertTrue(keys)
         duplicated = [k for k, n in collections.Counter(keys).items() if n > 1]
-        self.assertEqual(duplicated, [], "a duplicated block name loses one of the two blocks")
+        self.assertEqual(
+            duplicated, [], "a duplicated block name loses one of the two blocks"
+        )
         self.assertEqual(len(keys), len(sweep.BLOCKS))
 
     def test_every_sweep_block_names_a_real_flag(self):
@@ -2296,7 +2363,9 @@ print(",".join(failed))
         for action in build_parser()._actions:
             known.update(opt.lstrip("-") for opt in action.option_strings)
         unknown = sorted({arm for arm, _, _ in BLOCKS.values()} - known)
-        self.assertEqual(unknown, [], "sweep arms that no longer exist on the command line")
+        self.assertEqual(
+            unknown, [], "sweep arms that no longer exist on the command line"
+        )
 
     def test_tuning_survives_a_block_whose_arm_is_not_a_number(self):
         """The tuning pass sorted arm values with float(), which no boolean survives.
@@ -2307,10 +2376,16 @@ print(",".join(failed))
         from .tuning import _arm, _sortable
 
         self.assertEqual(
-            sorted(["False", "True", "2", "10"], key=_sortable), ["2", "10", "False", "True"]
+            sorted(["False", "True", "2", "10"], key=_sortable),
+            ["2", "10", "False", "True"],
         )
         # And the block lookup must not pull in a longer name, as the runner's did.
-        blocks = {"R-repeats": 1, "R-repeats-busy": 1, "R-signing": 1, "R-signing-cost": 1}
+        blocks = {
+            "R-repeats": 1,
+            "R-repeats-busy": 1,
+            "R-signing": 1,
+            "R-signing-cost": 1,
+        }
         self.assertEqual(_arm(blocks, "R-repeats"), ["R-repeats"])
         self.assertEqual(_arm(blocks, "R-signing"), ["R-signing"])
 
@@ -2324,12 +2399,14 @@ print(",".join(failed))
         """
         from .sweep import BLOCKS
 
-        pairs = [
-            (a, b) for a in BLOCKS for b in BLOCKS if a != b and b.startswith(a)
-        ]
-        self.assertTrue(pairs, "if no name shares a prefix, this guard has stopped guarding")
+        pairs = [(a, b) for a in BLOCKS for b in BLOCKS if a != b and b.startswith(a)]
+        self.assertTrue(
+            pairs, "if no name shares a prefix, this guard has stopped guarding"
+        )
 
-        runner = (pathlib.Path(__file__).resolve().parents[1] / "run-blocks.sh").read_text()
+        runner = (
+            pathlib.Path(__file__).resolve().parents[1] / "run-blocks.sh"
+        ).read_text()
         self.assertNotIn(
             '"$OUT_ROOT/$blk"*.json',
             runner,
@@ -2369,7 +2446,9 @@ print(",".join(failed))
                 # --profile-flag accumulates into a list, so make it comparable.
                 key = tuple(key) if isinstance(key, list) else key
                 if key in seen:
-                    identical.append(f"{name}: {value!r} and {seen[key]!r} both give {arm}={key!r}")
+                    identical.append(
+                        f"{name}: {value!r} and {seen[key]!r} both give {arm}={key!r}"
+                    )
                 seen[key] = value
         self.assertEqual(identical, [], "block cells that are the same run twice")
 
@@ -2384,8 +2463,14 @@ print(",".join(failed))
         from .sweep import BLOCKS
 
         needs = {
-            "hop-limit": ("--no-hop-spread", "hop-spread assigns per-node limits and wins"),
-            "dm-mode": ("--dm-transport", "a DM only exists once SR routes through the transport"),
+            "hop-limit": (
+                "--no-hop-spread",
+                "hop-spread assigns per-node limits and wins",
+            ),
+            "dm-mode": (
+                "--dm-transport",
+                "a DM only exists once SR routes through the transport",
+            ),
             "coding-rate-ladder": (
                 "--dm-transport",
                 "nothing is retransmitted without addressed messages",
@@ -2399,7 +2484,9 @@ print(",".join(failed))
         for name, (arm, _values, grid) in BLOCKS.items():
             enabler = needs.get(arm)
             if enabler and enabler[0] not in grid:
-                wrong.append(f"{name} sweeps --{arm} without {enabler[0]}: {enabler[1]}")
+                wrong.append(
+                    f"{name} sweeps --{arm} without {enabler[0]}: {enabler[1]}"
+                )
         self.assertEqual(wrong, [], "blocks whose arm cannot do anything as configured")
 
     def test_a_written_report_records_the_code_that_produced_it(self):
@@ -2411,10 +2498,22 @@ print(",".join(failed))
         out = os.path.join(tempfile.mkdtemp(), "run.json")
         result = subprocess.run(
             [
-                sys.executable, "-m", "sfpp.campaign",
-                "--hours", "1", "--nodes", "12", "--seed", "3", "--no-charts", "--out", out,
+                sys.executable,
+                "-m",
+                "sfpp.campaign",
+                "--hours",
+                "1",
+                "--nodes",
+                "12",
+                "--seed",
+                "3",
+                "--no-charts",
+                "--out",
+                out,
             ],
-            capture_output=True, text=True, cwd=sim,
+            capture_output=True,
+            text=True,
+            cwd=sim,
         )
         self.assertEqual(result.returncode, 0, result.stderr[-600:])
         with open(out) as handle:
@@ -2475,9 +2574,23 @@ print(",".join(failed))
         # And the other way: a flag the README names in backticks must still exist. `--runs` and
         # `--out` belong to the analysis tools rather than to campaign, so they are exempt.
         named = set(re.findall(r"`(--[a-z0-9][a-z0-9-]+)", readme))
-        ghosts = sorted(named - flags - {"--runs", "--status", "--list", "--block", "--seeds",
-                                         "--seed-base", "--grid", "--run"})
-        self.assertEqual(ghosts, [], "flags the README documents that the parser does not accept")
+        ghosts = sorted(
+            named
+            - flags
+            - {
+                "--runs",
+                "--status",
+                "--list",
+                "--block",
+                "--seeds",
+                "--seed-base",
+                "--grid",
+                "--run",
+            }
+        )
+        self.assertEqual(
+            ghosts, [], "flags the README documents that the parser does not accept"
+        )
 
     def test_the_documented_defaults_are_the_parser_defaults(self):
         """§4 quotes a default for every flag, and a wrong one sends someone down the wrong arm.
@@ -2490,12 +2603,23 @@ print(",".join(failed))
         from .campaign import build_parser
 
         readme = _manual()
-        section = readme[readme.index("## 4. Every parameter") : readme.index("## 5. Topologies")]
+        section = readme[
+            readme.index("## 4. Every parameter") : readme.index("## 5. Topologies")
+        ]
         defaults = {
-            a.option_strings[0]: a.default for a in build_parser()._actions if a.option_strings
+            a.option_strings[0]: a.default
+            for a in build_parser()._actions
+            if a.option_strings
         }
         prose = {
-            "-", "empty", "off", "on", "random", "per-class mix", "from board", "see §5",
+            "-",
+            "empty",
+            "off",
+            "on",
+            "random",
+            "per-class mix",
+            "from board",
+            "see §5",
             "region limit",
         }
         wrong = []
@@ -2513,15 +2637,30 @@ print(",".join(failed))
                 same = documented == actual
             if not same:
                 wrong.append((match.group(1), documented, actual))
-        self.assertEqual(wrong, [], "defaults the README states that the parser does not use")
+        self.assertEqual(
+            wrong, [], "defaults the README states that the parser does not use"
+        )
 
     def test_every_report_section_is_documented(self):
         """A section nobody documents is a section nobody reads, however carefully it is computed."""
         readme = _manual()
-        for section in ("mesh", "traffic", "by_class", "by_hop_limit", "hops_away",
-                        "hop_scaling", "adaptive", "baseline", "designated", "observers",
-                        "sfpp", "opts"):
-            self.assertIn(f"`{section}`", readme, f"report section {section} is undocumented")
+        for section in (
+            "mesh",
+            "traffic",
+            "by_class",
+            "by_hop_limit",
+            "hops_away",
+            "hop_scaling",
+            "adaptive",
+            "baseline",
+            "designated",
+            "observers",
+            "sfpp",
+            "opts",
+        ):
+            self.assertIn(
+                f"`{section}`", readme, f"report section {section} is undocumented"
+            )
 
     def test_the_named_profiles_are_the_ones_the_parser_takes(self):
         """The README described two profiles that had been removed, and named none of the five."""
@@ -2590,7 +2729,9 @@ class AdaptiveCongestion(unittest.TestCase):
             1.0,
             "having heard the mesh, the same node throttles",
         )
-        self.assertEqual(gen.node_congestion(1), 1.0, "and node 1 has still heard nobody")
+        self.assertEqual(
+            gen.node_congestion(1), 1.0, "and node 1 has still heard nobody"
+        )
 
     def test_the_two_hour_window_bounds_the_input(self):
         import random
@@ -2619,10 +2760,14 @@ class AdaptiveCongestion(unittest.TestCase):
 
         mesh = small_mesh(nodes=60, seed=2)
         for node in mesh.nodes:
-            node.max_num_nodes = 10  # a store far smaller than the mesh, before it fills
+            node.max_num_nodes = (
+                10  # a store far smaller than the mesh, before it fills
+            )
         for peer in range(1, 60):
             heard(mesh, 0, peer)
-        self.assertEqual(len(mesh.nodes[0].nodedb), 10, "the store trimmed as it filled")
+        self.assertEqual(
+            len(mesh.nodes[0].nodedb), 10, "the store trimmed as it filled"
+        )
         coefficients = {}
         for choice in ("hotstore", "truesize", "utilisation"):
             gen = T.Generator(
@@ -2630,7 +2775,9 @@ class AdaptiveCongestion(unittest.TestCase):
             )
             coefficients[choice] = gen.node_congestion(0)
         self.assertEqual(
-            coefficients["hotstore"], 1.0, "ten slots is under the 40-node pivot, so no throttle"
+            coefficients["hotstore"],
+            1.0,
+            "ten slots is under the 40-node pivot, so no throttle",
         )
         self.assertGreater(
             coefficients["truesize"],
@@ -2649,7 +2796,9 @@ class AdaptiveCongestion(unittest.TestCase):
         gen = T.Generator(
             mesh, random.Random(1), bytes(range(16)), congestion_input="utilisation"
         )
-        self.assertEqual(gen.node_congestion(0), 1.0, "an idle channel throttles nothing")
+        self.assertEqual(
+            gen.node_congestion(0), 1.0, "an idle channel throttles nothing"
+        )
         mesh.nodes[0].log_airtime(0.0, 0.9 * 60000.0)  # 90% busy
         self.assertGreater(gen.node_congestion(0), 1.0)
 
@@ -2721,7 +2870,9 @@ class FirmwareVersions(unittest.TestCase):
         }
         for version, (cw_min, cw_max, snr_max) in expected.items():
             profile = M.Profile(version)
-            self.assertEqual((profile.cw_min, profile.cw_max), (cw_min, cw_max), version)
+            self.assertEqual(
+                (profile.cw_min, profile.cw_max), (cw_min, cw_max), version
+            )
             self.assertEqual(profile.snr_min, -20.0, version)
             self.assertEqual(profile.snr_max, snr_max, version)
 
@@ -2752,7 +2903,12 @@ class FirmwareVersions(unittest.TestCase):
 
     def test_repeater_rebroadcasts_early_until_2_8(self):
         """shouldRebroadcastEarlyLikeRouter dropped REPEATER; up to 2.7 the test admitted it."""
-        for version, early in (("2.4", True), ("2.6", True), ("2.7", True), ("2.8", False)):
+        for version, early in (
+            ("2.4", True),
+            ("2.6", True),
+            ("2.7", True),
+            ("2.8", False),
+        ):
             mesh = small_mesh(profile=version)
             mesh.nodes[0].role = M.REPEATER
             self.assertEqual(mesh._rebroadcasts_early(0), early, version)
@@ -2839,7 +2995,9 @@ class FirmwareVersions(unittest.TestCase):
             mesh.nodes[0].role = M.ROUTER
             mesh.nodes[0].favourites = {1, 2}
             packet = M.Packet(9, 3, 1, 40, hop_limit=2)
-            packet.hop_start = 3  # one hop taken already, so the first-hop rule does not apply
+            packet.hop_start = (
+                3  # one hop taken already, so the first-hop rule does not apply
+            )
             packet.relay_node = 0x11
             self.assertEqual(
                 mesh.should_decrement_hop_limit(0, packet), not preserved, version
@@ -2922,3 +3080,42 @@ class EndToEnd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BlockDescriptions(unittest.TestCase):
+    """Every block explains what it changes, and no explanation outlives its block.
+
+    A trend table whose rows read `arm=topology` tells a reader which flag moved and not what that
+    means. These are held to the block list here because a block added without one would silently
+    publish an unexplained row, and a block renamed would leave its explanation pointing nowhere.
+    """
+
+    def test_every_block_is_explained(self):
+        from sfpp.sweep import BLOCKS, DESCRIPTIONS
+
+        self.assertEqual(sorted(set(BLOCKS) - set(DESCRIPTIONS)), [])
+
+    def test_no_explanation_outlives_its_block(self):
+        from sfpp.sweep import BLOCKS, DESCRIPTIONS
+
+        self.assertEqual(sorted(set(DESCRIPTIONS) - set(BLOCKS)), [])
+
+    def test_an_explanation_is_a_sentence(self):
+        from sfpp.sweep import DESCRIPTIONS
+
+        for name, text in DESCRIPTIONS.items():
+            self.assertTrue(text.endswith("."), f"{name}: not a sentence")
+            self.assertGreater(len(text), 30, f"{name}: too short to explain anything")
+
+    def test_sibling_blocks_do_not_share_an_explanation(self):
+        # Several pairs differ only by a grid flag - G-place against N-place, K-size against
+        # K-density, R-repeats against R-repeats-busy. Identical text would leave a reader unable to
+        # tell why both exist.
+        from sfpp.sweep import DESCRIPTIONS
+
+        seen = {}
+        for name, text in DESCRIPTIONS.items():
+            self.assertNotIn(
+                text, seen, f"{name} and {seen.get(text)} share an explanation"
+            )
+            seen[text] = name

@@ -385,6 +385,20 @@ def _has_denominator(cells, key):
     return bool(present) and min(present) >= floor
 
 
+def describe(block):
+    """Return what this block changes, in one sentence, or None if the sweep does not declare it.
+
+    Imported lazily: a digest can be collated from run JSONs alone, and a matrix run's cells are not
+    in sweep.BLOCKS at all.
+    """
+    try:
+        from .sweep import DESCRIPTIONS
+
+        return DESCRIPTIONS.get(block)
+    except ImportError:
+        return None
+
+
 def summarise_block(reports):
     first = reports[0]
     cells = cells_of(reports)
@@ -396,6 +410,7 @@ def summarise_block(reports):
         "cells": cells,
         "wall_seconds": sum(r.get("wall_seconds") or 0 for r in reports),
         "nodes": metric(first, "nodes"),
+        "explains": describe(first.get("block", "?")),
         "scenario": (first.get("opts") or {}).get("scenario"),
         "mirror": (first.get("opts") or {}).get("mirror"),
         "effect": {},
@@ -634,6 +649,10 @@ def markdown(summary):
         out += [
             f"### `{b['block']}` - {b['arm']}" + (f"  `{grid}`" if grid else ""),
             "",
+        ]
+        if b.get("explains"):
+            out += [f"*{b['explains']}*", ""]
+        out += [
             "| value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |",
             "| --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |",
         ]
