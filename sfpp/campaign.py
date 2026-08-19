@@ -549,6 +549,17 @@ class Campaign:
         # flooded and charged airtime, so any airtime share quoted against them needs their
         # receptions measured too.
         self.heard_by_class = {}
+        # Reception over time, in fixed bins of simulated time. A 72-hour run reported as one mean is
+        # still a single number: the reason the sweeps run three diurnal cycles is that the cycle is
+        # visible, and it is only visible if something samples inside it. `--reception-bin-s 0` is off
+        # and leaves the run byte-identical to one made before this existed.
+        self.bin_ms = float(getattr(opts, "reception_bin_s", 0) or 0) * 1000.0
+        # {bin index: {class: receptions}}, filled on the hot path, so it is a dict bump and an
+        # integer division per reception and nothing more.
+        self.received_bins = {}
+        # Cumulative mesh counters read at each bin boundary and differenced afterwards. Sampled on a
+        # timer rather than counted per event, so the loss attribution costs the hot path nothing.
+        self.counter_samples = []
         self.hop_stats = {}
         # Per node, how many hops each text it received had actually travelled. The firmware keeps the
         # same quantity per peer as NodeInfoLite.hops_away, so this is the simulator's view of the field
@@ -668,6 +679,14 @@ class Campaign:
         if key in seen:
             return
         seen[key] = True
+        if self.bin_ms:
+            # Binned by *reception* time, not by when the packet was originated. Over a bin far wider
+            # than the latency - an hour against seconds - the two agree for everything except the
+            # packets straddling a boundary, and tracking an origin time per packet would mean a slot
+            # on Packet and a live dict of every id in the run. The first and last bins are the ones
+            # to distrust, which is why the denominator is recorded per bin rather than assumed flat.
+            slot = self.received_bins.setdefault(int(self.mesh.now // self.bin_ms), {})
+            slot[kind] = slot.get(kind, 0) + 1
         # Split by the receiver's own hop limit, so "does turning it up help me" is answerable
         # separately from "does it help everyone else".
         limit = self.mesh.hop_limit_for(node.index)
@@ -1706,13 +1725,60 @@ class Campaign:
 
         self.mesh.at(interval_ms, tick)
 
+    def _start_counter_sampling(self):
+        """Read the cumulative counters at each bin boundary, so a per-bin figure is a difference.
+
+        On a timer rather than counted per event: the loss counters are per reception *opportunity*
+        and one broadcast heard by fifty nodes produces fifty of them, so incrementing a per-bin
+        structure on each would put a dict write in the busiest path in the simulator to produce a
+        number that is a subtraction of two totals.
+
+        The channel-utilisation distribution is sampled here too rather than at the end, because
+        `AirTime`'s ring covers sixty seconds - a single read after the last packet returns zero, and
+        the whole point of a series is that it is not read at the end.
+        """
+        if not self.bin_ms:
+            return
+
+        def sample():
+            utils = sorted(
+                node.channel_utilization_percent(self.mesh.now) for node in self.mesh.nodes
+            )
+            self.counter_samples.append(
+                {
+                    "hours": round(self.mesh.now / 3600_000.0, 3),
+                    "transmissions": self.mesh.stats["transmissions"],
+                    "receptions": self.mesh.stats["receptions"],
+                    "lost_to_collision": self.mesh.stats["lost_to_collision"],
+                    "lost_to_phy": self.mesh.stats.get("lost_to_phy", 0),
+                    "queue_drops": self.mesh.stats["queue_drops"],
+                    "airtime_ms": self.mesh.stats["airtime_ms"],
+                    # The percentage a device reports, as a distribution. p90 rather than the mean
+                    # because a mesh is busy where its busiest nodes are.
+                    "chutil_median": round(utils[len(utils) // 2], 2) if utils else 0.0,
+                    "chutil_p90": (
+                        round(utils[min(len(utils) - 1, int(0.9 * len(utils)))], 2)
+                        if utils
+                        else 0.0
+                    ),
+                    "chutil_max": round(utils[-1], 2) if utils else 0.0,
+                }
+            )
+            if self.mesh.now + self.bin_ms <= self.duration_ms:
+                self.mesh.at(self.mesh.now + self.bin_ms, sample)
+
+        # One at zero so the first bin has a floor to difference against.
+        self.mesh.at(0.0, sample)
+
     def run(self):
         started = time.time()
+        self.generator.bin_ms = self.bin_ms
         self.generator.schedule(self.duration_ms)
         self._schedule_traceroutes()
         self._schedule_admin_sessions()
         self.mesh.start_hop_scaling()
         self._start_util_sampling()
+        self._start_counter_sampling()
         if getattr(self.opts, "trace_interval_s", 0):
             self.mesh.start_adaptive_trace(
                 interval_ms=self.opts.trace_interval_s * 1000.0,
@@ -1796,6 +1862,7 @@ class Campaign:
             "admin": self._admin_report(),
             "by_class": self._class_report(),
             "by_hop_limit": self._hop_report(),
+            "series": self._series_report(),
             "hops_away": self._hops_away_report(),
             "hop_scaling": self._hop_scaling_report(),
             "adaptive": self._adaptive_report(),
@@ -2313,6 +2380,80 @@ class Campaign:
                 str(k): round(v / total, 4) for k, v in sorted(agg.items())
             },
             "mesh_mean_hops": round(sum(k * v for k, v in agg.items()) / total, 2),
+        }
+
+    def _series_report(self):
+        """Reception and load per bin of simulated time, or None if the run did not ask for it.
+
+        Why this exists: every other delivery figure in the report is a whole-run total, and a total
+        cannot tell a mesh that delivered steadily from one that delivered well for a day and then
+        stopped. The sweeps run 72 simulated hours specifically so three diurnal cycles are in the
+        data; a cycle is only readable if something samples inside it.
+
+        **Read `rate` per bin against its own `originated`, never across bins alone.** Traffic is not
+        flat - `--diurnal commuter` is 17:1 peak to trough - so a bin with few originations has a
+        noisy rate, and the quiet bins are exactly the ones where a handful of packets can read as a
+        collapse or a triumph. The denominator is in every row for that reason.
+        """
+        if not self.bin_ms:
+            return None
+        bins = sorted(set(self.received_bins) | set(self.generator.originated_bins))
+        peers = max(1, self.opts.nodes - 1)
+        rows = []
+        for index in bins:
+            originated = self.generator.originated_bins.get(index, {})
+            received = self.received_bins.get(index, {})
+            classes = {}
+            for name in sorted(set(originated) | set(received)):
+                sent = originated.get(name, 0)
+                got = received.get(name, 0)
+                classes[name] = {
+                    "originated": sent,
+                    "receptions": got,
+                    # The same definition as by_class.reception_rate, partitioned by time rather than
+                    # recomputed differently - so a series row and the whole-run figure are the same
+                    # quantity and can be read against each other.
+                    "rate": round(got / (sent * peers), 4) if sent else None,
+                }
+            rows.append(
+                {
+                    "hours": round(index * self.bin_ms / 3600_000.0, 3),
+                    # The hour of day this bin sits in, so a diurnal shape can be read without the
+                    # reader working out where --start-hour put the run.
+                    "hour_of_day": round(
+                        (self.opts.start_hour + index * self.bin_ms / 3600_000.0) % 24, 2
+                    ),
+                    "by_class": classes,
+                }
+            )
+
+        # The sampled counters, differenced into per-bin amounts. The first sample is the floor.
+        load = []
+        for previous, current in zip(self.counter_samples, self.counter_samples[1:]):
+            load.append(
+                {
+                    "hours": current["hours"],
+                    "transmissions": current["transmissions"] - previous["transmissions"],
+                    "receptions": current["receptions"] - previous["receptions"],
+                    "lost_to_collision": current["lost_to_collision"]
+                    - previous["lost_to_collision"],
+                    "lost_to_phy": current["lost_to_phy"] - previous["lost_to_phy"],
+                    "queue_drops": current["queue_drops"] - previous["queue_drops"],
+                    "airtime_s": round(
+                        (current["airtime_ms"] - previous["airtime_ms"]) / 1000.0, 1
+                    ),
+                    # Not a difference: a percentage sampled at that moment, which is what a device
+                    # would have reported. Differencing it would be meaningless.
+                    "chutil_median": current["chutil_median"],
+                    "chutil_p90": current["chutil_p90"],
+                    "chutil_max": current["chutil_max"],
+                }
+            )
+        return {
+            "bin_s": int(self.bin_ms / 1000.0),
+            "bins": len(rows),
+            "reception": rows,
+            "load": load,
         }
 
     def _hop_report(self):
@@ -3070,6 +3211,15 @@ def build_parser():
         "--no-charts",
         action="store_true",
         help="skip the charts a run renders beside its JSON",
+    )
+    ap.add_argument(
+        "--reception-bin-s",
+        type=int,
+        default=0,
+        help="bin reception and load into windows of this many simulated seconds and keep the "
+        "series, so a diurnal cycle is readable rather than averaged away. 3600 is the natural bin "
+        "for a multi-day run; 0 disables it and leaves the run identical to one made before this "
+        "existed",
     )
     ap.add_argument(
         "--mesh-map",
