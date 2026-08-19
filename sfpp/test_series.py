@@ -38,8 +38,8 @@ def fingerprint(report):
     return hashlib.sha256(json.dumps(r, sort_keys=True).encode()).hexdigest()
 
 
-def run(**flags):
-    argv = ["--hours", "3", "--nodes", "20", "--seed", "77", "--no-charts"]
+def run(hours_override=3, **flags):
+    argv = ["--hours", str(hours_override or 30), "--nodes", "20", "--seed", "77", "--no-charts"]
     for key, value in flags.items():
         argv += [f"--{key.replace('_', '-')}"] + ([] if value is True else [str(value)])
     return run_once(build_parser().parse_args(argv), 77)
@@ -166,6 +166,60 @@ class Series(unittest.TestCase):
             self.assertLessEqual(row["chutil_max"], 100.0)
             self.assertLessEqual(row["chutil_median"], row["chutil_p90"] + 1e-9)
             self.assertLessEqual(row["chutil_p90"], row["chutil_max"] + 1e-9)
+
+
+class SeriesChart(unittest.TestCase):
+    """The chart, which is the form anyone will actually read the series in."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.report = run(reception_bin_s=3600, diurnal="commuter", hours_override=None)
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def draw(self, report):
+        from . import autochart as AC
+
+        path = AC.render_series(report, self.tmp.name, "t")
+        return path, (open(path).read() if path else "")
+
+    def test_it_draws_and_is_valid_xml(self):
+        import xml.dom.minidom
+
+        path, svg = self.draw(self.report)
+        self.assertTrue(path)
+        xml.dom.minidom.parseString(svg)
+
+    def test_a_run_without_a_series_draws_nothing_rather_than_an_empty_frame(self):
+        """An axis with no line on it reads as "measured, and flat"."""
+        path, _ = self.draw(run())
+        self.assertIsNone(path)
+
+    def test_the_night_hours_are_shaded(self):
+        """Context, not decoration: it is what tells "the mesh got quieter" from "it was 4am", which
+        is the entire question a series over a multi-day run is asked."""
+        _, svg = self.draw(self.report)
+        self.assertIn('opacity="0.08"', svg)
+
+    def test_a_gap_is_not_bridged(self):
+        """A bin with no denominator has no rate. A line drawn through it would be a trend through an
+        hour with no measurement in it - the same failure explorer.py's sparkline avoids."""
+        from . import autochart as AC
+
+        panel = AC.Panel(0, "t", ["a", "b", "c"], lo=0.0, hi=1.0)
+        AC._series_line(panel, [(0, 0.5), (1, None), (2, 0.5)], AC.ACCENT)
+        self.assertEqual(len([p for p in panel.parts if "<line" in p]), 0)
+        panel2 = AC.Panel(0, "t", ["a", "b"], lo=0.0, hi=1.0)
+        AC._series_line(panel2, [(0, 0.5), (1, 0.6)], AC.ACCENT)
+        self.assertEqual(len([p for p in panel2.parts if "<line" in p]), 1)
+
+    def test_the_collision_line_says_it_is_scaled(self):
+        """It shares the utilisation panel's percentage axis, so the legend has to carry the peak or
+        it reads as a percentage - demand-as-utilisation one level down."""
+        _, svg = self.draw(self.report)
+        self.assertIn("collisions (peak", svg)
 
 
 class TypicalNodes(unittest.TestCase):

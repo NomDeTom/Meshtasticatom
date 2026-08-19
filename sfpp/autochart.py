@@ -235,6 +235,141 @@ class Panel:
             x += 16 + len(label) * 5.4
 
 
+def _series_line(panel, points, colour, width=1.6, dashed=False):
+    """A line through (x_index, value) pairs, skipping gaps rather than bridging them.
+
+    A gap is a bin with no denominator - nothing was sent, so there is no rate. Bridging it would draw
+    a straight line through an hour that has no measurement in it, which is the shape a reader would
+    take for a trend.
+    """
+    previous = None
+    for index, value in points:
+        if value is None:
+            previous = None
+            continue
+        if previous is not None:
+            dash = ' stroke-dasharray="3 2"' if dashed else ""
+            panel.parts.append(
+                f'<line x1="{panel.x(previous[0]):.1f}" y1="{panel.y(previous[1]):.1f}" '
+                f'x2="{panel.x(index):.1f}" y2="{panel.y(value):.1f}" stroke="{colour}" '
+                f'stroke-width="{width}" stroke-linecap="round"{dash}/>'
+            )
+        previous = (index, value)
+
+
+def _night_bands(panel, hours_of_day, count):
+    """Shade the small hours, so a diurnal trough is visible as night rather than as a dip.
+
+    Drawn first, under everything: this is the context a reader needs to tell "the mesh got quieter"
+    from "it was 4am", which is the whole question a time series over a 72-hour run is asked.
+    """
+    top, bottom = PAD_T, PANEL_H - PAD_B
+    for index, hour in enumerate(hours_of_day):
+        if hour is None or not (hour < 6 or hour >= 22):
+            continue
+        half = panel.band_width() / 2.0
+        panel.parts.append(
+            f'<rect x="{panel.x(index) - half:.1f}" y="{top}" '
+            f'width="{panel.band_width():.1f}" height="{bottom - top}" '
+            f'fill="{MUTED}" opacity="0.08"/>'
+        )
+
+
+def render_series(report, out_dir, label="run"):
+    """Reception and load over simulated time. Returns None when the run carried no series.
+
+    Two panels, because they answer different questions and share an x axis: what got through, and how
+    busy the channel was while it did. Reading them together is the point - a reception dip during a
+    utilisation peak is congestion, and the same dip in a quiet hour is not.
+    """
+    series = report.get("series")
+    if not series or not series.get("reception"):
+        return None
+    os.makedirs(out_dir, exist_ok=True)
+    rows = series["reception"]
+    load = series.get("load") or []
+    hours = [r["hour_of_day"] for r in rows]
+    # One label every few bins; 72 of them overlap into a grey smear.
+    step = max(1, len(rows) // 8)
+    labels = [
+        (f"{r['hour_of_day']:.0f}h" if i % step == 0 else "") for i, r in enumerate(rows)
+    ]
+
+    classes = sorted({name for r in rows for name in r["by_class"]})
+    # Text first and archived, matching every other output's ordering, then the rest.
+    classes.sort(key=lambda n: (n != "text", n))
+    palette = [ACCENT, "#2E5E7E", "#4E86A8", "#7FB0CB", "#B5D2E2"]
+
+    reception = Panel(
+        0,
+        "reception rate per bin, by class",
+        labels,
+        lo=0.0,
+        hi=1.0,
+        ylabel="received / (sent x peers)",
+    )
+    _night_bands(reception, hours, len(rows))
+    reception.frame()
+    for colour, name in zip(palette, classes):
+        _series_line(
+            reception,
+            [
+                (i, (r["by_class"].get(name) or {}).get("rate"))
+                for i, r in enumerate(rows)
+            ],
+            colour,
+        )
+    reception.legend(list(zip(classes, palette)))
+
+    panels = [reception]
+    if load:
+        util = Panel(
+            PANEL_W,
+            "channel utilisation and collisions per bin",
+            labels[: len(load)],
+            lo=0.0,
+            hi=100.0,
+            ylabel="chutil %, and collisions scaled",
+        )
+        _night_bands(util, hours[: len(load)], len(load))
+        util.frame()
+        _series_line(util, [(i, r["chutil_p90"]) for i, r in enumerate(load)], ACCENT)
+        _series_line(
+            util, [(i, r["chutil_median"]) for i, r in enumerate(load)], "#2E5E7E"
+        )
+        # Collisions on the same axis, scaled to its top, because the shape is the point and a second
+        # y axis on a 470px panel is unreadable. The legend says it is scaled rather than a percentage.
+        peak = max((r["lost_to_collision"] for r in load), default=0) or 1
+        _series_line(
+            util,
+            [(i, 100.0 * r["lost_to_collision"] / peak) for i, r in enumerate(load)],
+            MUTED,
+            width=1.2,
+            dashed=True,
+        )
+        util.legend(
+            [
+                ("chutil p90 %", ACCENT),
+                ("chutil median %", "#2E5E7E"),
+                (f"collisions (peak {peak:,})", MUTED),
+            ]
+        )
+        panels.append(util)
+
+    hours_total = rows[-1]["hours"] if rows else 0
+    doc = _document(
+        panels,
+        f"{label}: reception over {hours_total:.0f} simulated hours, "
+        f"{series['bin_s'] // 60} min bins - shaded 22:00-06:00",
+        f"{transport_pin()} - seed {report.get('seed')} - "
+        f"{report.get('opts', {}).get('nodes')} nodes",
+    )
+    path = os.path.join(out_dir, f"{label}-series.svg")
+    with open(path, "w") as f:
+        f.write(doc)
+    return path
+
+
 def _document(panels, suptitle, footer):
     """Lay the panels side by side and wrap them in one SVG."""
     width = PANEL_W * len(panels)
@@ -387,7 +522,11 @@ def auto(reports, out_json, kind="run"):
         name = os.path.basename(out_json or "run").replace(".json", "")
         if kind == "block" and len(reports) > 1:
             return render_block(reports, figs, name)
-        return render_run(reports[0], figs, name)
+        written = render_run(reports[0], figs, name)
+        # The series chart is an extra beside the run's own, not a replacement: it only exists when
+        # the run was asked to sample, and a run without it must render exactly as before.
+        extra = render_series(reports[0], figs, name)
+        return f"{written}, {extra}" if extra else written
     except Exception as exc:
         print(f"  (chart skipped: {type(exc).__name__}: {exc})")
         return None
