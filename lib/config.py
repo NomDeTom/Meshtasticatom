@@ -427,6 +427,26 @@ class Config:
                 "cr": 8,
                 "sensitivity": -140.0,
                 "cad_threshold": -143.0
+            },
+            # MeshCore's default radio settings, not a Meshtastic firmware preset.
+            # No Meshtastic preset pairs SF8 with 62.5 kHz, so modelling a MeshCore
+            # community network needs these spelled out. Sensitivity is the SF8
+            # demodulator limit (-10 dB SNR) against the 62.5 kHz thermal floor at
+            # NF 6 dB (-120.04 dBm); the CR4/8 variant adds the coding gain that
+            # the extra redundancy buys on a marginal link.
+            "MESHCORE_CR45": {
+                "bw": 62.5e3,
+                "cr": 5,
+                "sf": 8,
+                "sensitivity": -130.0,
+                "cad_threshold": -133.0
+            },
+            "MESHCORE_CR48": {
+                "bw": 62.5e3,
+                "cr": 8,
+                "sf": 8,
+                "sensitivity": -132.0,
+                "cad_threshold": -135.0
             }
         }
 

@@ -149,7 +149,7 @@ To simulate different parameters, you will have to change the *batchSim.py* scri
 ## Custom configurations
 Here we list some of the configurations, which you can change to model your scenario in */lib/config.py*. These apply to all nodes, except those that you configure per node when using the plot.
 ### Modem
-The LoRa modem ([see Meshtastic radio settings](https://meshtastic.org/docs/overview/radio-settings#predefined-channels)) that is used, as defined below:
+The LoRa modem ([see Meshtastic radio settings](https://meshtastic.org/docs/overview/radio-settings#predefined-channels)) that is used, as defined below. Select one with `--modem-preset`. The two `Meshcore` entries are not Meshtastic firmware presets; they are MeshCore's SF8/62.5 kHz settings, provided so MeshCore community networks can be modelled:
 | Modem | Name | Bandwidth (kHz) | Base coding rate | Spreading Factor | Nominal data rate (kbps) |
 |--|--|--:|--:|--:|--:|
 | 0 | Short Turbo | 500 | 4/5 | 7 | 21.9 |
@@ -162,6 +162,8 @@ The LoRa modem ([see Meshtastic radio settings](https://meshtastic.org/docs/over
 | 7 | Long Moderate | 125 | 4/8 | 11 | 0.336 |
 | 8 | Long Slow | 125 | 4/8 | 12 | 0.183 |
 | 9 | Very Long Slow | 62.5 | 4/8 | 12 | 0.0916 |
+| 10 | Meshcore Cr45 | 62.5 | 4/5 | 8 | 1.56 |
+| 11 | Meshcore Cr48 | 62.5 | 4/8 | 8 | 0.977 |
 
 The simulator stores coding rates as their LoRa denominators (`5` through
 `8`, meaning CR 4/5 through 4/8). This table shows the configured base CR; when

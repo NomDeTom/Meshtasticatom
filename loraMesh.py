@@ -424,6 +424,11 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         help="List Meshtastic modem presets and exit",
     )
     parser.add_argument(
+        "--modem-preset",
+        choices=sorted(conf.MODEM_PRESETS.keys()),
+        help="LoRa modem preset to simulate (default: %s)" % conf.MODEM_PRESET,
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="enable verbose/debug output"
     )
 
@@ -435,6 +440,15 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         print_modem_preset_list(conf)
     if parsed_arguments.list_presets or parsed_arguments.list_modem_presets:
         raise SystemExit(0)
+
+    if parsed_arguments.modem_preset is not None:
+        conf.MODEM_PRESET = parsed_arguments.modem_preset
+        # FREQ is derived from the preset bandwidth at Config construction, so
+        # it has to be recomputed when the preset changes.
+        conf.FREQ = (
+            conf.REGION["freq_start"]
+            + conf.MODEM_PRESETS[conf.MODEM_PRESET]["bw"] * conf.CHANNEL_NUM
+        )
 
     cli_defaults = get_cli_defaults(conf)
     simtime = cli_defaults["SIMTIME"]
