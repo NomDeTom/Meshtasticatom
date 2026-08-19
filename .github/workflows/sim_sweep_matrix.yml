@@ -7,8 +7,17 @@
 # preset ordering survives scaling, and whether any deliberate placement beats picking nodes at
 # random.
 #
-# One job per (preset, scale). Runs are independent processes with no shared state, so this
+# One job per (preset, scale, seed). Runs are independent processes with no shared state, so this
 # parallelises perfectly; the only shared thing is the scenario cache, and each job gets its own.
+#
+# The seed used to be inside the job rather than on the matrix, and the runs were two simulated hours
+# each. Both changed together, because neither works without the other: 2 h samples two hours of a
+# 24-hour diurnal curve, so the cells were measuring one arbitrary stretch of one evening (see
+# matrix.BASE), but at 72 h a whole cell of fifty runs in one sequential job comes to about five hours
+# unmirrored and twenty mirrored - past this job's ceiling, and the mirrored figure past the
+# platform's own 360-minute limit, which no `timeout-minutes` can raise. Sharding by seed cuts the job
+# to ten runs and makes the duration affordable. It is also why matrix.py needed a `--tag`: fifty runs
+# in one file needed no filename discipline, and five shards of ten do.
 name: Sim Sweep (matrix)
 
 on:
@@ -53,6 +62,7 @@ jobs:
         id: draw
         env:
           IN_CELLS: ${{ inputs.cells }}
+          IN_SEEDS: ${{ inputs.seeds }}
         run: |
           set -euo pipefail
           python3 - >> "$GITHUB_OUTPUT" <<'PY'
@@ -65,30 +75,54 @@ jobs:
           if unknown:
               sys.exit(f"unknown cell(s): {', '.join(unknown)}")
           chosen = asked or sorted(known)
-          print(f"matrix={json.dumps(chosen)}")
-          print(f"cells={' '.join(chosen)}")
+
           # Seeds are fixed here rather than drawn. The matrix is a paired comparison across
           # presets and placements, and pairing is what makes it readable at five seeds instead of
           # fifty; a fresh draw each week would compare this week's mesh with last week's.
+          seeds = (os.environ.get("IN_SEEDS") or "").split() or ["7", "11", "13", "17", "23"]
+          bad = [s for s in seeds if not s.lstrip("-").isdigit()]
+          if bad:
+              sys.exit(f"seeds must be numbers, got {', '.join(repr(b) for b in bad)}")
+
+          # One entry per (cell, seed) - the archive configurations stay inside the job, because they
+          # are what a cell is a comparison *across* and splitting them would draw the baseline
+          # control from a different job than the arms it is subtracted from. Seeds are safe to split
+          # because each is an independent draw already. Same reasoning, same shape, as sim_design.
+          jobs = [{"cell": c, "seed": int(s)} for c in chosen for s in seeds]
+          if len(jobs) > 256:
+              sys.exit(f"{len(jobs)} jobs exceeds the 256 a matrix may hold; run fewer cells or "
+                       f"seeds at a time")
+
+          print(f"matrix={json.dumps(jobs)}")
+          # Cell names alone, never the shards: this is what the digest is checked against, and all
+          # five shards of a cell carry the same `block` and collate as one.
+          print(f"cells={' '.join(chosen)}")
           print(f"run_id=matrix-{datetime.date.today().isoformat()}")
           PY
 
   matrix:
-    name: ${{ matrix.cell }}
+    name: ${{ matrix.cell }} @${{ matrix.seed }}
     needs: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    timeout-minutes: 300
+    # Ten archive configurations at one seed, at 72 simulated hours each. Extrapolating from the
+    # 24-hour figures in sim_design's header - 128 s unmirrored, 511 s mirrored, of which the link
+    # build is paid once per run either way - that is roughly an hour for an x1 cell's shard and four
+    # for an x4's. 330 leaves a runner half this speed inside the limit while staying clear of the
+    # platform's own 360-minute hard ceiling. If a real round comes back tighter than that, the next
+    # axis to shard on is the archive configuration, not the seed.
+    timeout-minutes: 330
     strategy:
       fail-fast: false
       max-parallel: 6
       matrix:
-        cell: ${{ fromJSON(needs.plan.outputs.matrix) }}
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       # `--mirror` writes a mirrored clutter CSV into the cache. Two jobs racing to write the same
-      # one is worth avoiding, and a per-job cache costs nothing but a rebuild.
-      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}
+      # one is worth avoiding, and a per-job cache costs nothing but a rebuild - and with the cells
+      # sharded by seed there are now five jobs per cell, so the key has to carry the seed too.
+      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}-${{ matrix.seed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -103,19 +137,21 @@ jobs:
       - name: Install the scenario loader
         run: pip install --quiet "PyYAML>=6.0"
 
-      - name: ${{ matrix.cell }}
+      - name: ${{ matrix.cell }} at seed ${{ matrix.seed }}
         env:
           CELL: ${{ matrix.cell }}
-          SEEDS: ${{ inputs.seeds || '7 11 13 17 23' }}
+          SEED: ${{ matrix.seed }}
         run: |
           set -euo pipefail
-          # shellcheck disable=SC2086  # seeds are a deliberate word list
-          python3 -u -m sfpp.matrix --cell "$CELL" --seeds $SEEDS --out out
+          # --tag names the file apart from the cell's other seeds. The reports keep the cell's name,
+          # so the digest reads the shards as one block. Without it every shard writes {cell}.json and
+          # the collate job's `merge-multiple: true` download silently keeps whichever arrived last.
+          python3 -u -m sfpp.matrix --cell "$CELL" --seeds "$SEED" --tag "s$SEED" --out out
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() # a shard that failed halfway still wrote the configurations it finished
         with:
-          name: matrix-${{ matrix.cell }}
+          name: matrix-${{ matrix.cell }}-s${{ matrix.seed }}
           path: out
           if-no-files-found: warn
           retention-days: 90

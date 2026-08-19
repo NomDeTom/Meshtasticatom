@@ -43,11 +43,18 @@ MIRRORS = [1, 4]
 PLACES = ["random-any", "beside-router", "routers"]
 SERVERS = [2, 4, 8]
 
-# Everything held fixed across the matrix. Two hours is long enough for adverts to have spread and
-# for a bucket to have sealed, and short enough that the x4 cells stay inside a CI job.
+# Everything held fixed across the matrix. Seventy-two hours, which is `campaign.py`'s own default.
+#
+# This was two, on the reasoning that two is "long enough for adverts to have spread and for a bucket
+# to have sealed, and short enough that the x4 cells stay inside a CI job". The first half was true of
+# the archive and false of everything around it: `--diurnal commuter` is a 17:1 peak-to-trough curve
+# and a 2 h run samples two hours of it, so every figure here was quietly a figure about one arbitrary
+# stretch of one evening. The second half was solved the right way instead - the cells are now sharded
+# one job per seed (see sim_sweep_matrix.yml), so a job holds ten runs rather than fifty and the x4
+# cells stay inside a CI job at 72 h too.
 BASE = [
     "--hours",
-    "2",
+    "72",
     "--scenario",
     "batumi",
     "--protocol",
@@ -79,8 +86,16 @@ def cell_argv(preset, mirror, place=None, servers=None, baseline=False):
     return argv + ["--place", place, "--servers", str(servers)]
 
 
-def run_cell(name, preset, mirror, seeds, out_dir):
-    """Every placement and count at one preset and one scale, plus the baseline control per seed."""
+def run_cell(name, preset, mirror, seeds, out_dir, tag=None):
+    """Every placement and count at one preset and one scale, plus the baseline control per seed.
+
+    `tag` distinguishes the file when a cell is sharded across jobs, exactly as `design.run_cell` uses
+    it: every shard keeps the same `block`, which is what the digest groups on, and only the filename
+    differs. It is not optional once the cells are sharded - the shards' artifacts are downloaded into
+    one directory with `merge-multiple: true`, so without a tag every seed of a cell writes
+    `{cell}.json` and each silently overwrites the last, leaving one seed's data wearing the whole
+    cell's name.
+    """
     parser = build_parser()
     results = []
     arms = [("baseline", None, None)] + [
@@ -105,7 +120,7 @@ def run_cell(name, preset, mirror, seeds, out_dir):
                 flush=True,
             )
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"{name}.json")
+    path = os.path.join(out_dir, f"{name}.{tag}.json" if tag else f"{name}.json")
     with open(path, "w") as f:
         json.dump(results, f, indent=2)
     print(f"wrote {path}")
@@ -125,6 +140,11 @@ def main(argv=None):
     )
     ap.add_argument("--seeds", nargs="+", type=int, default=[7, 11, 13, 17, 23])
     ap.add_argument("--out", default="runs")
+    ap.add_argument(
+        "--tag",
+        help="suffix this shard's filename. For splitting one cell over several jobs; the cell "
+        "keeps its name in the reports, so the digest still reads the shards as one block",
+    )
     opts = ap.parse_args(argv)
 
     known = cells()
@@ -139,7 +159,7 @@ def main(argv=None):
     if opts.cell not in known:
         return ap.error(f"unknown cell {opts.cell!r}; --list prints them")
     preset, mirror = known[opts.cell]
-    run_cell(opts.cell, preset, mirror, opts.seeds, opts.out)
+    run_cell(opts.cell, preset, mirror, opts.seeds, opts.out, opts.tag)
     return 0
 
 
