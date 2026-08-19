@@ -280,7 +280,11 @@ BLOCKS = {
     ),
     # Each node throttling on its own online count, against one coefficient for the whole mesh. The
     # firmware does the former; every figure measured here before did the latter.
-    "R-congestion-mode": ("congestion-mode", ["static", "adaptive"], ["--nodes", "120"]),
+    "R-congestion-mode": (
+        "congestion-mode",
+        ["static", "adaptive"],
+        ["--nodes", "120"],
+    ),
     # What the warm tier is worth on a mesh larger than the hot store: 0 is the pre-2.8 behaviour
     # of forgetting an evicted peer outright, and the rest is how much identity a node keeps.
     "R-warm": (
@@ -310,7 +314,11 @@ BLOCKS = {
     # The mesh nobody would build on purpose. Each arm removes one thing a real deployment has, so
     # a design that only holds up on baymesh-2026-08 with uniform siting shows it here.
     "X-nomute": ("role-mix", ["baymesh-2026-08", "no-mute", "all-routers"], []),
-    "X-badrouters": ("role-placement", ["degree", "inverse", "random"], ["--role-mix", "baymesh-2026-08"]),
+    "X-badrouters": (
+        "role-placement",
+        ["degree", "inverse", "random"],
+        ["--role-mix", "baymesh-2026-08"],
+    ),
     "X-siting": (
         "siting-mix",
         ["uniform", "local-typical", "basement-heavy"],
@@ -341,13 +349,21 @@ BLOCKS = {
     ),
     # The interferer's period against a fixed preset. The chance of being caught is (airtime + pulse)
     # / interval, so this arm is really asking how long a frame this mesh can afford to send.
-    "X-pulse": ("noise-pulse-interval-ms", [30000, 10000, 4000, 2000], ["--noise-profile", "periodic"]),
+    "X-pulse": (
+        "noise-pulse-interval-ms",
+        [30000, 10000, 4000, 2000],
+        ["--noise-profile", "periodic"],
+    ),
     # Tropospheric ducting. The reach is not the result - the contention and the routes learned
     # through links that then disappear are.
     "X-duct": ("duct-per-hour", [0.0, 0.25, 1.0], ["--duct-gain-db", "25"]),
     # A mesh stretched past what it can carry, against the duct that briefly makes it work. The
     # adversarial pair: reach that exists for half an hour, gets learned, and then does not.
-    "X-stretch-duct": ("duct-per-hour", [0.0, 1.0], ["--stretch", "1.5", "--duct-gain-db", "25"]),
+    "X-stretch-duct": (
+        "duct-per-hour",
+        [0.0, 1.0],
+        ["--stretch", "1.5", "--duct-gain-db", "25"],
+    ),
     # Position and telemetry turned up, which is what an operator does when the map looks stale.
     "X-chatty": ("broadcast-interval-s", [3600, 900, 300], []),
     # The same, with the hop limit raised too - the other half of that instinct.
@@ -360,11 +376,21 @@ BLOCKS = {
     # question as much as a routing one.
     "F-hoplimit": ("hop-limit", [3, 7, 15, 32], ["--no-hop-spread"]),
     # Every node relaying everything, against the roles that exist to stop that.
-    "F-flooding": ("role-mix", ["baymesh-2026-08", "all-routers"], ["--rebroadcast-mode", "ALL"]),
+    "F-flooding": (
+        "role-mix",
+        ["baymesh-2026-08", "all-routers"],
+        ["--rebroadcast-mode", "ALL"],
+    ),
     # The turbo corners of the SF/bandwidth curve, including two presets no release has.
     "F-preset-turbo": (
         "preset",
-        ["EXTRA_SHORT_TURBO", "SHORT_TURBO", "LONG_FAST", "LONG_TURBO", "EXTRA_LONG_TURBO"],
+        [
+            "EXTRA_SHORT_TURBO",
+            "SHORT_TURBO",
+            "LONG_FAST",
+            "LONG_TURBO",
+            "EXTRA_LONG_TURBO",
+        ],
         [],
     ),
     # What a polite mesh costs: the region limit is a ceiling, not an obligation.
@@ -408,6 +434,103 @@ BLOCKS = {
         ["ALL", "KNOWN_ONLY", "CORE_PORTNUMS_ONLY"],
         ["--platform-mix", "baymesh-2026-08"],
     ),
+}
+
+
+# What each block changes, in one sentence, for a reader of the results rather than a maintainer of
+# the sweep. The comments above say why a block exists; these say what moved, which is the question
+# someone looking at a trend table is actually asking. `collate.py` puts them in the report and
+# `explorer.py` on the page, so a row is never just `arm=topology`.
+#
+# Held to the block list by test_mesh: every block has one, and every one names a block.
+DESCRIPTIONS = {
+    "D-cadence": "When an archive advertises: on a sealed bucket, a fixed interval, AIMD, or both.",
+    "D-resolve": "How two archives settle a disagreement - send a sketch, enumerate, or sketch then fall back. Delivery should not move; what it costs should.",
+    "D-jitter": "Spread applied to bucket-close under global numbering, where every archive seals the same bucket at the same moment and fires together.",
+    "E-capacity": "How many differences one sketch can decode before it fails and the exchange escalates.",
+    "E-width": "Sketch member width. Narrower identifiers collide more often, and a collision cancels in the sketch without cancelling in the checksum.",
+    "E-signed": "Whether the advert carries its 66-byte signature.",
+    "F-loss": "A flat loss floor on every reception - degradation spread evenly across every bucket.",
+    "F-burst": "The same nominal loss delivered in 60-second stretches of deafness, which puts a whole bucket's divergence into one sketch instead of spreading it.",
+    "F-outage": "Burst loss at half an hour rather than a minute - most of a bucket, which is the outage that actually matters to an archive.",
+    "G-place": "Where the archives sit, under a flat hop limit.",
+    "G-hops": "How many hops apart the archives are placed, under a flat hop limit.",
+    "G-servers": "How many archives the mesh has, under a flat hop limit.",
+    "J-bucketmode": "What defines a bucket: a global counter (a fiction kept as an upper bound), the local count the firmware keeps, a time window, or a sliding window.",
+    "J-window": "Objects in the sliding window, when buckets are windowed.",
+    "J-wincap": "Sketch capacity under windowed buckets rather than counted ones.",
+    "J-timewin": "Width of the time bucket, when buckets are cut by the clock.",
+    "K-size": "Mesh size with density held constant - the area grows with the node count.",
+    "K-density": "The same node counts in a fixed area, so this is density rather than size. Running both is the only way to say which an effect belongs to.",
+    "K-hopspread": "One hop limit for everyone, swept. The per-node spread must be off or --hop-limit is never read.",
+    "K-spread": "A uniform hop limit against per-node limits of 3-7 assigned by centrality.",
+    "L-advert": "Whether an archive advertises by broadcast or by DM to each known peer.",
+    "L-provide": "Whether a replay goes by DM or by broadcast, so bystanders in earshot can file it too.",
+    "M-replayorder": "Where a replayed object lands in the receiver's stream: at the tip, or back at its heard_ago.",
+    "M-combined": "The same, with replays broadcast - the combination the replay header exists for.",
+    "M-jitter": "Advert spread under local numbering, where each archive seals its own bucket on its own count and the synchronisation jitter would break is largely absent.",
+    "M-capacity": "Sketch capacity under local numbering and the later defaults.",
+    "N-place": "Where the archives sit, under real per-node hop limits.",
+    "N-hops": "How many hops apart the archives are, under real per-node hop limits.",
+    "N-servers": "How many archives the mesh has, under real per-node hop limits.",
+    "P-diurnal": "Time of day. Text, position and DMs follow the clock; telemetry and nodeinfo are device timers and do not.",
+    "P-catchup": "The quiet-hours window reconciliation defers to, which only means anything once traffic has a time of day.",
+    "P-preset": "The presets deployed meshes actually run: the default, the fast end, and the slow end still in use.",
+    "P-bw500": "Spreading factor with bandwidth held at 500 kHz, where North America is heading.",
+    "P-eu-presets": "The presets Europe runs, including the narrow ones EU_866 and EU_N_868 default to.",
+    "P-congestion": "The firmware's node-count interval scaling, on against off.",
+    "Q-protocol": "Nothing, the incumbent chain walk, and the sketch - with `none` a paired baseline, so every other cell is a difference rather than a comparison.",
+    "Q-control": "The same nodes in the same places with the archive off then on, separating what serving costs a node from where it sits.",
+    "Q-interval": "The device broadcast interval - the denominator every SF++ airtime share is quoted against.",
+    "Q-hopassign": "Whether raised hop limits land on central nodes as operators do it, or at random - the control that separates the limit's effect from the siting of the nodes that raised it.",
+    "Q-topology": "The shape of the mesh, at fixed node count and seed.",
+    "G-allrouters": "Every router as an archive against half of them - same mesh, same traffic, only who holds the archive changes.",
+    "R-oversubscribed": "Mesh size against a store that has to hold it, over a full day.",
+    "R-hotstore-stress": "The store size against a fixed 250-node mesh, so eviction is constant.",
+    "R-congestion-input": "Which quantity drives the throttle: what the firmware can see and which saturates, or the unbounded ideal.",
+    "R-srretries": "Retries per addressed reconciliation hop, to find where delivery stops improving.",
+    "R-firmware": "The pre-fold-in transport against 2.8 - same seed, same mesh, only the MAC and routing rules change.",
+    "R-adopt": "The hop-recommendation feedback loop closed against held open, traced, because a converged mean and an oscillating one look identical at the end.",
+    "R-siting": "Where nodes physically are. A roof node and a basement one are 26 dB apart, wider than most parameters here.",
+    "R-hopscale": "How far the firmware's hop estimator sits from the exhaustive count it approximates, as the mesh outgrows its 128 entries.",
+    "R-traceroute": "Route discoveries per node per hour - whether traceroute learning pays for its own airtime.",
+    "R-traceroute-small": "The same on a mesh whose hot store cannot hold it, where the overflow cache is all that keeps a route for the long tail.",
+    "R-dmmode": "How a DM escalates to flooding.",
+    "R-crladder": "Raising the coding rate on each retransmission - airtime spent to make each attempt likelier to land.",
+    "R-dmmode-cr": "DM escalation with the coding-rate ladder already on, since both spend the same retry budget.",
+    "R-repeats": "The cheapest rival to an archive: one extra relay of a text rather than replicating it afterwards.",
+    "R-repeats-busy": "The same, on a mesh busy enough for the suppression thresholds to be deciding it.",
+    "R-signing": "The receive-side signature policy - what a node does with an unsigned packet.",
+    "R-signing-cost": "Signing itself, on against off inside 2.8. The only arm that separates 'signing costs reach' from '2.8 costs reach'.",
+    "R-congestion-mode": "Each node throttling on its own online count against one coefficient for the whole mesh. The firmware does the former.",
+    "R-warm": "The warm tier on a mesh larger than the hot store: 0 is the pre-2.8 behaviour of forgetting an evicted peer outright.",
+    "R-versions": "The release series in order, each at its final release - what a mesh gained or lost per upgrade, not what one rule is worth.",
+    "R-mixed": "A mesh part-way through upgrading, the older share on 2.5.",
+    "R-mixed-26": "The same with the older share on 2.6.",
+    "X-nomute": "The role census: a real mesh's mix, the same without muted clients, and everything a router.",
+    "X-badrouters": "Where the router roles land - on the best-connected nodes, the worst, or at random.",
+    "X-siting": "Siting against a real role census, including a basement-heavy mesh.",
+    "X-worst": "Router roles on the worst-connected nodes of an already badly sited mesh - the adversarial case.",
+    "X-amplifiers": "Power amplifiers as separate transmit and receive gain, sprinkled or in an arms race.",
+    "X-amplify-worst": "A high amplifier fitted to the worst-connected nodes after the links exist - the field pathology where the node nobody could hear is then heard by everyone while still hearing almost nobody.",
+    "X-stretch": "Every distance scaled about the centroid: the same nodes in the same arrangement, further apart.",
+    "X-noise": "The noise floor: none, a smooth field, episodic bursts, or a regular emitter that wipes whatever is in flight.",
+    "X-pulse": "How often the periodic emitter fires.",
+    "X-duct": "Tropospheric ducting episodes per hour. Not a free gain - read ducted receptions beside collisions.",
+    "X-stretch-duct": "Ducting on a stretched mesh, where the long links it creates are the ones that were missing.",
+    "X-chatty": "The device broadcast interval driven down to three times its default rate.",
+    "X-chatty-hops": "The same, with every node on a flat hop limit of 7 so nothing damps the flood.",
+    "F-hoplimit": "Hop limits past anything a release ships, to find where more hops stop helping.",
+    "F-flooding": "Every node rebroadcasting everything, against a real role census.",
+    "F-preset-turbo": "Presets from the fastest the firmware ships to the slow end.",
+    "F-txpower": "Transmit power in dBm - the region limit is a ceiling an operator may use, not one they must.",
+    "R-routerlate": "The share of nodes on ROUTER_LATE.",
+    "R-favourites": "Router-like nodes favouriting each other, so relays between them keep their hop limit.",
+    "R-platform": "The board mix, which decides each node's hot-store size.",
+    "R-hotstore": "The modelled MAX_NUM_NODES - the size of the hot store.",
+    "R-roles": "The legacy default role census against a real mesh's.",
+    "R-roles-fav": "The same with router favourites on.",
+    "R-rebroadcast": "The rebroadcast mode - what a node relays.",
 }
 
 
@@ -456,10 +579,28 @@ BATCHES = {
     # ---- PROPOSED: things that could be adopted, each against its own control ------------------
     # Does this change earn its airtime? Every arm here has a "without it" cell.
     "proposed-archive": ["Q-protocol", "Q-control", "R-srretries"],
-    "proposed-relay": ["R-repeats", "R-repeats-busy", "R-crladder", "R-dmmode", "R-dmmode-cr"],
-    "proposed-routing": ["R-traceroute", "R-traceroute-small", "R-adopt", "R-favourites"],
+    "proposed-relay": [
+        "R-repeats",
+        "R-repeats-busy",
+        "R-crladder",
+        "R-dmmode",
+        "R-dmmode-cr",
+    ],
+    "proposed-routing": [
+        "R-traceroute",
+        "R-traceroute-small",
+        "R-adopt",
+        "R-favourites",
+    ],
     # ---- VERSIONING: what a release is worth, and what a half-upgraded mesh costs -------------
-    "versioning": ["R-firmware", "R-versions", "R-mixed", "R-mixed-26", "R-signing-cost", "R-signing"],
+    "versioning": [
+        "R-firmware",
+        "R-versions",
+        "R-mixed",
+        "R-mixed-26",
+        "R-signing-cost",
+        "R-signing",
+    ],
     "versioning-hops": ["K-hopspread", "K-spread", "Q-hopassign"],
     # ---- ADVERSARIAL: remove the things known to help, one at a time --------------------------
     # Each arm deletes an improver rather than adding a stressor, so the loss is attributable.
@@ -477,16 +618,31 @@ BATCHES = {
     "shape": ["R-platform", "R-siting", "Q-topology", "K-density", "K-size"],
     "scale": ["R-hotstore", "R-hopscale", "R-hotstore-stress", "R-oversubscribed"],
     "load": ["Q-interval", "P-diurnal", "P-preset", "P-congestion", "P-catchup"],
-    "mechanisms": ["R-roles", "R-roles-fav", "R-routerlate", "R-rebroadcast", "R-congestion-mode", "R-warm", "R-congestion-input"],
+    "mechanisms": [
+        "R-roles",
+        "R-roles-fav",
+        "R-routerlate",
+        "R-rebroadcast",
+        "R-congestion-mode",
+        "R-warm",
+        "R-congestion-input",
+    ],
     # ---- ARCHIVE INTERNALS: how the sketch itself is tuned, not whether to have it -------------
     "archive-cadence": ["D-cadence", "D-jitter", "D-resolve", "M-jitter"],
     "archive-sketch": ["E-capacity", "E-width", "E-signed", "M-capacity"],
     "archive-buckets": ["J-bucketmode", "J-window", "J-wincap", "J-timewin"],
-    "archive-placement": ["G-place", "G-hops", "G-servers", "G-allrouters", "N-place", "N-hops", "N-servers"],
+    "archive-placement": [
+        "G-place",
+        "G-hops",
+        "G-servers",
+        "G-allrouters",
+        "N-place",
+        "N-hops",
+        "N-servers",
+    ],
     "archive-transport": ["L-advert", "L-provide", "M-replayorder", "M-combined"],
     "degradation": ["F-loss", "F-burst", "F-outage"],
 }
-
 
 
 def run_block(name, seeds, out_dir, grid=None):
@@ -641,13 +797,15 @@ def reception_table(name, arm, values, results):
             "all_median": dist("all", "median"),
             "all_p90": dist("all", "p90"),
             "channel_utilisation": traffic("channel_utilisation"),
-            "node_util_median": statistics.mean(
-                c["traffic"]["node_channel_util_percent"]["median"]
-                for c in cells
-                if "node_channel_util_percent" in c["traffic"]
-            )
-            if any("node_channel_util_percent" in c["traffic"] for c in cells)
-            else float("nan"),
+            "node_util_median": (
+                statistics.mean(
+                    c["traffic"]["node_channel_util_percent"]["median"]
+                    for c in cells
+                    if "node_channel_util_percent" in c["traffic"]
+                )
+                if any("node_channel_util_percent" in c["traffic"] for c in cells)
+                else float("nan")
+            ),
             "nodes_receiving_none": statistics.mean(
                 c["by_class"]["text"]["nodes_receiving_none"] for c in cells
             ),

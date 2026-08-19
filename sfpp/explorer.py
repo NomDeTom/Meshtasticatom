@@ -74,6 +74,7 @@ def index_by_block(runs):
             # The measure this block travels in, decided per run by collate. Later runs win, so the
             # page follows the current transport rather than whatever the first night happened to say.
             entry["moved"] = b.get("moved") or entry["moved"]
+            entry["explains"] = b.get("explains") or entry.get("explains")
             entry["runs"].append(
                 {
                     "run_id": run.get("run_id"),
@@ -468,6 +469,12 @@ def render_html(runs, blocks, board, for_pages=False):
             + f'<span class="pill">{len(entry["runs"])} run(s)</span>'
             + f'<span class="pill">tracking {_esc(measure)}</span></div>'
         )
+        if entry.get("explains"):
+            out.append(
+                f'<p class="sub" style="margin:-.2rem 0 .8rem;font-size:.85rem">'
+                f"{_esc(entry['explains'])}</p>"
+            )
+        out.append("")
         out.append('<div class="scroll"><table><thead><tr><th>value</th><th>trend</th>')
         out += [f"<th>{_esc(r['run_id'])}</th>" for r in entry["runs"]]
         out.append("<th>mean</th></tr></thead><tbody>")
