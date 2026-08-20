@@ -61,7 +61,15 @@ on:
         description: Seeds per cell. Every cell in the round uses the same ones
         type: string
         required: false
-        default: "3"
+        # Two, not three, because the **scheduled** round uses this default over every mesh and the
+        # mirrored cells are now split three ways: all five meshes at three seeds is 273 jobs, past the
+        # 256 a matrix may hold, and the plan would fail every Sunday. Two is 182 and fits.
+        #
+        # Seeds accumulate across weeks - the archive is cumulative and the digest averages over
+        # whatever it holds - which is the same reasoning sim_sweep_blocks gives for defaulting to one:
+        # "One is the nightly default; the archive accumulates the rest". A three-seed round is still
+        # available on demand, one mesh at a time via the `mesh` input.
+        default: "2"
 
 permissions: {}
 
