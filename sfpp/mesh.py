@@ -3378,11 +3378,8 @@ class Mesh:
     def resolve_last_byte(self, rx, relay_byte, require_direct_neighbour=False):
         """NodeDB::resolveLastByte. Returns (status, peer) - UNIQUE, AMBIGUOUS or NONE.
 
-        A candidate gate and a relevance gate, so a smaller store is less ambiguous - TRANSPORT.md.
-
-        One fidelity gap: the firmware reads the role recorded in its own `NodeInfoLite`, learned
-        from a NodeInfo exchange this model does not run, so the role gate here reads the peer's
-        true role and is better informed than the firmware's.
+        Two gates, so a smaller store is less ambiguous - TRANSPORT.md. One fidelity gap: the role
+        gate reads the peer's true role, where the firmware reads a learned one.
         """
         if not relay_byte:
             return RESOLUTION_NONE, None
@@ -3915,9 +3912,7 @@ class Mesh:
     def _record_traceroute_hop(self, rx, relay):
         """alterReceivedProtobuf: a relay writes itself into the route before passing it on.
 
-        TraceRouteModule picks the array by direction - `route` while the request travels out,
-        `route_back` once the destination has answered - so a reply that comes home by a different
-        path cannot append onto the outbound leg. `request_id` is what marks a packet as the reply.
+        The array is picked by direction, so a reply cannot append onto the outbound leg.
         """
         if relay.route is None:
             return
@@ -3954,15 +3949,8 @@ class Mesh:
     def _traceroute_learn(self, rx, packet):
         """TraceRouteModule::updateNextHops on a returning reply.
 
-        If the route is A->B->C->D, then B learns C as the next hop for C and for D, and C learns D
-        for D. A node that is the original sender takes the first entry; a node that is last in the
-        route takes the responder itself.
-
-        The guard is the part worth having. The route array is unauthenticated payload, so this
-        tree refuses to learn from it unless the node it names as our next hop is the one that
-        actually relayed this reply to us, and treats a missing relay byte - an MQTT-sourced packet
-        with no RF corroboration - as unlearnable. 2.7 has the learning without the guard, so a
-        forged reply could point any node's next_hop anywhere.
+        A node in the route learns every node beyond it, and only from a corroborated relay -
+        TRANSPORT.md.
         """
         node = self.nodes[rx]
         if not node.profile.traceroute_learning or packet.route is None:
@@ -3994,8 +3982,7 @@ class Mesh:
     def _maybe_set_next_hop(self, rx, target, next_hop_byte):
         """maybeSetNextHop: the hot store when it holds the target, and the overflow cache always.
 
-        Traceroute is the highest-confidence source there is - a full known route - so the hint is
-        mirrored into the overflow cache even for a target the hot store has no room for.
+        A full known route is the best source there is, so it is kept even without a record.
         """
         node = self.nodes[rx]
         record = node.nodedb.get(target)
@@ -4013,9 +4000,7 @@ class Mesh:
     def hop_limit_for_response(self, rx, packet):
         """RoutingModule::getHopLimitForResponse - answer over the distance the request came.
 
-        A reply does not need the sender's whole hop budget: it needs the hops the request used,
-        plus a margin because the way back may differ. A request that arrived with a hop_start of
-        zero is answered directly and not relayed at all.
+        The hops the request used plus a margin, and a zero-hop request is answered directly.
         """
         limit = self.hop_limit_for(rx)
         hops_used = packet.hops_taken()
@@ -4031,14 +4016,7 @@ class Mesh:
     def _apply_hop_policy(self, radio, packet):
         """Router.cpp:483 and the Portduino zero-hop list, applied to a packet we are composing.
 
-        The recommendation reaches routine device broadcasts and nothing else - position,
-        telemetry, nodeinfo, neighbourinfo - and can only lower the limit, never raise it above
-        what the operator configured. A text message is untouched, which bounds how far the
-        feedback loop can reach.
-
-        A zero-hop portnum is capped afterwards. Both paths reduce hop_start by the same amount as
-        hop_limit, so `hops_away` computed by every downstream receiver stays honest; changing only
-        the limit would silently corrupt the very histogram the recommendation came from.
+        Routine broadcasts only, downward only, and hop_start moves with hop_limit - TRANSPORT.md.
         """
         profile = radio.profile
         if (
@@ -4063,8 +4041,7 @@ class Mesh:
     def _perhaps_ack(self, rx, packet):
         """ReliableRouter::sendAckNak at the destination of a packet that asked to be acknowledged.
 
-        Only the addressee answers, and only for a request: a packet that is itself a response gets
-        a hop-limited ACK, so the far end stops retransmitting without the ACK itself flooding.
+        Only the addressee answers, and a response gets a hop-limited ACK rather than a flood.
         """
         node = self.nodes[rx]
         if not node.profile.reliable_retx or not packet.want_ack:
@@ -4090,9 +4067,7 @@ class Mesh:
     def _sniff_ack_or_reply(self, rx, packet):
         """NextHopRouter::sniffReceived - learn a route from a delivery that demonstrably worked.
 
-        Only a relayer that also carried the original teaches us anything, and only when its byte
-        resolves to one node. Without the first gate the learned hop need never have touched this
-        path; without the second, every future DM aims at whichever node shares a last byte.
+        Two gates: it must have carried the original, and its byte must resolve to one node.
         """
         if not self.nodes[rx].profile.next_hop_routing or not packet.is_ack_or_reply():
             return
@@ -4112,9 +4087,8 @@ class Mesh:
                     self.stats["next_hop_learned"] += 1
 
         if packet.destination == rx and packet.request_id:
-            # An ACK for something we sent came back. The route we used is working, so refresh its
-            # freshness and clear the failure count - without creating health for a route we never
-            # learned - and stop retransmitting, which is the whole point of having asked.
+            # The route we used is working, so refresh it without creating health for a route we
+            # never learned, and stop retransmitting - which is the point of having asked.
             self.note_route_success(rx, packet.origin)
             if packet.portnum == ROUTING_PORTNUM:
                 self.stats["acks_delivered"] += 1
@@ -4161,9 +4135,8 @@ class Mesh:
         retry = packet.copy()
         attempt = record["initial"] - record["left"] + 1
         if radio.profile.coding_rate_ladder:
-            # Branch `CRCRRCRRR`: a retry that already failed once should not go out identical.
-            # Base, then one step slower, then 4/8 - keyed by (from, id) so every copy of the same
-            # retransmission picks up the same rate.
+            # Branch `CRCRRCRRR`: a retry that already failed should not go out identical.
+            # Keyed by (from, id), so every copy of one retransmission picks the same rate.
             retry.coding_rate = self._ladder_coding_rate(attempt)
         if packet.destination != BROADCAST and record["left"] == 1:
             # Last directed try. The route has not worked; record the failure, clear it, and let
@@ -4175,9 +4148,8 @@ class Mesh:
             and retry.next_hop != NO_NEXT_HOP_PREFERENCE
             and not self.route_is_verified(node, packet.destination)
         ):
-            # M4, off in the firmware: a route that is not proven healthy does not get a second
-            # directed attempt. Start flooding one retry sooner, which trades airtime for recovery
-            # latency and leaves a fresh, never-failed route on the unchanged path.
+            # M4, in no release: an unproven route gets no second directed attempt, so flooding
+            # starts one retry sooner. TRANSPORT.md.
             self._fall_back_to_flooding(node, packet, retry)
             self.stats["early_floods"] += 1
         record["left"] -= 1
@@ -4209,9 +4181,7 @@ class Mesh:
     def start_hop_scaling(self, first_roll_ms=None):
         """Arm the hourly pass on every node that has the module.
 
-        The module runs RUNS_PER_HOUR times an hour and rolls once, so the recommendation moves on
-        an hourly cadence however busy the mesh is. Each node's roll is offset, since nothing
-        synchronises boot times.
+        Offset per node, since nothing synchronises boot times.
         """
         hour = 3600_000.0
         for node in self.nodes:

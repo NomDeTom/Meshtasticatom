@@ -620,3 +620,61 @@ not.
 `perhapsHandleUpgradedPacket`: a copy with more hops left than the one queued reached us by a
 shorter route, so it is swapped in. Relaying the copy with fewer hops left would strand everything
 beyond our own horizon.
+
+## Traceroute
+
+`alterReceivedProtobuf`: a relay writes itself into the route before passing it on, and
+`TraceRouteModule` picks the array by direction - `route` while the request travels out,
+`route_back` once the destination has answered - so a reply coming home by a different path cannot
+append onto the outbound leg. `request_id` marks a packet as the reply.
+
+`updateNextHops` on a returning reply: if the route is A→B→C→D then B learns C as the next hop for
+C *and* for D, and C learns D for D. A node that is the original sender takes the first entry; a
+node last in the route takes the responder itself.
+
+The guard is the part worth having. The route array is unauthenticated payload, so this tree refuses
+to learn from it unless the node it names as our next hop is the one that actually relayed the
+reply, and treats a missing relay byte - an MQTT-sourced packet with no RF corroboration - as
+unlearnable. 2.7 has the learning without the guard, so a forged reply could point any node's
+`next_hop` anywhere.
+
+`maybeSetNextHop` mirrors a traceroute hint into the overflow cache even for a target the hot store
+has no room for: a full known route is the highest-confidence source there is.
+
+## Replies and ACKs
+
+`RoutingModule::getHopLimitForResponse`: a reply needs the hops the request used plus a margin,
+because the way back may differ - not the sender's whole budget. A request that arrived with a
+`hop_start` of zero is answered directly and not relayed at all.
+
+`ReliableRouter::sendAckNak`: only the addressee answers, and only for a request. A packet that is
+itself a response gets a hop-limited ACK, so the far end stops retransmitting without the ACK
+flooding.
+
+`NextHopRouter::sniffReceived` learns a route from a delivery that demonstrably worked, under two
+gates: only a relayer that also carried the original teaches anything, and only when its byte
+resolves to one node. Without the first the learned hop need never have touched this path; without
+the second every future DM aims at whichever node shares a last byte.
+
+## Hop policy on our own packets
+
+`Router.cpp:483` and the Portduino zero-hop list. The hop recommendation reaches routine device
+broadcasts and nothing else - position, telemetry, nodeinfo, neighbourinfo - and can only lower the
+limit, never raise it above what the operator configured. A text message is untouched, which bounds
+how far the feedback loop can reach.
+
+A zero-hop portnum is capped afterwards. Both paths reduce `hop_start` by the same amount as
+`hop_limit`, so `hops_away` computed downstream stays honest - changing only the limit would
+silently corrupt the very histogram the recommendation came from.
+
+The hop-scaling module runs `RUNS_PER_HOUR` times an hour and rolls once, so the recommendation
+moves on an hourly cadence however busy the mesh is. Each node's roll is offset, since nothing
+synchronises boot times.
+
+## Retry ladders
+
+Two candidate mechanisms, neither in a release. The **coding-rate ladder** (branch `CRCRRCRRR`)
+sends a retry that already failed at a slower rate - base, then one step slower, then 4/8 - keyed by
+`(from, id)` so every copy of the same retransmission picks the same rate. **M4** starts flooding
+one retry sooner when a route is not proven healthy, trading airtime for recovery latency and
+leaving a fresh, never-failed route on the unchanged path.
