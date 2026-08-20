@@ -236,18 +236,23 @@ def is_channel_active(node, env):
 
 
 def airtime(conf, sf, cr, pl, bw):
+    """Time on air in ms. `cr` is the coding-rate denominator 5..8, as the firmware stores it.
+
+    The Semtech payload-symbol formula multiplies by that denominator directly, so no index
+    conversion belongs here. See docs/radio_model.md for the derivation and the reference vectors.
+    """
     pl = pl + conf.HEADERLENGTH  # add Meshtastic header length
     H = 0  # implicit header disabled (H=0) or not (H=1)
-    DE = 0  # low data rate optimization enabled (=1) or not (=0)
 
-    if bw == 125e3 and sf in [11, 12]:  # low data rate optimization
-        DE = 1
+    Tsym = (2.0 ** sf) / bw
+    # Auto LDRO, from RadioLibInterface.h: `.ldrOptimize = (1 << sf) / bw >= 16`. The rule is
+    # symbol time, not a bandwidth: SF12/BW62.5 optimizes and SF10/BW125 does not.
+    DE = 1 if Tsym * 1000 >= 16 else 0
     if sf == 6:  # can only have implicit header with SF6
         H = 1
 
-    Tsym = (2.0 ** sf) / bw
     Tpream = (conf.NPREAM + 4.25) * Tsym
-    payloadSymbNB = 8 + max(math.ceil((8.0 * pl - 4.0 * sf + 28 + 16 - 20 * H) / (4.0 * (sf - 2 * DE))) * (cr + 4), 0)
+    payloadSymbNB = 8 + max(math.ceil((8.0 * pl - 4.0 * sf + 28 + 16 - 20 * H) / (4.0 * (sf - 2 * DE))) * cr, 0)
     Tpayload = payloadSymbNB * Tsym
 
     return (Tpream + Tpayload) * 1000
