@@ -2251,14 +2251,16 @@ class FirmwarePresets(unittest.TestCase):
                 conf, 8, 4000.0, random.Random(1), hop_limit=3
             ).max_airtime_ms
         self.assertLess(windows["SHORT_TURBO"], 1000.0)
-        self.assertGreater(windows["VERY_LONG_SLOW"], 35000.0)
+        self.assertGreater(windows["VERY_LONG_SLOW"], 30000.0)
 
     def test_a_full_payload_is_not_six_seconds_on_long_slow(self):
-        """MAX_AIRTIME_MS was justified against a 6 s figure. A full LONG_SLOW payload is 21 s, and
-        VERY_LONG_SLOW exceeds the window outright, which drops in-flight interferers from the scan.
+        """MAX_AIRTIME_MS was justified against a 6 s figure. A full LONG_SLOW payload is 14.3 s.
+
+        The 21 s and 35 s this test once asserted came from lib.phy.airtime multiplying by cr + 4
+        against a coding-rate denominator, which inflated every preset by 37-60%.
         """
         conf = M.make_config()
-        for name, at_least in (("LONG_SLOW", 20000.0), ("VERY_LONG_SLOW", 35000.0)):
+        for name, at_least in (("LONG_SLOW", 14000.0), ("VERY_LONG_SLOW", 28000.0)):
             conf.MODEM_PRESET = name
             p = conf.current_preset
             air = M.Mesh.airtime_ms(type("X", (), {"conf": conf})(), 237, p["cr"])
