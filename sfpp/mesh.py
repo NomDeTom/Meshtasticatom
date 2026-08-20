@@ -2474,21 +2474,7 @@ class Mesh:
     def stretch_census(self, length=60):
         """What stretching this mesh did to the links it started with. The paired measurement.
 
-        Every share `link_quality` reports is against a denominator the stretch itself moves, and
-        that makes it unreadable across a sweep: the worst links fall off the bottom of the graph, so
-        the surviving population looks healthier the further you pull the mesh apart. Measured on a
-        uniform 60-node mesh, the share of links below 50% delivery goes 0.053, 0.064, 0.078, 0.059
-        across stretch 1.0 to 3.0 - it improves at the end, and the mesh is in pieces by then.
-
-        So the denominator here is the link set at stretch 1.0, recovered exactly rather than
-        re-drawn: the per-pair skew is stored for the life of the mesh, so scaling the distance back
-        reproduces the unstretched RSSI to the bit. Of the links this mesh had before it was pulled
-        apart, this reports how many still work, how many became marginal, and how many stopped
-        being links at all.
-
-        The last of those three is the honest headline of a stretch result. This model degrades a
-        link until it hits the sensitivity threshold and then deletes it, so most of what stretching
-        costs shows up as `lost_to_cliff` rather than as anything the delivery curve can see.
+        Denominated on the link set at stretch 1.0, and read at `lost_to_cliff` - TRANSPORT.md.
         """
         import lib.phy as phy
 
@@ -2633,8 +2619,7 @@ class Mesh:
     def slot_time_ms(self):
         """RadioInterface::computeSlotTimeMsec. 0.2 + 0.4 + 7 ms of propagation, turnaround and MAC.
 
-        The CAD duration differs on the 2.4 GHz parts: AN1200.22 wants four symbols plus a
-        sf-dependent term, where sub-GHz takes max(2.25, NUM_SYM_CAD + 0.5).
+        The CAD term differs on the 2.4 GHz parts, per AN1200.22.
         """
         p = self.conf.current_preset
         sf = p["sf"]
@@ -2646,9 +2631,7 @@ class Mesh:
     def _wide_lora(self):
         """`myRegion->wideLora` - a property of the configured region, not of the bandwidth.
 
-        The vendored region table carries the flag, so this asks the same question the firmware
-        does. Selecting on bandwidth instead would take the 2.4 GHz CAD term everywhere, putting the
-        LONG_FAST slot at 40.4 ms rather than 28.1.
+        Selecting on bandwidth would put the LONG_FAST slot at 40.4 ms rather than 28.1.
         """
         return bool(self.conf.REGION.get("wide_lora", False))
 
@@ -2667,8 +2650,7 @@ class Mesh:
     def _draw_slots(self, node, bound):
         """random(0, bound): integer and half-open, so `bound` itself never comes out.
 
-        Under the legacy profile this stays a continuous draw, which removes a class of collision
-        the firmware produces routinely: two nodes can only pick the same slot if slots are discrete.
+        Continuous under `legacy`, which removes collisions only discrete slots can produce.
         """
         if self.nodes[node].profile.quantised_slots:
             bound = int(bound)
@@ -2690,9 +2672,7 @@ class Mesh:
     def _rebroadcasts_early(self, node, packet=None):
         """RadioInterface::shouldRebroadcastEarlyLikeRouter - who skips the router offset.
 
-        This tree says ROUTER and nothing else. Up to 2.6 the test was inline in
-        getTxDelayMsecWeighted and admitted REPEATER as well; 2.7 added CLIENT_BASE for traffic to or
-        from one of its favourites, then 2.8 removed both again.
+        ROUTER alone in this tree, and not in every earlier one - TRANSPORT.md.
         """
         me = self.nodes[node]
         mode = me.profile.early_rebroadcast
@@ -2709,9 +2689,7 @@ class Mesh:
     def tx_delay_weighted(self, node, snr, packet=None):
         """RadioInterface::getTxDelayMsecWeighted - the delay for relaying someone else's packet.
 
-        High SNR means a large window, because a node that heard the packet loudly is close to the
-        sender and its relay adds least. Everyone who is not an early rebroadcaster waits out the
-        whole router window first, so routers go first.
+        A loud packet means a close sender and a large window, and non-routers wait one out first.
         """
         profile = self.nodes[node].profile
         cw = self.cw_size(node, snr)
@@ -2726,8 +2704,7 @@ class Mesh:
     def tx_delay_weighted_worst(self, node, snr):
         """RadioInterface::getTxDelayMsecWeightedWorst - the far end of a non-router's window.
 
-        This is the whole definition of "late": ROUTER_LATE relays at the point everyone else would
-        already have given up on.
+        The whole definition of "late": ROUTER_LATE relays where everyone else has given up.
         """
         profile = self.nodes[node].profile
         return (2 * profile.cw_max + 2 ** self.cw_size(node, snr)) * self.slot_time_ms()
@@ -2735,8 +2712,7 @@ class Mesh:
     def retransmission_msec(self, node, packet):
         """RadioInterface::getRetransmissionMsec - long enough for a send and an ACK to come back.
 
-        Assumes the worst contention window and a responder at half the SNR range, then adds the
-        4.5 s the firmware allows for constructing, processing and reconstructing a packet.
+        The worst window, a responder at half the SNR range, and 4.5 s of packet handling.
         """
         airtime = int(self.airtime_ms(packet.length, packet.coding_rate))
         util = self.nodes[node].channel_utilization_percent(self.now)
@@ -2778,11 +2754,7 @@ class Mesh:
     def send(self, node, packet, token=None):
         """RadioLibInterface::send - enqueue, then set the transmit delay.
 
-        The radio holds the packet rather than discarding it, so a congested mesh shows up as
-        latency and as a full queue. Queue overflow is the only drop.
-
-        `token` is the caller's handle on a packet it may want to cancel: a dict with `sent`,
-        `event` and `entry` keys.
+        `token` is the caller's cancel handle: a dict of `sent`, `event` and `entry`.
         """
         radio = self.nodes[node]
         if not radio.online:
@@ -2805,9 +2777,7 @@ class Mesh:
     def _replace_lower_priority(self, radio, entry):
         """MeshPacketQueue::replaceLowerPriorityPacket - make room, or refuse to.
 
-        A full queue does not simply reject the newcomer: the firmware looks for something it would
-        rather lose, in three passes, each giving up the back of the queue as the packet furthest
-        from being sent. Only reachable once the queue holds a mix of ready and deferred packets.
+        Three passes for something it would rather lose, from the back of the queue forward.
         """
         if not radio.queue:
             return False
@@ -2835,11 +2805,8 @@ class Mesh:
             # 3. Nothing ready to give up. Drop the back if its deadline has already passed: a
             #    ready packet always beats an overdue deferred one.
             #
-            #    The wait-time comparison below is unreachable today. send() is the only caller and
-            #    always arrives with a freshly built QueueEntry, whose tx_after is 0.0, so the first
-            #    branch always wins. It is kept because the firmware's own comparison is between two
-            #    overdue packets and a future caller could pass a deferred entry; nothing here
-            #    currently constructs one.
+            #    Unreachable today: send() is the only caller and always brings a fresh entry with
+            #    tx_after 0.0. Kept because the firmware compares two overdue packets here.
             if self.now >= back.tx_after:
                 new_goes_first = not entry.tx_after or (
                     self.now >= entry.tx_after
@@ -2863,15 +2830,7 @@ class Mesh:
     def _enqueue(radio, entry):
         """MeshPacketQueue::enqueue.
 
-        From 2.5 this is an upper_bound insert into a sorted list: the deferred group sorts behind
-        the ready one always, the ready group is priority order, and at equal priority a packet
-        already on the mesh sorts ahead of one we originated. Within the deferred group it is
-        deadline order. Keeping the groups apart is what makes the late-rebroadcast window work: a
-        clamped packet goes to the back and stays there until its time comes.
-
-        2.4 has no late group and no relayed-first tie-break: it holds a max-heap ordered by
-        priority alone, ties to the lower packet id. Pop order under that comparator is a total
-        order, so a sorted insert reproduces the sequence the heap dequeues.
+        A sorted insert from 2.5, a priority max-heap in 2.4 - TRANSPORT.md.
         """
         profile = radio.profile
         if not profile.queue_late_first:
@@ -2914,9 +2873,7 @@ class Mesh:
     def set_transmit_delay(self, node):
         """RadioLibInterface::setTransmitDelay - decide when to next look at the queue.
 
-        A packet we relayed carries the RSSI and SNR it arrived with, which is how the firmware
-        tells it from something we composed: a locally generated packet has both at zero, and the
-        radio's noise floor offset guarantees a received one never does.
+        A relayed packet is told from a composed one by the RSSI and SNR it arrived with.
         """
         radio = self.nodes[node]
         if not radio.queue:
@@ -2995,8 +2952,7 @@ class Mesh:
     def clamp_to_late_rebroadcast_window(self, node, packet):
         """RadioLibInterface::clampToLateRebroadcastWindow.
 
-        ROUTER_LATE heard someone else relay this. It will not cancel - that is the role's whole
-        point - but it moves to the back of the window, so it only speaks if the mesh still needs it.
+        ROUTER_LATE does not cancel on hearing a relay; it moves to the back of the window.
         """
         entry = self._cancel_sending(node, packet.id, only_ready=True)
         if entry is None:
@@ -3051,15 +3007,12 @@ class Mesh:
         interferers = self._overlapping(tx)
         self._prune()
 
-        # A radio cannot hear while it is keying up. A router relays everything it hears, so it
-        # spends a large share of the time deaf, and the node beside it - same traffic, fewer
-        # relays - is the better listener.
+        # A radio cannot hear while it is keying up, so a router - relaying everything - spends a
+        # large share of its time deaf, and the node beside it is the better listener.
         transmitting = {o.tx_node for o in interferers}
 
-        # One lift for the whole transmission, taken at its start: a duct does not open or close
-        # inside a single frame. Above zero it does two things at once - it brings pairs that are not
-        # links into range, and it makes every existing link louder, which is what turns the extra
-        # reach into extra contention rather than a free gain.
+        # One lift for the whole transmission, taken at its start. It both admits new pairs and
+        # makes existing links louder, which is what turns reach into contention. TRANSPORT.md.
         lift = self.lift_db(tx.start)
         audience = self.neighbours[tx.tx_node]
         if lift:
@@ -3070,10 +3023,8 @@ class Mesh:
                 if self.rssi[tx.tx_node][j] + lift >= sensitivity
             ]
 
-        # AirTime charges every packet a receiver could hear against its channel utilisation,
-        # decoded or not, and that figure is what sizes the contention window for our own traffic.
-        # Under a duct that figure rises for everyone, which is how an operator's mesh gets slower on
-        # the evening it appears to get bigger.
+        # Charged for every packet a receiver could hear, decoded or not, because that is what
+        # sizes our own contention window. A duct raises it for everyone. TRANSPORT.md.
         cad_floor = sensitivity - 3
         # The transmitter first: its own transmission occupied its channel too, and charging it here
         # rather than at start keeps every interval arriving in end order.
@@ -3116,9 +3067,8 @@ class Mesh:
             self._receive(rx, packet, rssi)
 
     def _survives_capture(self, tx, rx, rssi, interferers, sensitivity, lift=0.0):
-        # The interferers are on the air at the same instant, so the same duct lifts them too. Leaving
-        # them unlifted would have ducting deliver distant packets into a channel that had gone
-        # magically quiet, which is the opposite of what a duct does to a mesh.
+        # Lifted too, being on the air at the same instant: leaving them out would deliver distant
+        # packets into a channel that had gone magically quiet.
         audible = [
             o
             for o in interferers
@@ -3149,14 +3099,7 @@ class Mesh:
     def _lost_to_phy(self, rssi, length, coding_rate=None, rx=None, start=0.0, end=0.0):
         """The empirical SNR-to-PER curve. More redundancy survives a worse link.
 
-        A noise excursion arrives as a penalty on RSSI rather than as a change to the floor, because
-        the curve reads only their difference: 4 dB more noise and 4 dB less signal are the same
-        packet. That keeps the vendored `radio_loss` a clean copy, and it is why the excursion is
-        applied per reception - the floor a packet met is a property of when and where it was heard,
-        not of the configuration.
-
-        Exactly one random number is drawn, whatever the profile, so turning a profile on does not
-        move the stream and every existing run reproduces.
+        One draw whatever the profile, and noise arrives as an RSSI penalty - TRANSPORT.md.
         """
         import lib.radio_loss as radio_loss
 
@@ -3189,9 +3132,7 @@ class Mesh:
     def take_down(self, index):
         """Turn a node off. It stops transmitting and stops hearing anything.
 
-        Not a deletion: every other node keeps its NodeDB record for this one and keeps believing
-        whatever it last learned, including a next hop pointing through it. Failure is not
-        broadcast, so the gap between what the mesh believes and what is true has to be modelled.
+        Not a deletion: the mesh keeps believing what it learned, because failure is not broadcast.
         """
         node = self.nodes[index]
         if not node.online:
@@ -3208,8 +3149,7 @@ class Mesh:
     def bring_up(self, index):
         """Turn a node back on, with everything it knew intact.
 
-        A real node that reboots loses far more than this, but a node that was merely out of range
-        loses nothing, and both are "offline" to the rest of the mesh. `wipe` covers the other case.
+        The out-of-range case; `wipe` is the one that reboots.
         """
         node = self.nodes[index]
         if node.online:
@@ -3245,9 +3185,8 @@ class Mesh:
         """
         inside = set(group)
         cut = 0
-        # Both directions, because links are not reciprocal here - `_build_links` gives each pair an
-        # asymmetry draw, so A can hear B without B hearing A. Scanning only outward from the group
-        # leaves every inbound-only link intact, and the mesh stays connected through them.
+        # Both directions, because links are not reciprocal: scanning only outward would leave
+        # every inbound-only link intact and the mesh connected through them.
         for a in range(len(self.nodes)):
             for b in list(self.neighbours[a]):
                 if (a in inside) != (b in inside):

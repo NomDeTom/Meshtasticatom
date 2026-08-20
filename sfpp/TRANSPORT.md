@@ -474,3 +474,58 @@ pair is never offered a packet at all.
 
 Duct reach is precomputed from the widest lift any configured duct can produce, so a delivery
 filters a candidate set rather than scanning all *n* receivers per transmission.
+
+## Reception
+
+A radio cannot hear while it is keying up. A router relays everything it hears, so it spends a
+large share of the time deaf, and the node beside it - same traffic, fewer relays - is the better
+listener.
+
+`AirTime` charges every packet a receiver *could* hear against its channel utilisation, decoded or
+not, and that figure sizes the contention window for our own traffic. Under a duct it rises for
+everyone, which is how an operator's mesh gets slower on the evening it appears to get bigger.
+
+One duct lift applies to a whole transmission, taken at its start - a duct does not open or close
+inside a frame. Above zero it does two things at once: it brings pairs that are not links into
+range, and it makes every existing link louder, which is what turns extra reach into extra
+contention rather than a free gain. Interferers are lifted too; leaving them unlifted would have
+ducting deliver distant packets into a channel that had gone magically quiet.
+
+A noise excursion arrives as a penalty on RSSI rather than as a change to the floor, because the
+PER curve reads only their difference - 4 dB more noise and 4 dB less signal are the same packet.
+That keeps the vendored `radio_loss` a clean copy, and it is why the excursion is applied per
+reception: the floor a packet met is a property of when and where it was heard, not of the
+configuration. Exactly one random number is drawn whatever the profile, so turning a profile on does
+not move the stream.
+
+## Failure
+
+`take_down` is not a deletion. Every other node keeps its NodeDB record and keeps believing what it
+last learned, including a next hop pointing through the dead node. Failure is not broadcast, so the
+gap between what the mesh believes and what is true has to be modelled. `bring_up` restores a node
+with everything it knew - a node merely out of range loses nothing, where a reboot loses far more,
+and `wipe` covers that case.
+
+Partitioning scans both directions, because links are not reciprocal: `_build_links` gives each pair
+an asymmetry draw, so A can hear B without B hearing A, and scanning only outward would leave every
+inbound-only link intact and the mesh connected through them.
+
+## The queue's order
+
+`MeshPacketQueue::enqueue`. From 2.5 this is an upper-bound insert into a sorted list: the deferred
+group always sorts behind the ready one, the ready group is priority order, and at equal priority a
+packet already on the mesh sorts ahead of one we originated; within the deferred group it is
+deadline order. Keeping the groups apart is what makes the late-rebroadcast window work - a clamped
+packet goes to the back and stays there until its time comes.
+
+2.4 has no late group and no relayed-first tie-break: a max-heap ordered by priority alone, ties to
+the lower packet id. Pop order under that comparator is a total order, so a sorted insert reproduces
+the sequence the heap dequeues.
+
+`setTransmitDelay` tells a relayed packet from a composed one by the RSSI and SNR it arrived with: a
+locally generated packet has both at zero, and the radio's noise floor offset guarantees a received
+one never does.
+
+`clampToLateRebroadcastWindow` is what ROUTER_LATE does when it hears someone else relay: it will
+not cancel - that is the role's point - but it moves to the back of the window, so it only speaks if
+the mesh still needs it.
