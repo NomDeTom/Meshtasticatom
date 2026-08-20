@@ -146,17 +146,13 @@ PRESET_THROTTLING_DEFAULT = 0.075
 # v2.7.17, so the 2.7 profile - which is v2.7.21 - does not have it.
 SMALL_MESH_SPEEDUP = ((10, 0.6), (20, 0.7), (30, 0.8))
 
-# `--congestion-input utilisation` has no node count to feed the coefficient, so busy-ness is mapped
-# onto the same 40-node pivot the throttle turns at. The firmware has no such mode - this is the
-# candidate input round four exists to price, not a reconstruction of anything - and the mapping is a
-# stated assumption: 40% busy reads as the 40 nodes at which throttling begins.
+# No firmware has this mode: busy-ness is mapped onto the same 40-node pivot the throttle
+# turns at, as a stated assumption. MODEL.md.
 UTILISATION_PIVOT_PERCENT = 40.0
 UTILISATION_PIVOT_NODES = 40
 
-# The node count at which the firmware starts throttling at all - Default.h, where it is the literal
-# 40 in `numOnlineNodes > 40`. Below it every profile leaves the interval alone. Exposed as a knob
-# rather than left as a constant because "should the throttle start sooner or later" is a question
-# about deployment advice, and answering it needs the pivot moved rather than described.
+# Default.h's literal 40 in `numOnlineNodes > 40`; below it every profile leaves the interval
+# alone. A knob rather than a constant because moving it is how the advice gets tested.
 CONGESTION_PIVOT = 40
 
 
@@ -171,16 +167,7 @@ def congestion_coefficient(
 ):
     """The firmware's own broadcast-interval scaling, Default.h congestionScalingCoefficient.
 
-    A multiplier on every periodic broadcast interval. Three models, one per era:
-
-    `pivot` is the node count below which no profile throttles at all, 40 in the firmware.
-
-    - `flat` (2.4): 1.0 to the pivot, then 0.075 per extra node whatever the preset.
-    - `preset` (2.5, 2.6): a per-preset factor, no throttle at all on SHORT_FAST or SHORT_TURBO, and
-      a coefficient *below* 1.0 up to 30 nodes - a small mesh is deliberately made chattier.
-    - `sf_bw` (2.7, 2.8): 2^SF / (BW_kHz * divisor), which on LONG_FAST is 0.08192 per node, so a
-      150-node mesh stretches its intervals by a factor of ten. The divisor is 100, or 25 in event
-      mode.
+    A multiplier on every periodic broadcast interval; three models, one per era - MODEL.md.
     """
     if model == "preset":
         for bound, coefficient in SMALL_MESH_SPEEDUP:
@@ -205,13 +192,7 @@ def congestion_coefficient(
 def observed_senders(mesh, window_ms=7200_000.0):
     """Distinct senders heard recently, mesh-wide.
 
-    What the mesh can see of its own size, as against what a hot store can hold: this is bounded by
-    the packet history rather than by MAX_NUM_NODES, so it keeps rising after the hot-store count
-    has saturated. Reported next to the congestion coefficient so that saturation is visible in the
-    output rather than inferred from it.
-
-    The sender comes from the PacketHistory record. Counting packet ids instead would count packets,
-    not senders, since every packet carries its own id.
+    Bounded by packet history rather than MAX_NUM_NODES, so hot-store saturation is visible.
     """
     now = mesh.now
     senders = set()
@@ -228,9 +209,7 @@ def observed_senders(mesh, window_ms=7200_000.0):
 class Generator:
     """Schedules every node's originated traffic across the run, then hands it to the mesh.
 
-    Emission is a Poisson process per class per node - exponential gaps rather than a fixed period,
-    because synchronised senders would understate collisions and every node in a real mesh has its
-    own phase.
+    Poisson per class per node: synchronised senders would understate collisions. MODEL.md.
     """
 
     def __init__(
@@ -258,15 +237,8 @@ class Generator:
         self.mix = mix
         self.text_scale = text_scale
         preset = mesh.conf.current_preset
-        # Device-originated broadcasts stretch with mesh size; user-typed text does not, because
-        # nothing in the firmware throttles a person deciding to send a message. Which era's
-        # throttle applies comes from the mesh's own default profile, so a 2.5 mesh gets the
-        # per-preset table and its small-mesh speedup rather than 2.8's SF/BW curve.
-        #
-        # `adaptive` recomputes the coefficient per node from that node's own online count at the
-        # moment it would send, which is what Default::getConfiguredOrDefaultMsScaled does on every
-        # interval. `static` computes one mesh-wide coefficient up front - what this generator used
-        # to do, and what earlier runs were measured under.
+        # Device broadcasts stretch with mesh size and user text does not, under whichever era's
+        # throttle the mesh's own profile carries. adaptive vs static: MODEL.md.
         profile = mesh.nodes[0].profile if mesh.nodes else None
         self.congestion_mode = congestion_mode if congestion_scaling else "off"
         self.congestion_model = (
@@ -276,23 +248,14 @@ class Generator:
         self.sf = preset["sf"]
         self.bw = preset["bw"]
         self.online_cap = online_cap
-        # Which quantity drives the throttle. `hotstore` is what the firmware does and is bounded by
-        # MAX_NUM_NODES, so it saturates on a mesh larger than the store - the pathology round four
-        # exists to price. `truesize` is the unbounded ideal, the upper bound on what a corrected
-        # input could buy. `utilisation` scales on measured channel busy-ness instead of a node count,
-        # which is what the throttle actually cares about and cannot be bounded by memory.
+        # Which quantity drives the throttle: the firmware's bounded hot store, the unbounded
+        # ideal, or measured busy-ness. The arm round four exists to price - MODEL.md.
         self.congestion_input = congestion_input
         # Where the throttle starts. The firmware's 40 is a constant; moving it is the only way to
         # ask whether a mesh should begin throttling sooner or later than it does.
         self.congestion_pivot = congestion_pivot
-        # The coefficient falls below 1 on the 2.5 and 2.6 models, which speed a small mesh up.
-        # Thinning needs a candidate rate at least as high as anything later selected from it, so
-        # candidates are generated against the most permissive coefficient the model can produce.
-        # Across every profile present, not just node zero's. On a mixed mesh a node whose own
-        # model is more permissive than the sampled floor can never be thinned - floor/coefficient
-        # exceeds 1 - while its candidates were generated at the stricter rate, so it silently sends
-        # less than its own model calls for. That is exactly the --legacy-fraction arm the parameter
-        # exists to characterise.
+        # Across every profile present, not just node zero's: candidates must be generated at
+        # least as fast as anything later thinned from them. MODEL.md.
         models = {node.profile.congestion_model for node in mesh.nodes} or {
             self.congestion_model
         }
@@ -341,25 +304,20 @@ class Generator:
             []
         )  # message_hash in origination order; the chain counter follows it
         self.originated = {c.name: 0 for c in mix}
-        # The denominator for reception-over-time. Kept here rather than derived later because only
-        # the generator knows when it composed something; `bin_ms` of 0 leaves it entirely inert, so a
-        # run that does not ask for the series does not pay for it.
+        # The denominator for reception-over-time: only the generator knows when it composed
+        # something. A bin_ms of 0 leaves it inert, so a run without the series pays nothing.
         self.bin_ms = 0.0
         self.originated_bins = {}
         self.archive_dms = archive_dms
-        # DM outcomes. `dm_sent` is packet id -> (sender, target, sent_at); the campaign resolves
-        # each against whether the target ever saw it, so success is measured at the intended
-        # recipient rather than inferred from the flood.
+        # packet id -> (sender, target, sent_at). Resolved against whether the target ever saw
+        # it, so success is measured at the recipient rather than inferred from the flood.
         self.dm_sent = {}
         self.dm_no_key = 0
         self.dm_no_addressable = 0
 
         node_count = len(mesh.nodes)
-        # Who can be either end of a DM. A router is a piece of infrastructure on a mast: people do
-        # not chat from it and nobody DMs it, and the traffic addressed to one in the field is an
-        # admin session, which the campaign models separately. CLIENT_MUTE is included as a
-        # recipient and a sender - a muted node does not REBROADCAST, which is not the same as not
-        # having a user - so the pool is every node that is not router-like.
+        # Every node that is not router-like: nobody chats from a mast, and CLIENT_MUTE still
+        # has a user even though it does not rebroadcast. MODEL.md.
         self.dm_pool = [
             i
             for i, node in enumerate(mesh.nodes)
@@ -374,10 +332,8 @@ class Generator:
         ]
         for cls in mix:
             if cls.directed:
-                # A class with no rate draws NOTHING, not even its emitter set. rng.sample() would
-                # advance the shared stream and shift every schedule after it, so a run that asks for
-                # no DMs would stop matching the same run made before DMs existed - which is the one
-                # regression check this branch relies on most.
+                # A class with no rate draws nothing, not even its emitter set: a sample() here
+                # would shift every later schedule off the shared stream.
                 if cls.per_hour <= 0 or not self.dm_pool:
                     self.emitters[cls.name] = set()
                     continue
@@ -394,19 +350,7 @@ class Generator:
     def node_congestion(self, node_index):
         """The coefficient this node would apply right now, from its own view of the mesh.
 
-        `congestion_input` chooses what that view is, which is the whole point of the arm:
-
-        - `hotstore` is what the firmware does. getNumOnlineMeshNodes() walks the hot store, so the
-          input is bounded twice - by the store, which cannot hold more than MAX_NUM_NODES, and by
-          the two-hour NUM_ONLINE_SECS window - and therefore saturates on a mesh larger than the
-          store, which is exactly where the throttle is most needed. The node counts itself, as the
-          firmware does by iterating a table that contains its own record.
-        - `truesize` is the unbounded ideal: the mesh as it really is, which no device can see. The
-          upper bound on what a corrected input could buy.
-        - `utilisation` drops the node count entirely and scales on measured channel busy-ness,
-          which is what the throttle actually cares about and is the one input memory cannot bound.
-          The busy share is mapped onto the same 40-node pivot so the three are comparable: 0% busy
-          reads as an empty mesh, 100% as one saturated well past the pivot.
+        `congestion_input` chooses what that view is, which is the point of the arm - MODEL.md.
         """
         if self.congestion_mode != "adaptive":
             return self.congestion
@@ -437,18 +381,15 @@ class Generator:
             if cls.archived:
                 rate = cls.per_hour * self.text_scale
             else:
-                # One operator-set interval for every device class when given, otherwise the per-class
-                # mix. Congestion scaling and the region throttle apply on top either way, so this
-                # measures the operator's choice rather than replacing the firmware's own scaling.
+                # An operator-set interval for every device class, or the per-class mix. Congestion
+                # scaling and the region throttle still apply on top of either.
                 base = (
                     3600.0 / self.broadcast_interval_s
                     if self.broadcast_interval_s
                     else cls.per_hour
                 )
-                # Under `adaptive` the coefficient is not known until the moment of sending, so
-                # candidates are laid down at the most permissive rate the model allows and thinned
-                # at emit time against each node's own view. Under `static` the coefficient is a
-                # constant and divides the rate directly.
+                # adaptive lays candidates down at the most permissive rate and thins at emit
+                # time; static divides the rate by one constant. MODEL.md.
                 rate = base / self.throttle.get(cls.name, 1)
                 rate = (
                     rate / self.congestion_floor
@@ -464,9 +405,8 @@ class Generator:
                 if diurnal
                 else 1.0
             )
-            # Non-homogeneous Poisson by thinning: generate at the peak rate and keep each candidate
-            # with probability weight(t)/peak. Simpler and less error-prone than integrating the rate
-            # curve, and it produces the right arrival process rather than a rescaled uniform one.
+            # Non-homogeneous Poisson by thinning: generate at peak, keep with weight(t)/peak.
+            # The right arrival process, rather than a rescaled uniform one.
             mean_gap_ms = 3600_000.0 / (rate * peak)
             for node in self.emitters[cls.name]:
                 t = self.rng.expovariate(1.0 / mean_gap_ms)
@@ -484,20 +424,13 @@ class Generator:
 
         def emit(node=node, cls=cls, size=size):
             if adaptive:
-                # Thinning against the node's live coefficient: a candidate survives with
-                # probability floor/coefficient, so a node whose store says the mesh is large sends
-                # proportionally less often, and one on a small 2.5 mesh sends more often.
+                # A candidate survives with probability floor/coefficient, so a node whose store
+                # says the mesh is large sends proportionally less often.
                 if self.rng.random() > self.congestion_floor / self.node_congestion(node):
                     return
             if cls.directed:
-                # One peer, chosen fresh each time. Real DMs run in conversations rather than to a
-                # uniform random stranger, but a persistent pairing would make the result depend on
-                # which pairs the draw happened to place near each other; uniform keeps the airtime
-                # honest without claiming to model who talks to whom.
-                # People DM someone they can see. The firmware's DM UI lists the peers whose keys
-                # this node holds, so a target it cannot encrypt to is one the user could not have
-                # picked - drawing uniformly from the whole mesh instead makes the measurement mostly
-                # about key availability (91% of attempts on a 2 h Batumi run) rather than delivery.
+                # A fresh peer each time, from those whose keys this node holds - the list the
+                # firmware's DM UI shows. Drawing from the whole mesh measures keys, not delivery.
                 radio = self.mesh.nodes[node]
                 peers = [
                     p
@@ -561,9 +494,7 @@ class Generator:
     def _make_object(self, node, packet_id, size, destination=BROADCAST):
         """The object the archive would hold: ciphertext stands in at the same length.
 
-        The capture the earlier runs used was already decrypted, so it did the same thing. Length
-        and uniqueness are all the hash needs, and using the real derivation keeps the short IDs and
-        checksum contributions identical to the ones the firmware would compute.
+        Length and uniqueness are all the hash needs, and the derivation is the firmware's.
         """
         encrypted = self.rng.randbytes(size)
         return TextObject(
