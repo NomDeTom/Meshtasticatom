@@ -4,67 +4,22 @@ import unittest
 import lib.discrete_event_sim
 
 class TestDiscreteEventSim(unittest.TestCase):
-    '''manually replicate a 10-node default configuration discrete sim test as
-    if executing `loraMesh.py 10`. Set up the config to match our previous
-    known good test run, run the sim, then check against some hardcoded
-    results from a previous known good test run.
+    """A 10-node default run, as if `loraMesh.py 10`, checked against known-good numbers.
 
-    This will make it easier to make big changes and make sure the behavior
-    of the sim doesn't change. Or if the prior behavior was mistaken or
-    incorrect, we can update this test.
-    '''
+    A change that moves them is either a bug or an improvement; decide which, then update these.
+    """
     # TODO: add many more tests for SimulationResults, especially finalize method
 
     def test_simulation_results_finalization(self):
-        """SimulationResults is a glorified dictionary, but the finalize
-        method does a notable number of simple calculations and makes a
-        notable number of assumptions on keys that exist. Do some
-        rudimentary testing with mock types, since it expects lists of
-        MeshNode and MeshPacket objects.
+        """finalize() assumes a lot of keys exist and derives a lot from them.
+
+        Mock nodes and packets, since it wants lists of MeshNode and MeshPacket.
         """
         from lib.config import CONFIG
         conf = CONFIG
 
-        # nodes must have attributes:
-        # - nodeid (int)
-        # - usefulPackets (int)
-        # - txAirUtilization (float?)
-        # - droppedByDelay (int)
-        # - isMoving (boolean)
-        # - gpsEnabled (boolean)
-
-        # packets must have attributes:
-        # (lists which are as long as there are nodes)
-        # - collidedAtN list (boolean)
-        # - sensedByN list (boolean)
-        # - receivedAtN list (boolean)
-
-        # first-order results must have keys:
-        # - nodes (list of nodes)
-        # - packets (list of packets)
-        # - delays (list of ...floats?)
-        # - packetIdsIssued - total # of packet ids allocated
-        # - totalPairs (int)
-        # - noLinks (int)
-
-        # Things which are computed (keys in results):
-        # *: conditional on a config setting
-        # +: gated by division-by-zero check of some value (may be nan)
-        # - potentialReceivers *
-        # - sent
-        # - nrCollisions
-        # - nrSensed
-        # - nrReceived
-        # - nrUseful
-        # - meanDelay
-        # - txAirUtilizationRate *+
-        # - collisionRate +
-        # - nodereach *+
-        # - usefulness +
-        # - delayDropped
-        # - noLinkRate *+
-        # - movingNodes *
-        # - gpsEnabled *
+        # The mocks below are the contract: what finalize() reads off a node and a packet.
+        # What it computes from them is in docs/metrics.md; rates may be nan on an empty run.
 
         class MockNode:
             def __init__(self, nodeid: int):
@@ -95,11 +50,8 @@ class TestDiscreteEventSim(unittest.TestCase):
                 self.txNodeId = 0
                 self.origTxNodeId = 0
 
-        # mock situation: 3 nodes who can all mutually see each other, no DMs,
-        # moving nodes, asymmetric links (default config)
-        # (complete graph. Triangle)
-        # 10 messages and 10 packets
-        # I probably won't make this perfect, but want some basic numbers
+        # Three nodes that all hear each other, 10 broadcast messages and 10 packets,
+        # on the default config: moving nodes, asymmetric links, no DMs.
         conf.NR_NODES = 3
         mock_nodes = [MockNode(i) for i in range(3)]
         mock_nodes[0].isMoving = True
@@ -170,11 +122,8 @@ class TestDiscreteEventSim(unittest.TestCase):
 
         all_results = []
 
-        # somewhat lazily test with connectivity map optimization on and off,
-        # to make sure the optimization doesn't change any results/the simulation
-        # is consistent regardless of this optimization. Further simulation changes
-        # that warrant this kind of testing should be very carefully considered,
-        # since that leads to exponential growth in configurations to test.
+        # Both settings of the connectivity-map optimization, which must not change a
+        # result. Add a second such axis sparingly: the configurations multiply.
         for enable_optimization in [True, False]:
             # test against optimization being enabled/disabled
             conf.ENABLE_CONNECTIVITY_MAP = enable_optimization
@@ -198,9 +147,7 @@ class TestDiscreteEventSim(unittest.TestCase):
             results = sim.get_results()
             all_results.append(results)
 
-        # look at just specific simulation results for now. May go as deep as
-        # comparing MeshPacket objects later if that seems useful and we feel
-        # like adding comparison functions to those objects.
+        # Named results only. Comparing MeshPacket objects would need equality on them.
         facets = [
             'potentialReceivers',
             'sent',
@@ -296,15 +243,8 @@ class TestDiscreteEventSim(unittest.TestCase):
 
         appMessages = results["appMessages"]
 
-        # Begin actual tests, comparing against a hardcoded 'known
-        # good' run. If these fail then a change has impacted the
-        # results a simulation produces. This could be unintended and
-        # a bug, it could be a known consequence of a default config
-        # change, or it could be because of an improvement or
-        # correction to the sim. Whether to keep these hardcoded values
-        # and modify your changes, or to update the hardcoded "known good"
-        # simulation results is up to your judgement for which is
-        # appropriate. Be cautious!
+        # Known-good numbers. A failure here means a change moved the simulation: decide
+        # whether that was the bug or the fix before updating them.
         self.assertEqual(appMessages, 179, "expected number of application messages created")
         sent = results['sent']
         potentialReceivers = results['potentialReceivers']

@@ -42,10 +42,7 @@ def generated_positions(node_configs):
 class TestLoraMeshCli(unittest.TestCase):
     """Regression tests for the top-level CLI wrapper.
 
-    loraMesh.py used to run a simulation while being imported and mutate global
-    process state while still rejecting arguments. These tests lock in the more
-    tool-friendly behavior: import is quiet, parser failures are side-effect
-    free, and accepted headless runs can be used by CI.
+    Import is quiet, a rejected argument changes no global state, and headless runs work in CI.
     """
 
     def parse_quietly(self, conf, args):

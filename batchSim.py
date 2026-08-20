@@ -49,10 +49,9 @@ numberOfNodes = [3, 5, 10, 15, 30]
 # Progress-logging process
 ###########################################################
 def simulation_progress(env, currentRep, repetitions, endTime):
-    """
-    Keep track of the ratio of real time per sim-second over
-    a fixed sliding window, so if the simulation slows down near the end,
-    the time-left estimate adapts quickly.
+    """Track real time per sim-second over a sliding window.
+
+    A window rather than a total, so the estimate adapts when a run slows down near the end.
     """
     startWallTime = time.time()
     lastWallTime = startWallTime

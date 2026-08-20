@@ -150,9 +150,8 @@ def build_lora_args(args, policy_name):
     if extra_args[:1] == ["--"]:
         extra_args = extra_args[1:]
 
-    # The comparison intentionally enables packet-level loss and capture-aware
-    # collisions for every policy. Without those two physics flags, CR and TX
-    # power changes mostly affect airtime accounting, not delivery behavior.
+    # Packet loss and capture-aware collisions are on for every policy: without them,
+    # CR and TX power move airtime accounting rather than delivery.
     return [
         "--preset",
         args.preset,

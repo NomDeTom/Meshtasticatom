@@ -113,9 +113,8 @@ class TestClutter(unittest.TestCase):
             first = clutter_path_features(conf, Point(0, 0, 1), Point(0, 0, 1))
             self.assertEqual(first["urban_fraction"], 1.0)
 
-            # The same CSV can be projected around a different scenario origin.
-            # Include origin in the grid cache key so map/preset inputs cannot
-            # accidentally reuse stale cell coordinates.
+            # One CSV can be projected around a different origin, so the origin is part of
+            # the cache key: otherwise a second scenario reuses the first one's cells.
             conf.GEO_ORIGIN_LON = 10.01
             second = clutter_path_features(conf, Point(0, 0, 1), Point(0, 0, 1))
             self.assertEqual(second["water_fraction"], 1.0)

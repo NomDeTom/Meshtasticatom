@@ -8,52 +8,33 @@ class TestCommonFunctions(unittest.TestCase):
 
     def test_calc_dist(self):
         message = "sanity-checking our euclidean distance calculation"
-        # test some pythagorean triple triangles https://en.wikipedia.org/wiki/Pythagorean_triple
-        # (3, 4, 5)
-        # x diff: 3
-        # y diff: 4
+        # Pythagorean triples, so the expected distance is exact: (3, 4, 5) here.
         p1 = (-1, -1)
         p2 = (2, 3)
         self.assertEqual(lib.common.calc_dist(p1[0], p2[0], p1[1], p2[1]), 5.0, message)
 
         # (5, 12, 13)
-        # x diff: 5
-        # y diff: 12
         p1 = (-1, -1)
         p2 = (4, 11)
         self.assertEqual(lib.common.calc_dist(p1[0], p2[0], p1[1], p2[1]), 13.0, message)
 
-        # test some pythagorean quadruple cuboids https://en.wikipedia.org/wiki/Pythagorean_quadruple
-        # (1, 2, 2, 3)
-        # x diff: 1
-        # y diff: 2
-        # z diff: 2
+        # Pythagorean quadruples, the same trick in three dimensions: (1, 2, 2, 3).
         p1 = (-1, -1, -1)
         p2 = (0, 1, 1)
         self.assertEqual(lib.common.calc_dist(p1[0], p2[0], p1[1], p2[1], p1[2], p2[2]), 3.0, message)
 
         # (2, 3, 6, 7)
-        # x diff: 2
-        # y diff: 3
-        # z diff: 6
         p1 = (-1, -1, -1)
         p2 = (1, 2, 5)
         self.assertEqual(lib.common.calc_dist(p1[0], p2[0], p1[1], p2[1], p1[2], p2[2]), 7.0, message)
 
     def test_find_random_position(self):
-        # mock up the needed objects
-        # conf: config from lib.config.Config(). Must have
-        # - XSIZE, YSIZE, OX, OY, MINDIST, FREQ, PTX, GL, current_preset property
-        # - MODEL, LPLD0, GAMMA, D0
-        # (just use an actual config object)
-        # nodes: empty list OR list of nodes which must have:
-        #  - x, y attributes
+        # A real Config rather than a mock: the function reads enough of one that
+        # standing a fake up would just restate the class.
         from lib.config import CONFIG
         from lib.phy import estimate_path_loss
 
-        # TODO: iterate this test for each of our supported models, since they
-        # change the return value of estimate_path_loss. Also, each LoRa preset
-        # has its own sensitivity which changes radio range.
+        # TODO: run this for every path-loss model and preset - each changes the range.
         conf = CONFIG
 
         class MyNode:
@@ -69,11 +50,7 @@ class TestCommonFunctions(unittest.TestCase):
         upper_bound_y = conf.OY + conf.YSIZE/2
 
         nodes = []
-        # conditions that must be held:
-        # - found position can 'reach' at least one other node.
-        # - found position is not within conf.MINDIST of any other node.
-        # - found position is within defined scenario area.
-        # - a position is always returned
+        # A position always comes back: in the area, in reach of one node, MINDIST from all.
 
         # first node case
         position = lib.common.find_random_position(conf, nodes)
@@ -96,10 +73,8 @@ class TestCommonFunctions(unittest.TestCase):
         distance = lib.common.calc_dist(n.position.x, position[0], n.position.y, position[1])
         self.assertGreaterEqual(distance, conf.MINDIST, f"{position=} not within MINDIST of {n=}")
 
-        # this directly replicates the logic from the function which I dislike.
-        # Find a better way to test "found node can reach one other node",
-        # perhaps by pre-computing a max distance based on the config params
-        # we're using. There are lots of those, but they shouldn't change often.
+        # TODO: this restates the function under test. A precomputed max distance for
+        # these config parameters would be a real check rather than a mirror.
         pathLoss = estimate_path_loss(conf, distance, conf.FREQ)
         rssi = conf.PTX + 2*conf.GL - pathLoss
         self.assertGreaterEqual(rssi, conf.current_preset["sensitivity"], f"found {position=} is within radio range of {n=}")

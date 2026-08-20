@@ -227,9 +227,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
     a list of node configurations, or a list of None.
     """
 
-    # previous cli behavior:
-    # loraMesh.py [nr_nodes [router_type]] | [--from-file [file_name]]
-    # we'll replicate the intent with argparse, but more strictly, so flags like '--never--from-file' will no longer be accepted
+    # Replicates the old `loraMesh.py [nr_nodes [router_type]] | [--from-file [name]]`,
+    # more strictly: malformed flags like '--never--from-file' are no longer accepted.
     parser = argparse.ArgumentParser(
         description="run a single interactive or discrete Meshtastic network simulation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -276,9 +275,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         help="Load a packaged real-mesh scenario preset.",
     )
 
-    # the earlier behavior of specifying `router_type` as an optional positional arg with `nr_nodes` is difficult to exactly
-    # replicate with argparse, especially since nesting groups was an unintended feature and deprecated.
-    # Just implement as an optional argument, and manually treat it as incompatible with `--from-file`
+    # router_type was a second optional positional, which argparse cannot express alongside
+    # nr_nodes; it is a flag here, checked by hand for conflict with --from-file.
     parser.add_argument(
         "--router-type",
         type=conf.ROUTER_TYPE,
@@ -509,9 +507,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         parser.error("--dtp-very-strong-margin-db must be >= --dtp-strong-margin-db")
 
     if parsed_arguments.no_gui:
-        # Headless CI and smoke runs should not pay Tk startup, per-node
-        # plt.pause(), or the final interactive schedule plot. Keep this as an
-        # explicit flag so historical visual CLI behavior remains unchanged.
+        # Headless runs skip Tk startup, per-node plt.pause() and the schedule plot.
+        # An explicit flag, so the visual CLI behaves exactly as it always did.
         gui_enabled = False
         plot_enabled = False
 
@@ -573,9 +570,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         selected_preset = parsed_arguments.preset
         config = load_preset_node_configs(parsed_arguments.preset, period)
         scenario_origin = preset_origin(parsed_arguments.preset)
-        # Packaged scenarios can carry terrain/clutter grids matched to the
-        # node geometry. Use them by default, while still letting explicit CLI
-        # files override them for A/B comparison runs.
+        # A packaged scenario's own terrain and clutter match its geometry, so they are
+        # the default; explicit CLI files still override them for A/B runs.
         bundled_terrain_grid = preset_terrain_grid(parsed_arguments.preset)
         bundled_clutter_grid = preset_clutter_grid(parsed_arguments.preset)
         nr_nodes = len(config)
@@ -709,10 +705,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
             parser.error(f"could not load preset terrain: {err}")
 
     if not seeded_for_scenario:
-        # File, map, preset, and interactive scenarios do not need random state
-        # for node placement, but the later MAC/PHY simulation does. Seed only
-        # after successful scenario loading so rejected inputs leave caller RNG
-        # state alone.
+        # Seeded only once a scenario has loaded, so a rejected input leaves the caller's
+        # RNG untouched. Placement may not need it, but the MAC and PHY simulation does.
         random.seed(conf.SEED)
 
     if bounds_follow_node_config:
@@ -769,9 +763,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         apply_preset_radio_calibration(conf, parsed_arguments.preset)
 
     if parsed_arguments.verbose:
-        # Set this logger and lib.* to DEBUG only after the command line has
-        # resolved into a usable scenario. Failed parser inputs should not leave
-        # imported callers with noisier logging.
+        # Raised only once the command line resolves into a usable scenario, so a failed
+        # parse does not leave an importing caller with noisier logging.
         logger.setLevel(logging.DEBUG)
         lib_logger = logging.getLogger("lib")
         lib_logger.setLevel(logging.DEBUG)
@@ -808,9 +801,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
 
 def run_simulation(conf, node_config):
     """Run one configured simulation and print the historical CLI summary."""
-    # Keep the heavier simulation/GUI import out of module import. That makes
-    # CLI parsing unit-testable and lets CI/tools import loraMesh without
-    # starting Matplotlib/Tk plumbing as a side effect.
+    # Imported here, not at module scope, so parsing the CLI is testable and importing
+    # loraMesh does not start Matplotlib and Tk as a side effect.
     from lib.discrete_event_sim import DiscreteEventSim
 
     conf.update_router_dependencies()
