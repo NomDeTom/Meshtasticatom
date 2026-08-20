@@ -558,10 +558,9 @@ class Campaign:
         return int(value)
 
     def _place_servers(self, archive=True):
-        """Choose the archive positions. With `archive=False` they are marked and instrumented but
-        run nothing, so the same nodes in the same places can be measured as ordinary nodes.
+        """Choose the archive positions, or with `archive=False` mark them without running one.
 
-        Placement draws from its own stream, not the run's - TRAPS 12.
+        Draws from its own stream, not the run's - TRAPS 12.
         """
         strategy = Placement.BY_NAME[self.opts.place]
         wanted = self.server_count()
@@ -2225,10 +2224,7 @@ class Campaign:
     def _typical_nodes(self, observed, topo):
         """A few nodes worth actually printing, each labelled with what it stands for.
 
-        Chosen by observed reach, and two of the three histograms are in different units - MODEL.md.
-
-        One consequence worth stating: `truth` has no zero bucket, because a node is not its own peer,
-        while `observed` does - a direct reception has travelled no hops. That is not a discrepancy.
+        Chosen by observed reach, in two different units, and `truth` has no zero bucket - MODEL.md.
         """
         ranked = sorted(
             observed, key=lambda i: sum(observed[i]["counts"].values())
@@ -2479,8 +2475,7 @@ class Campaign:
 def _profile_for(opts):
     """The rule set, with the branch-only and compiled-out mechanisms the flags asked for.
 
-    --profile-flag stays alongside them so a specific pre-2.5 pathology can be simulated on its own
-    without pretending a whole-version reconstruction exists.
+    --profile-flag stays alongside, so one pathology can be simulated without a whole version.
     """
     name = getattr(opts, "profile", "2.8")
     dm_mode = getattr(opts, "dm_mode", "directed-with-late-flood")
@@ -2513,8 +2508,7 @@ def _profile_for(opts):
 def _hot_store_size(opts):
     """The hot-store cap to hand every node, or None to let the platform mix decide.
 
-    --max-num-nodes and MAX_NUM_NODES are the same constant, so one flag drives both the congestion
-    input and the store. A platform mix asks for nodes that differ, so it overrides the flag.
+    One constant drives the store and the congestion input; a platform mix overrides the flag.
     """
     if getattr(opts, "platform_mix", "uniform") != "uniform":
         return None
@@ -3135,9 +3129,8 @@ def run_once(opts, seed):
         # Here rather than in main(): sweep.py calls run_once directly and writes its own JSON, so
         # stamping the commit further out left every swept result - which is all of them - unstamped.
         report["transport"] = AC.transport_pin()
-        # The mesh map, if asked for. Here for the same reason and one more: it needs the live mesh -
-        # positions, roles, the rssi matrix - and none of that is in the report, so it cannot be drawn
-        # afterwards from saved JSON the way every other figure can.
+        # Drawn here because it needs the live mesh - positions, roles, the rssi matrix - none of
+        # which is in the report, so it cannot be redrawn from saved JSON.
         if getattr(opts, "mesh_map", False) and opts.out:
             from .meshmap import mesh_svg
 
