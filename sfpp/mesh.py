@@ -1535,8 +1535,7 @@ class Transmission:
 def place_nodes(count, area, rng, min_dist=300.0):
     """Poisson-disc-ish placement: uniform, rejecting anything too close to an existing node.
 
-    The minimum spacing stops stacked nodes making the mesh look better connected than a real
-    deployment.
+    The spacing stops stacked nodes making the mesh look better connected than a deployment.
     """
     points = []
     attempts = 0
@@ -1551,10 +1550,9 @@ def place_nodes(count, area, rng, min_dist=300.0):
 
 
 def place_clustered(count, area, rng, min_dist, towns=4, spread=0.10):
-    """Towns, with a thin scatter between them. What most regional meshes actually look like.
+    """Towns, with a thin scatter between them. What most regional meshes look like.
 
-    Dense pockets joined by a handful of long links, rather than the even neighbourhoods a uniform
-    field gives. Nine in ten nodes belong to a town; the rest hold the mesh together.
+    Nine in ten nodes belong to a town; the rest hold the mesh together. TRANSPORT.md.
     """
     centres = [
         (rng.uniform(0.15, 0.85) * area, rng.uniform(0.15, 0.85) * area)
@@ -1598,8 +1596,7 @@ def place_corridor(count, area, rng, min_dist, aspect=6.0):
 def place_hub(count, area, rng, min_dist, spokes=6):
     """A dense core with radial arms. The core hears everything; the spoke ends hear almost nothing.
 
-    The well-connected nodes are all in one place, so archives placed among them are maximally
-    redundant with each other.
+    Every well-connected node is in one place, so archives among them are maximally redundant.
     """
     centre = (area / 2, area / 2)
     points, attempts = [], 0
@@ -1628,10 +1625,7 @@ def place_hub(count, area, rng, min_dist, spokes=6):
 def place_chain(count, area, rng, min_dist, towns=None, spread=0.035):
     """Towns strung out in a line, each linked to the next. A valley, a rail line, a coast road.
 
-    The point is a mesh that is *long and connected*. Stretching a uniform field far enough to exceed
-    seven hops eventually fragments it - at 20 km with 60 nodes a fifth of them are isolated and the
-    measured diameter becomes the diameter of a surviving fragment, which is meaningless. A chain
-    stretches without breaking, because consecutive towns are placed inside each other's range.
+    A mesh that is long *and* connected, where a stretched uniform field fragments. TRANSPORT.md.
     """
     towns = towns or max(3, count // 8)
     # Span the diagonal so the chain has room; step is what keeps consecutive towns in contact.
@@ -1668,8 +1662,7 @@ TOPOLOGIES = {
 def place(topology, count, area, rng, min_dist=300.0):
     """Place nodes by the named generator. `mixed` draws the generator from the same seed.
 
-    Under `mixed` a sweep samples across mesh shapes rather than across draws of one shape, so a
-    placement rule that only holds on uniform points shows up as an artefact of the generator.
+    So a sweep samples across mesh shapes rather than across draws of one shape.
     """
     if topology == "mixed":
         topology = sorted(TOPOLOGIES)[rng.randrange(len(TOPOLOGIES))]
@@ -1702,9 +1695,7 @@ class NoiseField:
     """A noise floor that moves, reported as an offset in dB. Positive is a worse band.
 
     Hashed rather than drawn, so it costs no randomness and does not depend on delivery order; the
-    three profiles and what each is for are in TRANSPORT.md. Reach that
-    extends under a lift belongs to `Ducting`, which moves the link graph instead of the floor -
-    the thing a floor-only model cannot do, because `neighbours` is thresholded on static RSSI.
+    three profiles are in TRANSPORT.md. Reach that extends under a lift belongs to `Ducting`.
     """
 
     MAX_SAMPLES = 64  # a 28.6 s VERY_LONG_SLOW frame at tau=500 ms would otherwise cost 57 hashes
@@ -1817,9 +1808,6 @@ class Ducting:
     """Tropospheric ducting: episodes when links far beyond normal range come alive.
 
     Not a gift - the interesting result is what the mesh does afterwards. TRANSPORT.md.
-
-    Hashed on a window lattice like NoiseField, for the same two reasons: it draws no randomness, and
-    it does not depend on the order the event loop happens to run in.
     """
 
     def __init__(
@@ -1839,10 +1827,7 @@ class Ducting:
     def gain_db_at(self, t_ms):
         """The lift in dB in force at this instant, or 0.0 outside an episode.
 
-        One figure for the whole mesh: a duct is a property of the atmosphere over the region, not of
-        a pair of nodes. That is a simplification - a real duct has a geometry and favours paths along
-        it, often over water - and it is the conservative direction for the question being asked,
-        because a uniform lift densifies the mesh everywhere at once.
+        One figure for the whole mesh, which is the conservative simplification - TRANSPORT.md.
         """
         if self.rate_per_hour <= 0 or self.gain_db == 0:
             return 0.0
@@ -1980,8 +1965,7 @@ DEPLOYED_SIZE_LIMIT = 30
 def preset_realism(preset, nodes):
     """Is this preset and node count a combination a real mesh would be in? None if it is.
 
-    Not a guard and not an error - a run is free to ask about anything. It is a line in the report, so
-    a number that came out of a mesh nobody runs cannot be quoted later as though it came out of one.
+    A line in the report, not a guard: a run may ask about anything, and the answer says so.
     """
     if preset in DEPLOYED_PRESETS:
         return None
@@ -2010,9 +1994,7 @@ DEMOD_SNR_LIMIT_DB = {
 def derived_sensitivity(bw_hz, sf):
     """Sensitivity as kTB + 6 dB NF + the demodulator limit for this spreading factor.
 
-    This is not a model of the vendored table - it IS the vendored table. All ten of its rows come
-    back to within 0.041 dB, which is what licenses deriving the missing presets the same way instead
-    of extrapolating a slope through them.
+    Not a model of the vendored table but the table itself, to within 0.041 dB on every row.
     """
     return round(thermal_noise_floor(bw_hz) + DEMOD_SNR_LIMIT_DB[sf], 2)
 
@@ -2022,30 +2004,9 @@ def _preset(bw_hz, cr, sf):
     return {"bw": bw_hz, "cr": cr, "sf": sf, "sensitivity": sens, "cad_threshold": sens - 3.0}
 
 
-# Presets this firmware ships and the vendored table does not have. REAL, not extrapolated: the
-# bandwidth, coding rate and spreading factor of each are read straight out of
-# src/mesh/MeshRadio.h's modemPresetToParams, and the sensitivity is derived on the same basis as
-# every row already in the table.
-#
-# These matter because they are where the deployed meshes are going. EU_866 defaults to LITE_FAST and
-# EU_N_868 to NARROW_SLOW (src/mesh/RadioInterface.cpp:144-145), so a European result that only covers
-# the 250 kHz presets is about to be a result about the past. Without them this simulator could not
-# express half the presets its own firmware offers.
-#
-# The wideLora (2.4 GHz) bandwidths in the same switch - 1625, 812.5, 406.25 kHz - are not here,
-# because the vendored region table has no 2.4 GHz entry to run them against.
-FIRMWARE_PRESETS = {
-    "MEDIUM_TURBO": _preset(500e3, 5, 9),
-    # 125 kHz at CR5. The EU_866 default.
-    "LITE_FAST": _preset(125e3, 5, 9),
-    "LITE_SLOW": _preset(125e3, 5, 10),
-    # 62.5 kHz at CR6. The EU_N_868 default, and the ITU ham 100 kHz default.
-    "NARROW_FAST": _preset(62.5e3, 6, 7),
-    "NARROW_SLOW": _preset(62.5e3, 6, 8),
-    # 15.6 kHz. Legal in places nothing else is; unusable for anything but the shortest text.
-    "TINY_FAST": _preset(15.6e3, 5, 7),
-    "TINY_SLOW": _preset(15.6e3, 6, 8),
-}
+# The seven presets 2.8 added - MEDIUM_TURBO, the LITE, NARROW and TINY pairs - now ship in the
+# vendored table itself, so nothing is overlaid here. The wideLora bandwidths in the same switch
+# are still absent, because the region table has no 2.4 GHz entry to run them against.
 
 
 def make_config(
@@ -2055,7 +2016,6 @@ def make_config(
 
     conf = Config()
     conf.MODEM_PRESETS = dict(conf.MODEM_PRESETS)
-    conf.MODEM_PRESETS.update(FIRMWARE_PRESETS)
     conf.MODEM_PRESETS.update(EXTRA_PRESETS)
     conf.MODEM_PRESET = preset
     conf.MODEL = model

@@ -2206,7 +2206,7 @@ class FirmwarePresets(unittest.TestCase):
         """What licenses deriving the missing presets instead of extrapolating a slope."""
         conf = M.make_config()
         for name, p in conf.MODEM_PRESETS.items():
-            if name in M.FIRMWARE_PRESETS or name in M.EXTRA_PRESETS:
+            if name in M.EXTRA_PRESETS:
                 continue
             self.assertAlmostEqual(
                 p["sensitivity"],
