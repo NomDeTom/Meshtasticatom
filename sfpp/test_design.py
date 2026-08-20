@@ -135,3 +135,40 @@ class TestReproducesBaseline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ArchiveSharding(unittest.TestCase):
+    """Splitting a cell's archive configurations, which this module's header used to warn against.
+
+    The warning was right until placement got its own RNG stream: with the archive arms drawing from
+    the run's shared stream, a randomised placement shifted the traffic generator's later draws, so the
+    control and the arms carried different offered load. `test_matrix.PlacementIsolation` pins the fix;
+    without it none of this is sound.
+    """
+
+    def test_the_shards_of_a_cell_cover_every_configuration_exactly_once(self):
+        for total in (1, 2, 3, 4, 10):
+            rebuilt = [a for i in range(total) for a in D.shard_of(D.archives(), i, total)]
+            self.assertEqual(rebuilt, D.archives(), f"{total} shards do not reassemble the cell")
+
+    def test_the_off_control_lands_in_the_first_shard(self):
+        self.assertEqual(D.shard_of(D.archives(), 0, 3)[0][0], "off")
+
+    def test_only_the_mirrored_mesh_is_split(self):
+        """It is the only one past the platform's hard limit; splitting the others buys nothing and
+        costs a checkout each."""
+        self.assertGreater(D.shards_for("batumi-x4"), 1)
+        for mesh, _ in D.MESHES:
+            if mesh != "batumi-x4":
+                self.assertEqual(D.shards_for(mesh), 1, mesh)
+
+    def test_every_sharded_mesh_is_a_mesh_the_design_declares(self):
+        """A shard count for a mesh that no longer exists is a silent no-op."""
+        self.assertEqual(
+            sorted(set(D.SHARDS_BY_MESH) - {m for m, _ in D.MESHES}), []
+        )
+
+    def test_no_shard_is_empty(self):
+        for total in (2, 3, 4):
+            for index in range(total):
+                self.assertTrue(D.shard_of(D.archives(), index, total), f"{index}/{total}")

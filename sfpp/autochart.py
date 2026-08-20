@@ -52,6 +52,13 @@ def _nice_ceiling(value):
     return value
 
 
+def version_pin():
+    """`sim <version> - <commit>`, for a figure footer. Both, for the reason sfpp/version.py gives."""
+    from .version import SIM_VERSION
+
+    return f"sim {SIM_VERSION} - {transport_pin()}"
+
+
 def transport_pin():
     """Return the short SHA of the code producing this run, for the chart footer and the report."""
     try:
@@ -361,7 +368,7 @@ def render_series(report, out_dir, label="run"):
         panels,
         f"{label}: reception over {hours_total:.0f} simulated hours, "
         f"{series['bin_s'] // 60} min bins - shaded 22:00-06:00",
-        f"{transport_pin()} - seed {report.get('seed')} - "
+        f"{version_pin()} - seed {report.get('seed')} - "
         f"{report.get('opts', {}).get('nodes')} nodes",
     )
     path = os.path.join(out_dir, f"{label}-series.svg")
@@ -449,7 +456,7 @@ def render_run(report, out_dir, label="run"):
         panels,
         f"{label} - {opts.get('topology', 'uniform')}, {mesh.get('nodes')} nodes, "
         f"diameter {mesh.get('diameter') or 'FRAGMENTED'}, protocol {opts.get('protocol', 'sr')}",
-        f"transport {transport_pin()} · seed {report.get('seed')} · {opts.get('hours')} h",
+        f"{version_pin()} · seed {report.get('seed')} · {opts.get('hours')} h",
     )
     path = os.path.join(out_dir, f"{label}.svg")
     with open(path, "w") as f:
@@ -506,7 +513,7 @@ def render_block(reports, out_dir, name):
     doc = _document(
         [reach, airtime],
         f"{name} - arm `{reports[0].get('arm', 'value')}`, {len(arms[labels[0]])} seeds per cell",
-        f"transport {transport_pin()}",
+        f"{version_pin()}",
     )
     path = os.path.join(out_dir, f"{name}.svg")
     with open(path, "w") as f:

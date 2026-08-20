@@ -1,11 +1,11 @@
-# Eleven ways this simulator produced a confident wrong number
+# Twelve ways this simulator produced a confident wrong number
 
 Companion to [README.md](README.md), which is the operating manual. This is the other half: not how
 to run the thing, but how it has lied. All ten are fixed. They are written down because the
 **shapes** recur, and because someone extending this tree can assert against them rather than
 rediscover them one at a time.
 
-Every entry ends with the check that would have caught it, and where that check lives now. Nine are
+Every entry ends with the check that would have caught it, and where that check lives now. Ten are
 enforced automatically on every scheduled run; two are not, and are marked.
 
 ## The defects
@@ -166,6 +166,43 @@ sweep.
 The shape is one already on the list - "a request and a result recorded as one number" - with the twist
 that here the request was mistaken for the result *by the checker*. Worth asking of any comparison in
 this tree: is anything on both sides of it?
+
+## 12. A randomised placement did not carry the control's traffic
+
+Found 2026-08-19, while testing whether a cell's archive arms could be split across CI jobs - so found
+by asking whether a *different* thing was safe.
+
+`random-any` and `random-clients` pick with `rng.sample`; the deliberate strategies sort by degree and
+draw nothing. Both took their samples from `self.rng`, the run's shared stream. The traffic generator is
+built before placement but *scheduled after it*, so consuming those draws shifted every later draw and
+the generator produced a different schedule. At seed 4242, 25 nodes, 2 h:
+
+| arm | text | position | telemetry | reach |
+| --- | --: | --: | --: | --: |
+| `off` (control) | 31 | 298 | 104 | 0.343 |
+| `spread x2` | 31 | 298 | 104 | 0.343 |
+| `beside-router x2` | 31 | 298 | 104 | 0.343 |
+| **`random-any x2`** | 32 | 289 | 106 | **0.371** |
+| **`random-any x6`** | 35 | 324 | 101 | **0.355** |
+
+An 8% reach difference, the same order as the effects these sweeps exist to measure, between the control
+and **the one arm whose whole job is to be the control** - `random-any` is described in `campaign.py` as
+"the honest control for any claim that a deliberate arrangement beat chance", and it was the only arm
+not carrying the control's traffic. `--servers` made it worse: more servers means more samples drawn, so
+a count sweep confounded count with load.
+
+> **Assert** that every placement and every server count reproduces the control's offered load.
+> **Enforced**: `test_matrix.PlacementIsolation`, three tests. Placement now draws from
+> `random.Random(seed ^ 0x504C4143)` - the pattern `_noise_field` and `_ducting` already used, and for
+> the reason their comments give: "seeded off the run's seed but through its own constant, so the field
+> is reproducible without being correlated with anything else the seed decides".
+
+Two things worth carrying from this one. First, the shape: **a shared RNG is a shared mutable
+dependency**, and "draws are hashed on (seed, constant, window) rather than pulled from a sequential
+stream" was true of the physics and not of this. Second, the *reason it was found* - `design.py`'s header
+warned against splitting the archive axis because "a cell's control comes from a different draw than the
+arms it is subtracted from", and testing that warning is what exposed it. The warning was right, about a
+defect that was already there without any splitting.
 
 ## What is still open
 

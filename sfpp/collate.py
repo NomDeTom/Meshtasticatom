@@ -616,6 +616,7 @@ def summarise_block(reports):
         "arm": first.get("arm", "?"),
         "grid": first.get("grid") or [],
         "transport": first.get("transport"),
+        "sim_version": first.get("sim_version"),
         "cells": cells,
         "wall_seconds": sum(r.get("wall_seconds") or 0 for r in reports),
         # The comparable form of the above. `wall_seconds` is a sum over however many cells and seeds
@@ -757,6 +758,9 @@ def collate(
     present = {b["block"] for b in blocks}
     missing = sorted(set(expected) - present) if expected else []
     transports = sorted({b["transport"] for b in blocks if b.get("transport")})
+    # More than one means the round straddles a behaviour change, and its blocks are not comparable
+    # with each other. Named rather than averaged away - see sfpp/version.py.
+    versions = sorted({b["sim_version"] for b in blocks if b.get("sim_version")})
     scenarios = sorted({b["scenario"] for b in blocks if b.get("scenario")})
     seeds = sorted(
         {s for b in blocks for c in b["cells"] for s in c["seeds"] if s is not None}
@@ -774,6 +778,7 @@ def collate(
         "scenario_requested": scenario,
         "scenario_observed": scenarios,
         "transport": transports[0] if len(transports) == 1 else transports,
+        "sim_version": versions[0] if len(versions) == 1 else versions,
         "blocks": sorted(blocks, key=lambda b: b["block"]),
         "missing_blocks": missing,
         "wall_seconds": sum(b["wall_seconds"] for b in blocks),
@@ -794,6 +799,15 @@ def gate(blocks, missing):
             entry = by_kind.setdefault(kind, {"flags": 0, "blocks": 0})
             entry["flags"] += count
             entry["blocks"] += 1
+    # A round assembled from two behaviours is a round whose blocks cannot be read against each
+    # other, and nothing else in the digest would say so.
+    versions = sorted({b["sim_version"] for b in blocks if b.get("sim_version")})
+    if len(versions) > 1:
+        warnings.insert(
+            0,
+            f"mixed sim versions in one round: {', '.join(versions)} - blocks from different "
+            f"versions are not comparable with each other (see sfpp/version.py)",
+        )
     return {
         "ok": not failures,
         "failures": failures,
@@ -835,6 +849,7 @@ def markdown(summary):
     out = [
         f"# Sweep {summary['run_id']}",
         "",
+        f"- **sim version** `{summary.get('sim_version') or 'unversioned'}`",
         f"- **transport** `{summary['transport']}`",
         f"- **ground** {run_scenario}",
         f"- **seed base** {summary.get('seed_base') or 'drawn per block'}"

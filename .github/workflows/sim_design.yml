@@ -101,7 +101,7 @@ jobs:
           set -euo pipefail
           python3 - >> "$GITHUB_OUTPUT" <<'PY'
           import datetime, json, os, secrets, sys
-          from sfpp.design import MESHES, RIVALS, cells
+          from sfpp.design import MESHES, RIVALS, cells, shards_for
 
           known = cells()
           meshes = [m for m, _ in MESHES]
@@ -139,13 +139,27 @@ jobs:
               sys.exit(f"seed count must be 1-10, got {count!r}")
           seeds = [int(seed_base) + i for i in range(int(count))]
 
-          # One entry per (cell, seed). `cells` stays the cell names alone: that is what the digest
-          # is checked against, and a shard is not a block - all three shards of a cell carry the
-          # same `block` and are collated as one.
-          jobs = [{"cell": c, "seed": s} for c in chosen for s in seeds]
+          # One entry per (cell, seed, shard). `cells` stays the cell names alone: that is what the
+          # digest is checked against, and a shard is not a block - every shard of a cell carries the
+          # same `block` and they are collated as one.
+          #
+          # The mirrored mesh is split across three jobs. Measured on a runner: ten archive
+          # configurations at 72 h is 141 min unmirrored and about 444 mirrored, and 444 is past the
+          # platform's own 360-minute hard limit, so this is not a timeout that could have been
+          # raised. Splitting is sound because placement now draws from its own stream - see
+          # design.SHARDS_BY_MESH.
+          jobs = [
+              {"cell": c, "seed": sd, "shard": f"{i}/{n}", "tag": f"s{sd}-{i}"}
+              for c in chosen
+              for sd in seeds
+              for n in [shards_for(known[c][0])]
+              for i in range(n)
+          ]
           if len(jobs) > 256:
-              sys.exit(f"{len(jobs)} jobs exceeds the 256 a matrix may hold; run fewer meshes, "
-                       f"rivals or seeds at a time")
+              sys.exit(f"{len(jobs)} jobs exceeds the 256 a matrix may hold. A full round over every "
+                       f"mesh no longer fits in one dispatch now the mirrored cells are sharded: run "
+                       f"it one mesh at a time with the `mesh` input, which is what the mesh axis is "
+                       f"the outer coordinate for.")
 
           print(f"matrix={json.dumps(jobs)}")
           print(f"cells={' '.join(chosen)}")
@@ -155,17 +169,18 @@ jobs:
           cat "$GITHUB_OUTPUT"
 
   cross:
-    name: ${{ matrix.cell }} @${{ matrix.seed }}
+    name: ${{ matrix.cell }} @${{ matrix.seed }} ${{ matrix.shard }}
     needs: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Ten archive configurations at one seed. At 24 hours that was 21 minutes on Batumi and 85 on
-    # the mirrored mesh; at 72 it extrapolates to roughly an hour and four hours respectively, so
-    # 180 no longer has margin for the mirrored cells and would start killing them mid-round. 300
-    # keeps a runner half this speed inside the limit while staying clear of the platform's own
-    # 360-minute hard ceiling, which no `timeout-minutes` can raise.
-    timeout-minutes: 300
+    # Measured on a real runner rather than extrapolated: ten archive configurations at 72 h took 141
+    # minutes on Batumi (846 s a run - 2.4x this tree's own container, which also carries the DM
+    # transport, traceroute and admin probes this workflow adds). The mirrored mesh is 3.15x per run,
+    # so its configurations are split three ways and every job is now ~140-150 minutes whatever the
+    # mesh. 240 leaves room for a runner half this speed and stays clear of the platform's 360-minute
+    # hard limit.
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       # Below the account's concurrency allowance, so a round never occupies every runner and
@@ -177,7 +192,7 @@ jobs:
       # Each job gets its own scenario cache. Every cell in a round reads the same Batumi rasters,
       # and two jobs racing to write the same derived CSV is the kind of thing that fails once a
       # month and is never reproducible.
-      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}-${{ matrix.seed }}
+      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}-${{ matrix.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -193,20 +208,22 @@ jobs:
       - name: Install the scenario loader
         run: pip install --quiet "PyYAML>=6.0"
 
-      - name: ${{ matrix.cell }} at seed ${{ matrix.seed }}
+      - name: ${{ matrix.cell }} at seed ${{ matrix.seed }} shard ${{ matrix.shard }}
         env:
           CELL: ${{ matrix.cell }}
           SEED: ${{ matrix.seed }}
+          SHARD: ${{ matrix.shard }}
+          TAG: ${{ matrix.tag }}
         run: |
           set -euo pipefail
-          # --tag names the file apart from the cell's other seeds. The reports keep the cell's
-          # name, so the digest reads the three shards as one block.
-          python3 -u -m sfpp.design --cell "$CELL" --seeds "$SEED" --tag "s$SEED" --out out
+          # --tag names the file apart from the cell's other seeds and shards. The reports keep the
+          # cell's name, so the digest reads them all as one block.
+          python3 -u -m sfpp.design --cell "$CELL" --seeds "$SEED" --shard "$SHARD"             --tag "$TAG" --out out
 
       - uses: actions/upload-artifact@v4
         if: always() # a shard that failed halfway still wrote the archive configurations it finished
         with:
-          name: design-${{ matrix.cell }}-s${{ matrix.seed }}
+          name: design-${{ matrix.cell }}-${{ matrix.tag }}
           path: out
           if-no-files-found: warn
           # The raw data: every cell's full report. The results branch gets the digest only, because
