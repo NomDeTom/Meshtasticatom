@@ -59,23 +59,13 @@ ensure_on_path()
 class IndexedTerrainGrid:
     """`TerrainGrid` with a spatial index. Same answers, without the per-call sort.
 
-    The vendored grid sorts all N samples by distance on every lookup and keeps the nearest eight
-    for an inverse-square weighting. This buckets the samples on a cell of the grid's own spacing
-    and widens a ring until it can prove no unexamined bucket can hold a closer sample than the
-    eighth it already has - so the candidate set is a superset of the vendored nearest eight, and
-    the weighting that follows is the vendored one applied to the same eight points.
-
-    Ties are broken on sample order, as a stable sort does, so a point equidistant from two samples
-    resolves the way the vendored grid resolves it.
+    A ring search over buckets, proven to cover the vendored nearest eight - MODEL.md.
     """
 
     NEAREST = 8
 
-    # Below this many samples the index is slower than the scan it replaces, and measurably: the
-    # packaged Batumi grid is 42 points about 4 km apart, so the ring has to widen two or three
-    # times - re-sorting its candidates on each pass - to prove it has the nearest eight, where
-    # heapq over all 42 answers in one. Profiling a 92-node Batumi build put 1.48 s of 5.19 s in
-    # the ring search alone. The index earns its keep on an SRTM tile, not on a preset.
+    # Below this the index is slower than the scan it replaces: 1.48 s of a 5.19 s Batumi
+    # build went into ring widening. It earns its keep on an SRTM tile, not a preset.
     SCAN_BELOW = 512
 
     def __init__(self, samples):
@@ -90,18 +80,16 @@ class IndexedTerrainGrid:
             return
         xs = sorted({x for x, _, _ in self.samples})
         ys = sorted({y for _, y, _ in self.samples})
-        # The bucket side is the grid's own spacing where it has one, and the bounding box divided
-        # into roughly sqrt(N) cells per axis where it does not. Either way a bucket holds O(1)
-        # samples, which is what makes the ring search terminate quickly.
+        # The grid's own spacing where it has one, sqrt(N) cells per axis where it does not:
+        # either way a bucket holds O(1) samples, which is what bounds the ring search.
         self.cell = max(1.0, _median_spacing(xs, ys, len(self.samples)))
         self._buckets = {}
         for index, (x, y, elevation) in enumerate(self.samples):
             self._buckets.setdefault(
                 (int(math.floor(x / self.cell)), int(math.floor(y / self.cell))), []
             ).append((x, y, elevation, index))
-        # The occupied extent, so the ring search knows when it has actually covered every sample.
-        # Counting examined cells against the number of occupied buckets does not: buckets are
-        # sparse, and a square can cover many empty cells while every sample sits outside it.
+        # The occupied extent, so the ring knows when it has covered every sample: counting
+        # cells against occupied buckets does not, since a square can be all empty cells.
         self._bx_min = min(bx for bx, _ in self._buckets)
         self._bx_max = max(bx for bx, _ in self._buckets)
         self._by_min = min(by for _, by in self._buckets)
@@ -127,9 +115,8 @@ class IndexedTerrainGrid:
         return cls(samples)
 
     def elevation_at(self, x, y):
-        # A path profile walks the same handful of coordinates for every pair that shares an
-        # endpoint, and the knife-edge loop asks for 24 of them per link. Rounding to a decimetre
-        # before caching costs nothing the model can see and removes most of the lookups.
+        # Every pair sharing an endpoint walks the same coordinates, 24 per link. A decimetre
+        # is below anything the model can see, and rounding to it removes most of the lookups.
         key = (round(x, 1), round(y, 1))
         hit = self._cache.get(key)
         if hit is not None:
@@ -234,10 +221,8 @@ def _unit(*key):
     return h / 18446744073709551616.0
 
 
-# Named ground shapes. `relief_m` is the peak-to-trough elevation range and `ridges` the number of
-# ridge lines across the area; `roughness` adds a shorter-wavelength component on top so a valley
-# floor is not perfectly flat. None of these are measured - see the register - and they exist to
-# make the shape of the ground a variable rather than the constant zero.
+# Named ground shapes, none of them measured: they make the shape of the ground a variable
+# rather than the constant zero. Field meanings in MODEL.md.
 LANDFORMS = {
     # No relief at all. The control, and identical to running with terrain off except that the
     # elevation term is exercised, so it is also the test that terrain costs nothing on flat ground.
@@ -259,9 +244,7 @@ LANDFORMS = {
 def synthetic_terrain_rows(landform, area, seed, step=None):
     """A regular elevation grid over `[-area, area]^2`, hashed from `seed`.
 
-    Two sinusoidal ridge systems at an angle to each other, plus a hashed lattice perturbation, so
-    the field has both a long wavelength a link can be blocked by and a short one that moves a
-    margin. `coastal` replaces one system with a monotone rise, which is what a shoreline is.
+    Two ridge systems plus a lattice perturbation, so both wavelengths are present - MODEL.md.
     """
     shape = LANDFORMS[landform]
     relief = shape["relief_m"]
@@ -307,13 +290,9 @@ def synthetic_terrain_rows(landform, area, seed, step=None):
 
 @dataclass
 class Scenario:
-    """A place, as far as this simulator is concerned: where the nodes are and what is under them.
+    """A place: where the nodes are and what is under them.
 
-    `points` are local metres from `origin`, matching the vendored projection exactly, so a node
-    index here and the same index in `loraMesh.py --preset batumi` are the same node in the same
-    spot. `antenna_height` stays height above local ground and never becomes altitude: the path-loss
-    models take an antenna height term and handing them metres above sea level would silently make
-    every node a mountaintop.
+    Local metres from `origin`, and `antenna_height` never becomes altitude - MODEL.md.
     """
 
     name: str
@@ -337,10 +316,7 @@ class Scenario:
     def __bool__(self):
         """A scenario is always a scenario, whatever `__len__` says.
 
-        `__len__` counts nodes, and a landform carries ground under a *generated* mesh - so it has
-        terrain rows and no points, and Python would read the scenario as false and silently drop
-        the ground. Every caller here tests `is None` for that reason, but the trap only has to be
-        stepped in once, by anyone, for a run to come out flat while claiming a landform.
+        A landform has ground and no points, and falsiness silently dropped it - TRAPS 1.
         """
         return True
 
@@ -381,8 +357,7 @@ class Scenario:
 def preset_scenario(name="batumi"):
     """The packaged real-mesh snapshot, geometry and ground together.
 
-    Node roles, hop limits and mute flags come from the snapshot, so a run over this scenario starts
-    from the roles the mesh actually runs rather than from `--router-fraction`.
+    Roles, hop limits and mute flags come from the snapshot, not from --router-fraction.
     """
     import yaml
 
@@ -411,11 +386,8 @@ def preset_scenario(name="batumi"):
     terrain_path = PRESET_ROOT / f"{name}_terrain.csv"
     clutter_path = PRESET_ROOT / f"{name}_clutter.csv"
     calibration = dict(raw.get("radio_calibration", {}) or {})
-    # How far the fit was actually trained, taken from the observations it was trained on rather
-    # than assumed. A ridge fit extrapolates without complaint, and this one's ground-elevation
-    # terms are large, positive and unbounded (+4.24 dB per 100 m of the lower endpoint alone)
-    # against a distance penalty of only -4.68*log10(km): past the observed range two high nodes
-    # gain more from their elevation than the distance takes away, and the model invents a link.
+    # How far the fit was actually trained, from its own observations: it extrapolates without
+    # complaint, and past that range it invents links - TRAPS 4.
     observed = [
         math.dist(points[o["from"]], points[o["to"]])
         for o in raw.get("calibration_observations", []) or []
@@ -471,13 +443,7 @@ def map_scenario(
 ):
     """A mesh cut out of the public map, with SRTM ground and OSM land cover under it.
 
-    This is the path Komzpa's scenarios were built on and it is unchanged: `lib.map_input` decides
-    which map rows are usable and where they land, `lib.srtm` fetches the elevation tiles, and
-    `lib.osm_clutter` rasterises the land cover from Overpass. All three cache into `CACHE_ROOT`,
-    and `offline=True` refuses to reach the network so an unattended run fails loudly rather than
-    hanging on a fetch.
-
-    `bbox` is `(min_lat, min_lon, max_lat, max_lon)`.
+    `bbox` is (min_lat, min_lon, max_lat, max_lon); `offline` refuses the network rather than hanging.
     """
     from lib.map_input import (
         fetch_map_payload,
@@ -537,10 +503,9 @@ def _role_from_config(config):
 
 
 def _srtm_rows(bbox, origin, step_m, offline):
-    """SRTM elevation over the bounding box, projected into the scenario's local metres.
+    """SRTM elevation over the bounding box, in the scenario's local metres.
 
-    The vendored generator yields lat/lon rows; the projection is the same `latlon_to_xy` the node
-    positions went through, so a sample and a node that share a coordinate share a coordinate.
+    Through the same `latlon_to_xy` the node positions went through, so coordinates line up.
     """
     from lib.srtm import terrain_rows_from_srtm
     from lib.terrain import latlon_to_xy
@@ -595,16 +560,7 @@ def tile_grid_for(copies):
 def mirror(scenario, copies, gap_m=1500.0):
     """Reflect a scenario into `copies` tiles, ground and all.
 
-    Reflection, not translation, and the difference is the whole point. `IndexedTerrainGrid`
-    interpolates rather than refusing, so a translated copy lands on ground the grid never
-    surveyed and gets a featureless plateau - the packaged Batumi grid returns the same 460 m at
-    any distance outside its box. A reflected copy sits on terrain samples as real as the
-    original's, because they ARE the original's, and every seam meets its own mirror image so the
-    ground is continuous across it.
-
-    It scales a place, not a mesh: the result is a plausible larger version of somewhere with this
-    terrain, not a claim about anywhere. A fitted scenario carries the further caveat that pairs
-    spanning a seam are outside the distance range its coefficients were fitted over.
+    Reflection, not translation, and it scales a place rather than a mesh - MODEL.md.
     """
     if copies <= 1:
         return scenario
@@ -645,10 +601,8 @@ def mirror(scenario, copies, gap_m=1500.0):
                 terrain.append((*place(x, y, i, j), z))
             for x, y, lat, lon, cls in rows:
                 px, py = place(x, y, i, j)
-                # A reflection fixes the tile boundary, so adjacent tiles would each contribute the
-                # same column. Duplicates break ClutterGrid.is_regular, and an irregular grid falls
-                # back to scanning every sample on every lookup - which is minutes per build, not
-                # seconds. Dropping the repeat keeps the raster regular and loses nothing.
+                # Adjacent reflected tiles share the boundary column, and a duplicate makes the
+                # grid irregular - minutes per build rather than seconds. TRAPS 8.
                 key = (round(px, 3), round(py, 3))
                 if key in seen_clutter:
                     continue
@@ -720,8 +674,7 @@ def synthetic_scenario(landform, area, seed, name=None):
 def load(spec, area=8000.0, seed=0, bbox=None, limit=None, offline=False):
     """Resolve a `--scenario` string.
 
-    `batumi` (or any packaged preset name) is real geometry over real ground; a landform name is
-    ground under a generated mesh; `map` cuts a bounding box out of the public map.
+    A preset name is real geometry, a landform is ground under a generated mesh, `map` is a bbox.
     """
     if spec in (None, "", "none"):
         return None
@@ -745,13 +698,9 @@ def available():
 
 
 def apply(conf, scenario, terrain=True, clutter=True, link_calibration=True):
-    """Set the vendored terrain/clutter/calibration fields from a scenario.
+    """Set the vendored terrain, clutter and calibration fields from a scenario.
 
-    Returns the terrain grid so the caller can lift node z coordinates with it. Each of the three
-    terms is separately refusable, because each is a separate claim: terrain is geometry anyone can
-    check, clutter is a land-cover raster, and the calibration is a ridge fit over 296 observed
-    links in one city. A run that keeps the first and drops the third is asking what the ground
-    alone does.
+    Each is separately refusable because each is a separate claim - MODEL.md. Returns the grid.
     """
     grid = None
     if scenario is None:
@@ -776,12 +725,8 @@ def apply(conf, scenario, terrain=True, clutter=True, link_calibration=True):
         conf.CLUTTER_GRID_FILE = None
 
     calibration = scenario.calibration or {}
-    # The noise floor and the near-field distance floor are field measurements of the place, not of
-    # the link model, so they come in with the scenario whatever the calibration flag says. The
-    # thermal floor this transport computes per preset is the better answer for a generated mesh and
-    # the wrong one for a mesh whose observed SNRs were fitted against a measured floor, so a
-    # scenario that carries one wins - `--noise-model` set explicitly on the command line still
-    # overrides it, since it is applied after this.
+    # Measurements of the place, not of the link model, so they arrive with the scenario whatever
+    # the calibration flag says. An explicit --noise-model still wins, being applied after.
     for source, target in (
         ("noise_level", "NOISE_LEVEL"),
         ("path_loss_distance_floor_m", "PATH_LOSS_DISTANCE_FLOOR_M"),
@@ -824,11 +769,9 @@ def ground_elevation(grid, x, y):
 
 
 class Point:
-    """The two coordinates and the altitude the vendored terrain and clutter code asks for.
+    """The x, y, z the vendored terrain and clutter code asks for.
 
-    `lib.terrain` and `lib.clutter` take objects with `.x`, `.y`, `.z`, where z is absolute antenna
-    altitude once terrain is in play. This transport keeps its nodes as flat records, so this is the
-    adapter between the two rather than a second position type.
+    An adapter from this transport's flat node records, not a second position type.
     """
 
     __slots__ = ("x", "y", "z")
