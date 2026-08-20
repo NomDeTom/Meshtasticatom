@@ -506,3 +506,71 @@ mean because the interesting nodes are the ones whose traffic all arrives at 4+ 
 
 A replayed object is useful to whoever hears it, not only to whoever asked: a server files it in its
 store and any other node records it for its own history, so both paths run.
+
+### Bucket modes
+
+**`counter`** is what the firmware does and the only mode describing a real mesh:
+`chain_end.counter + 1`, every time, because no official counter is ever supplied. Both the bucket a
+message lands in and the moment a bucket fills are therefore per server and effectively random -
+each server hears a different subset in a different order.
+
+**`global`** is a fiction, kept only as an upper bound. `StoreForwardPlusPlus.cpp:1364` reads "if we
+get an official counter, use it. Otherwise, just increment", and there is no official counter to
+get. The mode describes a mesh that cannot be built, and exists to bound what bucket agreement would
+be worth.
+
+**`time`** quantises the receive clock. Both servers heard a packet within a second or two, so any
+window wider than that agrees except for objects near a boundary - a bounded disagreement rather
+than a total one.
+
+A replay is filed where it belongs in the receiving server's own stream rather than at the tip.
+That is what lets an old bucket converge: numbered at the tip, a transferred object lands in the
+newest bucket and the bucket it came from can never agree with the peer's.
+
+The replay's claim about when a message was first heard is recorded *before* deciding whether to
+store the object. A server that already holds the message is exactly the case worth keeping both
+for: its own receive time beside a peer's claim is what makes drift between archives measurable.
+
+### Broadcast against DM
+
+A broadcast advert is relayed by every node in earshot, which is why adverts dominate the byte
+budget. Once a server knows its peers - and an advert is itself the discovery mechanism, so it does
+after the first one - the same information can go as a DM to each, paying per peer instead of per
+neighbourhood.
+
+A broadcast replay costs the neighbourhood a relay and pays it back: every node in earshot that
+lacks the message can file it correctly off the replay header. Whether that trade is worth it is
+what the bystander counters measure. It only works because the header sits outside the encryption
+wrapper - without `heard_ago` a node could store the message but not place it.
+
+Everything except a replayed object is a two-party conversation. A replay is not: a server that
+overhears one addressed to a different peer should keep it, which is most of the argument for
+broadcasting them at all.
+
+### Addressed SR messages
+
+`transport` hands a message to the transport as a real DM: `NextHopRouter` picks the next hop from
+what the sender has actually learned, falls back to flooding when it has learned nothing, and runs
+the retry ladder. Costs are then whatever routing really costs, including being wrong.
+
+`hop-by-hop` walks a precomputed shortest path outside the transport, one addressed hop at a time
+with a hand-written delay and no contention for the route decision itself. Every published chain-arm
+cost was measured that way, so it stays the default until those numbers are re-measured.
+
+### The catch-up window
+
+Reconciliation is delay-tolerant and contention is not, so an archive that waits for the small hours
+pays for its airtime when the channel is cheap and nobody is waiting on a text. The cost is latency
+- a message missed at the evening peak is not replicated until the small hours - which is why it is
+an arm and not a default.
+
+### Audits
+
+An advert is a snapshot: the sender keeps ingesting while it is in flight, so a checksum has to be
+judged against the set it was computed over rather than the sender's later state. The member list
+carried for that gate is ground truth for the safety check only and is never read by the protocol.
+
+The final audit takes every server pair and every bucket at rest and asks whether checksum equality
+implies set equality. The in-flight check can only judge the exchanges that happened; this judges
+the end state, where nothing is in flight and no snapshot is stale, so a disagreement is
+unambiguous.
