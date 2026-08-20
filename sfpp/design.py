@@ -48,18 +48,12 @@ from .campaign import build_parser, run_once
 
 # --- axis three: the mesh the cross is run on ----------------------------------------------------
 #
-# Batumi is the zeroth case and is in every round, because it is the only real geometry in the tree
-# and a result that holds nowhere else is a result about synthetic meshes. The rest of this axis is
-# conditions applied to it: the same 92 nodes and the same ground, scaled up by mirroring, carrying
-# older firmware, or on a different preset. Holding the geometry while varying the condition is what
-# lets "3 archives, spread" be advice rather than an observation.
-#
-# A later round replaces these with meshes drawn from the run's seed. This one is Batumi.
+# Batumi is in every round: it is the only real geometry here, and everything else on this axis is
+# a condition applied to it, so that a finding can be advice rather than an observation.
 MESHES = [
     ("batumi", ["--scenario", "batumi"]),
-    # Kaleidoscopic scale-up: the same place tiled into reflected copies, so size moves and the
-    # ground does not. Seam-spanning pairs fall outside the fitted budget - read
-    # pairs_beyond_calibration before reading anything else here.
+    # The same place tiled into reflected copies, so size moves and the ground does not. Read
+    # pairs_beyond_calibration first: seam-spanning pairs are outside the fitted budget.
     ("batumi-x4", ["--scenario", "batumi", "--mirror", "4"]),
     # A mesh part-way through upgrading, which is every real mesh.
     ("batumi-legacy-25", ["--scenario", "batumi", "--legacy-fraction", "0.25", "--old-profile", "2.6"]),
@@ -68,16 +62,8 @@ MESHES = [
     ("batumi-short-fast", ["--scenario", "batumi", "--preset", "SHORT_FAST"]),
 ]
 
-# Traffic every cell carries, so the addressed measures have denominators and the DM-dependent
-# rivals are not inert. Not part of the cross: changing it changes every cell equally.
-#
-# 72 hours, which is `campaign.py`'s own default rather than a number invented here. This was 24, and
-# 24 is one pass of a 24-hour curve: `--diurnal commuter` is 17:1 peak-to-trough and README §4.4 calls
-# it "nearly inert on a run shorter than a day", so at 24 h a time-of-day effect and an artefact of
-# wherever `--start-hour` happened to land are the same reading. Three passes tell them apart. The
-# other half is the slow build-ups - the hop-scaling feedback loop needs time to converge at all
-# (README §10.4), and `held`/`union` measured while the first buckets are still filling is a
-# different number from the same mesh once reconciliation has run a few bucket-close cycles.
+# Traffic every cell carries, so the addressed measures have denominators. 72 hours because one
+# pass of a diurnal curve cannot separate a time-of-day effect from where --start-hour landed.
 TRAFFIC = [
     "--hours",
     "72",
@@ -99,12 +85,8 @@ SERVERS = [2, 3, 6]
 
 # --- axis two: what else could be changed --------------------------------------------------------
 #
-# Each entry is (label, flags). `none` is the mesh as the firmware runs it. The rest are one change
-# each, never combined with one another - combining them is a later question and would square an
-# already square grid.
-#
-# To add an idea: append one line. It crosses against every archive configuration, on every mesh
-# already measured, against the same reference cell.
+# (label, flags), one change each and never combined - combining is a later question that would
+# square an already square grid. Appending a line crosses it against everything already measured.
 RIVALS = [
     ("none", []),
     ("extra-repeats", ["--extra-repeats"]),
@@ -131,10 +113,8 @@ RIVALS = [
 # that cannot reproduce its own baseline is wired wrong, and this is the cheapest way to notice.
 REPRODUCES_BASELINE = ("hop-scaling-40", "congestion-40")
 
-# One sentence per coordinate, in the terms a reader of the page has - what changed, not which flag
-# moved. The digest composes a cell's sentence from its mesh and its rival, so a page can say what
-# `batumi-legacy-50-hop-limit-15` was without anyone opening this file. `sweep.DESCRIPTIONS` is the
-# same idea for the block sweeps.
+# One sentence per coordinate, in a reader's terms rather than a flag's: the digest composes a
+# cell's sentence from its mesh and its rival. sweep.DESCRIPTIONS is the same idea.
 MESH_NOTES = {
     "batumi": "the 92-node Batumi snapshot on its own ground, at the shipped defaults",
     "batumi-x4": "Batumi mirrored into four reflected copies - four times the nodes over the same "
@@ -199,8 +179,7 @@ def archives():
 def cells():
     """One job per (mesh, rival): that pair crossed against every archive configuration.
 
-    The mesh is the outer coordinate, so a round can be run mesh by mesh - Batumi first, and every
-    later mesh added without disturbing what is already measured.
+    Mesh is the outer coordinate, so a round runs mesh by mesh without disturbing what is measured.
     """
     return {
         f"{mesh}-{rival}": (mesh, mesh_flags, rival, rival_flags)
@@ -209,17 +188,8 @@ def cells():
     }
 
 
-# How many jobs a cell's archive configurations are split across, per mesh. Measured rather than
-# guessed: on a GitHub runner an x1 cell's ten configurations at 72 h took 141 minutes, and the
-# mirrored mesh is 3.15x that per run - about 444 minutes, which is past this workflow's ceiling **and
-# past the platform's own 360-minute hard limit that no timeout can raise.** Split three ways it is
-# ~148 minutes, the same size as an x1 job.
-#
-# Sound only because placement draws from its own stream (see Campaign._place_servers): every archive
-# configuration carries the `off` control's offered load whichever job it lands in, so a cell
-# reassembled from three shards is the same cell. This module's own header used to warn against exactly
-# this split - "split those over runners and a cell's control comes from a different draw than the arms
-# it is subtracted from" - and it was right until that fix.
+# Measured, not guessed: the mirrored mesh at 72 h is ~444 minutes in one job, past the platform's
+# 360-minute hard limit. Sound only because placement draws from its own stream - TRAPS 12.
 SHARDS_BY_MESH = {"batumi-x4": 3}
 DEFAULT_SHARDS = 1
 
@@ -239,10 +209,7 @@ def shard_of(items, index, total):
 def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir, tag=None, shard=None):
     """One (mesh, rival) pair against every archive configuration, at each seed.
 
-    `tag` distinguishes the file when a cell is sharded across jobs - the mirrored mesh is four
-    times the nodes, and its whole cell in one job runs past the runner's ceiling. Every shard keeps
-    the same `block`, which is what the digest groups on; only the filename differs, because the
-    shards' artifacts are merged into one directory and identical names would overwrite.
+    `tag` names a shard's file; every shard keeps the same `block`, which the digest groups on.
     """
     parser = build_parser()
     results = []
@@ -258,9 +225,8 @@ def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir, tag=Non
             report["block"] = name
             report["arm"] = "archive"
             report["value"] = archive
-            # All three coordinates, so the cross can be re-tabulated along any axis later.
-            # `mesh_label`, not `mesh`: the campaign already writes `mesh` as the run's mesh
-            # statistics, and overwriting that dict with a name costs the digest its node count.
+            # All three coordinates, so the cross re-tabulates along any axis later. `mesh_label`
+            # because `mesh` is already the run's mesh statistics, and the digest reads its count.
             report["mesh_label"] = mesh
             report["rival"] = rival
             report["archive"] = archive

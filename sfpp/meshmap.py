@@ -39,8 +39,7 @@ W, H = 900, 780
 def _extent(nodes):
     """The bounding box of where the nodes actually are, not the area they were drawn in.
 
-    A real snapshot is not a square and neither is a corridor or a chain, so scaling by `--area` would
-    leave most of the picture empty and squeeze the mesh into a corner of it.
+    Scaling by --area would squeeze a corridor or a real snapshot into a corner of an empty square.
     """
     xs = [n.x for n in nodes]
     ys = [n.y for n in nodes]
@@ -50,9 +49,7 @@ def _extent(nodes):
 def _stacks(nodes, tolerance=1.0):
     """{(x, y) rounded: [node index]} - which nodes share a position.
 
-    Load-bearing on the only real snapshot in the tree: Batumi is 92 nodes on 55 unique coordinates,
-    the three largest stacks holding 14, 13 and 10. Plotted literally that is 92 nodes drawn as 55
-    dots, with a third of the mesh invisible and nothing saying so.
+    Batumi is 92 nodes on 55 coordinates, so drawn literally a third of the mesh is invisible.
     """
     groups = {}
     for i, n in enumerate(nodes):
@@ -62,10 +59,9 @@ def _stacks(nodes, tolerance=1.0):
 
 
 def _fan(count, index, radius=7.0):
-    """Offset for one node of a co-located stack, spread on a small circle around the true position.
+    """Offset for one node of a co-located stack, on a small circle around the true position.
 
-    A deliberate lie about position, and the caption says so. The alternative - one dot with a count
-    badge - hides the roles, which is most of what this map is for.
+    A deliberate lie about position, captioned as one: a count badge would hide the roles.
     """
     if count == 1:
         return 0.0, 0.0
@@ -100,12 +96,9 @@ def _mark(shape, cx, cy, r, fill, stroke, width=0.9):
 
 
 def mesh_svg(campaign, path, max_links=2500):
-    """Draw one run's mesh. Returns the counts it drew, so a caller can record what the map claims.
+    """Draw one run's mesh, returning the counts it drew so a caller can record the claim.
 
-    Links are drawn in two passes: every link faint, then the fragile ones over the top in the colour
-    the report uses for them. Drawing 2000 links at equal weight is a grey rectangle; drawing only the
-    fragile ones loses the shape. The pair says "here is the mesh, and here is the part of it that a
-    little fading would remove", which is the question a placement map is actually asked.
+    Two passes - every link faint, the fragile ones over the top - since 2000 equal links are a smear.
     """
     mesh = campaign.mesh
     nodes = mesh.nodes
@@ -196,9 +189,8 @@ def mesh_svg(campaign, path, max_links=2500):
         cx, cy = place[i]
         role = getattr(nodes[i], "role", None) or "CLIENT"
         shape, _, _ = ROLE_MARKS.get(role, UNKNOWN_ROLE)
-        # The archive ring sits *outside* the role mark rather than replacing it: an archive on a
-        # router and an archive on a muted client are different deployments, and a map that draws
-        # both as the same red dot cannot tell you which one you are looking at.
+        # Outside the role mark rather than replacing it: an archive on a router and one on a
+        # muted client are different deployments, and one red dot cannot tell them apart.
         parts.append(
             f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="11.5" fill="none" '
             f'stroke="{SERVER}" stroke-width="2.4"/>'

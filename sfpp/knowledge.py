@@ -27,19 +27,15 @@ ROUTE_DEATHS = (
     ("routes_lost_to_eviction", "destination evicted from NodeDB"),
 )
 
-# Not a death but a refusal: an ambiguous relay byte deletes nothing, it makes one decision fall
-# back to the safe branch, and the next may resolve cleanly. Counted apart from the deaths so a
-# healthy dense mesh does not read as a broken one.
+# A refusal, not a death: an ambiguous relay byte falls back to the safe branch and the next may
+# resolve. Counted apart, so a healthy dense mesh does not read as a broken one.
 RESOLUTION_FAILURES = (("next_hop_ambiguous", "relay byte shared by two known nodes"),)
 
 
 def node_knowledge(mesh, index):
     """What one node holds right now, split into what is still true and what is not.
 
-    Coverage is measured against what this node can reach now, counting only records for nodes it
-    can still reach. Anything else is counted separately as `stale_records`: after a partition a
-    node keeps what it learned about the far side, and a denominator ignoring that would report
-    coverage above 100%.
+    Coverage counts only reachable nodes; the rest are `stale_records`, or coverage exceeds 100%.
     """
     node = mesh.nodes[index]
     # Reachable over the live graph, so a partition or a downed node shrinks it as it should.
@@ -128,8 +124,7 @@ def snapshot(mesh):
 def partitions(mesh):
     """Connected components over the *live* link graph, largest first.
 
-    After a break this is the honest picture of the mesh: not "how many nodes are up" but "how many
-    separate meshes are there now", which is what decides whether an archive can still reconcile.
+    After a break, how many separate meshes there are decides whether an archive can reconcile.
     """
     seen = set()
     components = []
@@ -153,9 +148,7 @@ def partitions(mesh):
 def stale_beliefs(mesh):
     """Routes that point through a node that is no longer there.
 
-    This is the cost of a break that no counter catches at the moment it happens: the mesh does not
-    know it is wrong yet. Every one of these is a directed delivery that will fail, three times,
-    before the route decays - so this number is a *prediction* of wasted airtime, not a record of it.
+    Each is a directed delivery that will fail three times before decaying: a prediction, not a record.
     """
     dead_bytes = {}
     for node in mesh.nodes:
@@ -175,10 +168,9 @@ def stale_beliefs(mesh):
 
 
 class Recorder:
-    """Samples knowledge on a timer and keeps the series.
+    """Samples knowledge on a timer and keeps the series. Attach before running.
 
-    Attach before running. The sample interval is in simulated milliseconds; an hour is usually
-    right for a multi-day run, and anything finer just makes the plot noisy.
+    The interval is simulated milliseconds; an hour suits a multi-day run.
     """
 
     def __init__(self, mesh, every_ms=3600_000.0):
@@ -255,8 +247,7 @@ class Recorder:
     def render(self, path, title="What the mesh knows"):
         """Four panels: coverage, what is held, how broken the mesh is, and how a route died.
 
-        Returns the path, or None when matplotlib is not installed - a headless run should not fail
-        because it could not draw a picture.
+        None when matplotlib is absent: a headless run should not fail for want of a picture.
         """
         try:
             import matplotlib

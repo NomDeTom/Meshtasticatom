@@ -300,8 +300,7 @@ def fig_topology(runs_dir, out_dir):
 def fig_baseline(runs_dir, out_dir, block="Q-control"):
     """Reach against the routing ceiling, per seed.
 
-    Reads only the `baseline` section, which every report carries, so any block will do. It was
-    pinned to `C-baseline`, a block that no longer exists, and so had stopped drawing entirely.
+    Reads only `baseline`, which every report carries, so any block will do.
     """
     reports = load(runs_dir, block)
     if reports is None:
@@ -352,9 +351,7 @@ def fig_baseline(runs_dir, out_dir, block="Q-control"):
 def fig_placements(out_dir, seed=20260817, nodes=60, area=8000.0, servers=3):
     """The same mesh five times, with the servers put somewhere different each time.
 
-    Placement is the one arm whose result is meaningless as a number without the picture: knowing
-    that 'beside a router' holds less than 'two hops apart' says nothing until you can see that the
-    first arrangement puts three servers inside one neighbourhood.
+    The one arm whose number means nothing without the picture of where they went.
     """
     import random
 
