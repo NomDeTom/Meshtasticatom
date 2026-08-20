@@ -43,19 +43,8 @@ SR_ENVELOPE = 18
 SR_CHECKSUM = 9
 SR_SIGNATURE = 66
 OBJECT_OVERHEAD = 14
-# Two fields on the outside of a replayed object, clear of the original encryption wrapper, so a node
-# that merely overhears the replay can file it in the right place in its own history rather than
-# showing it as having arrived now. `heard_ago` is seconds since the archive received it; `replayed`
-# marks it as a replay so a client can present it as such instead of as fresh traffic.
-# One field, outside the encryption wrapper: heard_ago, in 64-second ticks, 2 bytes.
-#
-# No separate "replayed" flag is needed, because the field's *presence* is the flag. Fresh traffic
-# carries no heard_ago; a replay does. In protobuf terms that is an optional field, so absence costs
-# nothing and cannot be confused with a value of zero-seconds-ago.
-#
-# 64-second ticks because fine resolution is worthless here - the measured spread between two
-# archives' accounts of the same message is single-digit seconds - and a full 16 bits of ticks buys
-# 48 days of range, comfortably past any archive retention window.
+# One field outside the encryption wrapper: heard_ago, in 64-second ticks, 2 bytes. Its presence
+# is the flag - fresh traffic carries none - and 16 bits of ticks buys 48 days. MODEL.md.
 REPLAY_TICK_S = 64
 REPLAY_HEADER = 2
 REPLAY_MAX_TICKS = (1 << 16) - 1
@@ -67,15 +56,11 @@ ADMIN_REQUEST_BYTES = 32
 ADMIN_REPLY_BYTES = 48
 # How long each leg is given before it is judged. Generous against the retry ladder's own budget.
 ADMIN_LEG_TIMEOUT_MS = 120_000.0
-# AdminModule.h:109, kOutstandingAdminRequestMs = 300 * 1000, "same window as the session passkey".
-# The whole round trip has to land inside this or the firmware stops accepting the response: the
-# request's slot has expired and the reply is no longer vouched for by anything.
+# AdminModule.h:109, kOutstandingAdminRequestMs. The whole round trip must land inside it or the
+# firmware stops accepting the response - its slot has expired. MODEL.md.
 ADMIN_SESSION_TIMEOUT_MS = 300_000.0
-# What a person does when a configuration change does not take: presses it again, twice, then stops.
-# Not a firmware constant - the firmware has no retry loop here at all - so it is an assumption about
-# the operator, stated as one and adjustable with --admin-attempts. The key half of the model is not
-# an assumption: admin authorisation lives in config.security.admin_key[3], separate from NodeDB and
-# immune to its eviction, so a session's outcome is the timing rather than key availability.
+# What a person does when a change does not take: presses it again, twice, then stops. An
+# assumption about the operator, not a firmware constant, and adjustable. MODEL.md.
 ADMIN_DEFAULT_ATTEMPTS = 3
 
 # The traffic mix. NodeInfo is every three hours in the firmware's defaults, not hourly.
@@ -97,11 +82,7 @@ def sketch_bytes(capacity, width_bits):
 def truncated_short_id(message_hash, width_bits):
     """The sketch member at a chosen short-ID width.
 
-    PinSketch here is GF(2^32) because it is a transcription of the firmware's, so the arithmetic
-    cannot be re-fielded without breaking the oracle. Narrowing is modelled by masking the ID to `b`
-    bits before it enters the sketch, which reproduces exactly what `b` controls - the collision
-    rate - while airtime is charged at the real c x b/8. Widths above 32 are charged their real
-    airtime and modelled as collision-free, which they effectively are.
+    Masked rather than re-fielded, which reproduces what the width controls - MODEL.md.
     """
     sid = short_id(message_hash)
     if width_bits >= 32:
@@ -149,8 +130,7 @@ class Placement:
     def beside_router(mesh, count, rng, hops=None):
         """A plain client one hop from each router - the 'off to the side of a router' case.
 
-        The argument for it: such a server hears most of what the router hears without competing
-        with it for the channel.
+        It hears most of what the router hears without competing with it for the channel.
         """
         routers = [i for i, node in enumerate(mesh.nodes) if node.role == M.ROUTER]
         routers.sort(key=lambda i: -len(mesh.neighbours[i]))
@@ -176,12 +156,7 @@ class Placement:
     def random_any(mesh, count, rng, hops=None):
         """Any node at all, chosen at random, whatever it already is.
 
-        The other strategies each answer "where should an operator put one", and every one of them
-        is bounded by something: `routers` and `beside-router` cannot exceed the number of routers
-        the mesh happens to have - four, on the Batumi snapshot - so asking either for six gets four
-        and no complaint. This one is bounded only by the node count, which makes it the strategy for
-        asking how the archive scales rather than where it goes, and the honest control for any claim
-        that a deliberate arrangement beat chance.
+        Bounded only by the node count, so it asks how the archive scales - MODEL.md.
         """
         return rng.sample(range(len(mesh.nodes)), min(count, len(mesh.nodes)))
 
@@ -278,11 +253,7 @@ class Counters:
 class Server:
     """One SF++ node: a store, plus the reconciliation state the protocol needs.
 
-    Bucket membership is per-server. The firmware assigns a chain counter as `chain_end.counter + 1`
-    when it ingests a message that arrived without an official one (StoreForwardPlusPlus.cpp:1366),
-    so two servers hearing the same broadcast off the air number it differently. `SketchIndex.h`
-    describes a count boundary as one both sides derive from the data itself; it is derived from
-    local arrival order instead, which is what the bucket-mode arm measures.
+    Bucket membership is per server, from local arrival order - MODEL.md.
     """
 
     def __init__(self, index, store, opts):
@@ -297,13 +268,11 @@ class Server:
         self.matched = set()
         self.poisoned = set()
         self.sealed = set()  # buckets this server considers closed
-        # (rx_time_ms, bucket) for objects heard directly, in time order. A replay carrying
-        # `heard_ago` can be binary-searched into this to land in the bucket it would have been in
-        # had it arrived on time, rather than in whatever bucket is current now.
+        # (rx_time_ms, bucket) for objects heard directly, so a replay carrying heard_ago can be
+        # searched into the bucket it belonged in rather than the current one.
         self.timeline = []
-        # message_hash -> (first_heard_ms, [claimed original ms from each replay]). Holding both the
-        # directly-heard copy and every replay's claim is what makes drift measurable and what would
-        # catch a peer lying about heard_ago.
+        # message_hash -> (first_heard_ms, [claims]). Holding both the heard copy and every claim
+        # is what makes drift measurable, and what would catch a peer lying.
         self.provenance = {}
 
     def members(self, bucket):
@@ -312,9 +281,7 @@ class Server:
     def window(self, size):
         """The N objects this server ingested most recently, by its own numbering.
 
-        A sliding window needs no agreement. Two servers' windows overlap because they heard mostly
-        the same recent traffic, not because they negotiated a boundary: the XOR of two sketches is
-        the symmetric difference of whatever sets they were built over.
+        A sliding window needs no agreement between servers at all - MODEL.md.
         """
         recent = sorted(self.held.items(), key=lambda kv: -kv[1])[:size]
         return {h for h, _ in recent}
@@ -353,8 +320,7 @@ class Server:
     def holds(self, message_hash):
         """Membership in the whole store, not just the window.
 
-        Load-bearing for window mode: a short ID in the decoded difference may be something the peer
-        holds and has simply aged out of its window. Checking the window would request it back.
+        Checking the window instead would request back what the peer has merely aged out.
         """
         return message_hash in self.held
 
@@ -377,10 +343,7 @@ class Server:
 def _noise_field(opts, seed, area):
     """The moving noise floor, or None for the static one this simulator has always had.
 
-    Seeded off the run's seed but through its own constant, so the field is reproducible without
-    being correlated with anything else the seed decides. NoiseField draws no randomness at all, so
-    switching a profile on leaves every other draw in the run exactly where it was - the arms of a
-    noise sweep differ in the field and in nothing else.
+    Its own seed constant, and no randomness drawn, so the arms differ in nothing else.
     """
     profile = getattr(opts, "noise_profile", "none")
     if profile == "none":
@@ -422,16 +385,13 @@ class Campaign:
         self.seed = seed
         self.rng = random.Random(seed)
         self.conf = M.make_config(preset=opts.preset, phy_loss=not opts.no_phy_loss, tx_power=getattr(opts, 'tx_power', None), noise_model=getattr(opts, 'noise_model', 'thermal'))
-        # 150 nodes in the same 8 x 8 km as 60 is two and a half times the density, so a size sweep
-        # that holds area fixed measures density and calls it size. Scaling the side by sqrt(n/60)
-        # keeps nodes per square kilometre constant and lets the two be separated.
+        # Holding area fixed while node count moves measures density and calls it size, so the
+        # side scales by sqrt(n/60) to keep nodes per square kilometre constant.
         self.area = (
             opts.area * math.sqrt(opts.nodes / 60.0) if opts.scale_area else opts.area
         )
-        # The ground, resolved before the mesh is built because it decides the conf the link budget
-        # is computed against - and, for a real snapshot, the geometry and the node count too. It is
-        # applied here rather than inside build() so an explicit --noise-model still wins over the
-        # floor a calibrated scenario carries; see terrain.apply().
+        # Resolved before the mesh is built, because it decides the conf the budget is computed
+        # against and, for a real snapshot, the geometry too. MODEL.md.
         self.scenario = TR.load(
             getattr(opts, "scenario", None),
             area=self.area,
@@ -451,11 +411,8 @@ class Campaign:
             link_calibration=not getattr(opts, "no_link_calibration", False),
         )
         if self.scenario is not None and self.scenario.fixed_geometry:
-            # The place decides the count and the extent; a --nodes that disagrees is a mistake, not
-            # a preference. `opts.nodes` is overwritten rather than merely ignored because every
-            # per-node structure below is sized from it, and because the report records opts as the
-            # description of the run - leaving 60 there while 92 nodes transmit would be a lie in
-            # the one place a reader checks.
+            # The place decides the count. Overwritten rather than ignored: every per-node
+            # structure is sized from it, and the report records opts as the run. MODEL.md.
             opts.nodes = self.scenario.node_count
             self.area = max(self.area, 2.0 * self.scenario.extent())
         self.mesh = M.build(
@@ -497,10 +454,8 @@ class Campaign:
             terrain=self.terrain,
         )
         self.root_hash = bytes(range(16))
-        # Who anyone ever types on. Assigned before the generator picks its DM pool, and at random
-        # rather than by degree: whether a node has a user is a fact about its owner, not about how
-        # well sited it is, and choosing the worst-connected nodes would make an unattended mesh look
-        # cheaper than it is.
+        # Who anyone types on, assigned before the DM pool is picked and at random: having a user
+        # is a fact about the owner, not about siting. MODEL.md.
         originating = float(getattr(opts, "dm_originator_fraction", 1.0))
         if originating < 1.0:
             silent = self.rng.sample(
@@ -531,9 +486,8 @@ class Campaign:
             telemetry_throttle=opts.telemetry_throttle,
             congestion_pivot=getattr(opts, "congestion_pivot", T.CONGESTION_PIVOT),
         )
-        # Its own stream, for the reason spelled out on _place_servers: a randomised placement drawing
-        # from self.rng moved the traffic schedule, so the arms of a placement sweep differed in their
-        # offered load as well as their placement. 0x504C4143 is "PLAC".
+        # Its own stream, for the reason on _place_servers: drawing from self.rng moved the
+        # traffic schedule. 0x504C4143 is "PLAC". TRAPS 12.
         self.placement_rng = random.Random(int(seed) ^ 0x504C4143)
         self.counters = Counters()
         # packet id -> (hops, latency_ms) for DMs that reached the node they were addressed to.
@@ -550,14 +504,11 @@ class Campaign:
         self.counter_of = {}  # message_hash -> canonical chain counter
         self._counted = 0
         self.heard_text = {i: set() for i in range(opts.nodes)}
-        # Every class, not just the archived one. Position, telemetry and nodeinfo are generated,
-        # flooded and charged airtime, so any airtime share quoted against them needs their
-        # receptions measured too.
+        # Every class, not just the archived one: anything charged airtime needs its receptions
+        # measured before an airtime share can be quoted against it.
         self.heard_by_class = {}
-        # Reception over time, in fixed bins of simulated time. A 72-hour run reported as one mean is
-        # still a single number: the reason the sweeps run three diurnal cycles is that the cycle is
-        # visible, and it is only visible if something samples inside it. `--reception-bin-s 0` is off
-        # and leaves the run byte-identical to one made before this existed.
+        # Reception over time, in fixed bins: a 72-hour run reported as one mean is still one
+        # number. 0 is off and leaves a run byte-identical to before this existed. MODEL.md.
         self.bin_ms = float(getattr(opts, "reception_bin_s", 0) or 0) * 1000.0
         # {bin index: {class: receptions}}, filled on the hot path, so it is a dict bump and an
         # integer division per reception and nothing more.
@@ -565,36 +516,27 @@ class Campaign:
         # Cumulative mesh counters read at each bin boundary and differenced afterwards. Sampled on a
         # timer rather than counted per event, so the loss attribution costs the hot path nothing.
         self.counter_samples = []
-        # Running sums of each node's own hop histogram, so the reported one is an average over the
-        # run rather than whatever the last roll happened to hold. Summed rather than kept per sample:
-        # a per-bin array per node is O(nodes x bins) and only ever read as a mean, so O(nodes) does.
+        # Running sums, so the reported histogram is an average over the run rather than the last
+        # roll. Summed rather than per sample, since only the mean is ever read.
         self.hop_hist_sums = {}
         self.hop_hist_samples = {}
         self.hop_stats = {}
-        # Per node, how many hops each text it received had actually travelled. The firmware keeps the
-        # same quantity per peer as NodeInfoLite.hops_away, so this is the simulator's view of the field
-        # rather than an invented metric - and a histogram rather than a mean, because the interesting
-        # nodes are the ones whose traffic all arrives at 4+ hops.
+        # How far each received text actually travelled - the simulator's view of
+        # NodeInfoLite.hops_away, kept as a histogram because the tail is the interesting part.
         self.hops_away_hist = {i: {} for i in range(opts.nodes)}
         self.servers = {}
         self.db_dir = tempfile.mkdtemp(prefix="sfpp-campaign-")
         self.bucket_closed_at = {}
         self.width = opts.short_id_bits
 
-        # Intermediate nodes wired for telemetry. They run no archive and change no behaviour; they
-        # only record what an ordinary node in the middle of the mesh actually ends up with, split by
-        # how it got there. Without this the bystander benefit of a broadcast replay is invisible.
+        # Telemetry only: they run no archive and change no behaviour, but without them the
+        # bystander benefit of a broadcast replay is invisible.
         self.observers = {}
-        # `none` is the paired baseline: same seed, same topology, same traffic schedule, no archive.
-        # Making it a cell of the protocol arm rather than a separate run turns every other cell into
-        # a difference instead of a comparison.
+        # The paired baseline, as a cell of the protocol arm rather than a separate run - which
+        # turns every other cell into a difference. MODEL.md.
         self.chain = CH.ChainProtocol(self) if opts.protocol == "chain" else None
-        # The same nodes are chosen whatever the protocol, including `none`. Under `none` they run no
-        # archive and behave as ordinary nodes - which is the control that separates two things this
-        # campaign had been conflating: what being a server *costs* a node in its own reception
-        # (a server transmits more, so contention and half duplex charge it), and what
-        # reconciliation then *adds* on top. Without it, "held 0.966" could not be split into
-        # "heard anyway" and "recovered".
+        # The same nodes whatever the protocol, so what being a server costs can be separated
+        # from what reconciliation adds. MODEL.md.
         self.designated = []
         if not opts.baseline:
             self._place_servers(archive=opts.protocol != "none")
@@ -606,10 +548,7 @@ class Campaign:
     def server_count(self):
         """How many archives this run wants, as a count.
 
-        A value below 1 is read as a share of the mesh rather than a count, so a scaling sweep can
-        hold the archive density fixed while the node count moves: `--servers 0.05` is five per
-        hundred nodes at every scale, where `--servers 3` is three whether the mesh is 92 nodes or
-        368. Zero servers is a legitimate answer and means the same as --baseline.
+        Below 1 it is a share of the mesh, so density holds while the node count moves.
         """
         value = self.opts.servers
         if value is None:
@@ -622,30 +561,14 @@ class Campaign:
         """Choose the archive positions. With `archive=False` they are marked and instrumented but
         run nothing, so the same nodes in the same places can be measured as ordinary nodes.
 
-        **Placement draws from its own stream, not the run's.** `random-any` and `random-clients` pick
-        with `rng.sample`; the deliberate strategies sort by degree and draw nothing. Taking those
-        samples from `self.rng` shifted every later draw, so the traffic generator - built before this
-        runs but scheduled after it - produced a *different schedule* under a randomised placement than
-        under a deliberate one. Measured at seed 4242: `off`, `spread` and `beside-router` all
-        originated 31 texts and 298 positions, and `random-any x2` originated 32 and 289, for a
-        reach of 0.371 against the control's 0.343.
-
-        That put an 8% difference - the same order as the effects these sweeps measure - between the
-        control and the one arm that exists to *be* the control: `random-any` is the honest baseline
-        for any claim that a deliberate arrangement beat chance, and it was the only arm not carrying
-        the control's traffic.
-
-        The fix is the pattern `_noise_field` and `_ducting` already use: a stream seeded off the run's
-        seed through its own constant, so it is reproducible without being correlated with anything
-        else the seed decides, and consuming from it cannot move anything else.
+        Placement draws from its own stream, not the run's - TRAPS 12.
         """
         strategy = Placement.BY_NAME[self.opts.place]
         wanted = self.server_count()
         indexes = strategy(self.mesh, wanted, self.placement_rng, self.opts.hops_apart)
         self.designated = sorted(indexes)
-        # What was asked for against what the mesh could offer. A role-bounded strategy silently
-        # returning a shorter list is how "6 servers" and "4 servers" end up as the same row in a
-        # sweep, indistinguishable once the requested number is the only one written down.
+        # Both figures, because a role-bounded strategy returning a shorter list silently is how
+        # "6 servers" and "4 servers" become one row. TRAPS 6.
         self.servers_requested = wanted
         self.servers_short = wanted - len(self.designated)
         if self.servers_short > 0:
@@ -707,11 +630,8 @@ class Campaign:
             return
         seen[key] = True
         if self.bin_ms:
-            # Binned by *reception* time, not by when the packet was originated. Over a bin far wider
-            # than the latency - an hour against seconds - the two agree for everything except the
-            # packets straddling a boundary, and tracking an origin time per packet would mean a slot
-            # on Packet and a live dict of every id in the run. The first and last bins are the ones
-            # to distrust, which is why the denominator is recorded per bin rather than assumed flat.
+            # By reception time, not origination: over an hour-wide bin the two agree except at
+            # the boundaries, which is why each bin records its own denominator. MODEL.md.
             slot = self.received_bins.setdefault(int(self.mesh.now // self.bin_ms), {})
             slot[kind] = slot.get(kind, 0) + 1
         # Split by the receiver's own hop limit, so "does turning it up help me" is answerable
@@ -727,9 +647,8 @@ class Campaign:
         if packet.kind == "text":
             h = self.hops_away_hist[node.index]
             h[hops] = h.get(hops, 0) + 1
-        # A DM counts as received only at the node it was addressed to. Every other node that heard
-        # it relayed it; the flood reaching a bystander is not delivery, and counting it as one is
-        # how an addressed protocol gets credited with a broadcast's reach.
+        # Only at the node it was addressed to: counting the flood reaching a bystander is how
+        # an addressed protocol gets credited with a broadcast's reach.
         if packet.kind == "dm":
             sent = self.generator.dm_sent.get(packet.id)
             if sent is not None and sent[1] == node.index:
@@ -749,9 +668,8 @@ class Campaign:
         if packet.kind == "text":
             self._on_text(node, packet)
         elif packet.kind == "sr:item_provide" and packet.payload is not None:
-            # A replayed object is useful to whoever hears it, not only to whoever asked. A server
-            # files it in its store and any other node records it for its own history, so both paths
-            # run: returning here instead would stop servers ingesting broadcast replays.
+            # Useful to whoever hears it, not only to whoever asked, so both paths run:
+            # returning here would stop servers ingesting broadcast replays.
             if node.index in self.servers:
                 self._on_sr(node, packet)
             else:
