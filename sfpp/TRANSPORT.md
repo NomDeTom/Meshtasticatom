@@ -735,3 +735,19 @@ uses.
 The overlap window is derived per preset - one maximum-length frame plus a fifth - because the span
 across presets is two orders of magnitude, 0.175 s at SHORT_TURBO against 28.6 s at VERY_LONG_SLOW,
 and one number cannot be both correct at the slow end and cheap at the fast end.
+
+## Originating a packet
+
+`Router::send`: a node adds its own packet to the history first, so the copies it hears coming back
+are recognised as its own, and sets the next hop before it goes out.
+
+`assume_key` skips the PKI gate for a peer whose key did not come from the hot store. It exists for
+the admin path and is firmware-authentic rather than a convenience: admin authorisation lives in
+`config.security.admin_key[3]` - three 32-byte keys in `SecurityConfig`, compared directly at
+`AdminModule.cpp:184` - which is separate persistent config, not NodeDB. It is provisioned out of
+band or baked in via USERPREFS, and it survives every eviction the hot store performs. Gating an
+admin session on NodeDB would measure eviction rather than whether the session completes.
+
+`pki` marks a DM that has to be encrypted to the destination's public key. Without a key in any tier
+the packet is never composed, which is what evicting a peer actually costs: not a worse route to it,
+but no conversation with it until its NodeInfo is heard again.

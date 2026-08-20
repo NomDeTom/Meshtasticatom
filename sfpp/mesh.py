@@ -1694,8 +1694,7 @@ def _lattice_gauss(*key):
 class NoiseField:
     """A noise floor that moves, reported as an offset in dB. Positive is a worse band.
 
-    Hashed rather than drawn, so it costs no randomness and does not depend on delivery order; the
-    three profiles are in TRANSPORT.md. Reach that extends under a lift belongs to `Ducting`.
+    Hashed rather than drawn, and three profiles deep - TRANSPORT.md. Lift belongs to `Ducting`.
     """
 
     MAX_SAMPLES = 64  # a 28.6 s VERY_LONG_SLOW frame at tau=500 ms would otherwise cost 57 hashes
@@ -1993,9 +1992,8 @@ def _preset(bw_hz, cr, sf):
     return {"bw": bw_hz, "cr": cr, "sf": sf, "sensitivity": sens, "cad_threshold": sens - 3.0}
 
 
-# The seven presets 2.8 added - MEDIUM_TURBO, the LITE, NARROW and TINY pairs - now ship in the
-# vendored table itself, so nothing is overlaid here. The wideLora bandwidths in the same switch
-# are still absent, because the region table has no 2.4 GHz entry to run them against.
+# The seven presets 2.8 added now ship in the vendored table, so nothing is overlaid here. The
+# wideLora bandwidths are still absent: no region entry runs at 2.4 GHz.
 
 
 def make_config(
@@ -2314,17 +2312,15 @@ class Mesh:
                 self.loss_terms["clutter_db"] += clutter_db
                 self.loss_terms["pairs"] += 1
                 base = conf.PTX + 2 * conf.GL - loss - terrain_db - clutter_db
-                # i transmitting and j receiving, so i's transmit gain and j's receive gain - which
-                # differ on an amplified node. The per-pair skew sits on top, for the asymmetry of
-                # the link rather than of either radio. Drawn once, above, and reused.
+                # i transmitting and j receiving, so i's transmit gain and j's receive gain. The
+                # per-pair skew on top is the link's own asymmetry, drawn once above and reused.
                 skew = self._skew[i][j]
                 in_envelope = calibration_max is None or d <= calibration_max
                 if calibrated and not in_envelope:
                     self.loss_terms["beyond_calibration"] += 1
                 if calibrated and in_envelope:
-                    # A fitted scenario has measured what its links do, and that beats this budget.
-                    # The vendored function is called, not reimplemented, so the number is the one
-                    # the preset was fitted to produce. TRANSPORT.md.
+                    # A fitted scenario measured what its links do, and the vendored function is
+                    # called rather than reimplemented, so the number is the fitted one.
                     self.rssi[i][j] = (
                         calculate_link_budget(
                             conf,
@@ -3313,8 +3309,7 @@ class Mesh:
     def _signature_policy_admits(self, rx, packet):
         """Router::checkXeddsaReceivePolicy - does this node accept the packet as it arrived?
 
-        COMPATIBLE, BALANCED and STRICT, and the size test that is BALANCED's sharp edge:
-        TRANSPORT.md.
+        Three policies, and the size test that is BALANCED's sharp edge - TRANSPORT.md.
         """
         node = self.nodes[rx]
         if not node.profile.signing or packet.pki_encrypted:
@@ -3378,8 +3373,7 @@ class Mesh:
     def resolve_last_byte(self, rx, relay_byte, require_direct_neighbour=False):
         """NodeDB::resolveLastByte. Returns (status, peer) - UNIQUE, AMBIGUOUS or NONE.
 
-        Two gates, so a smaller store is less ambiguous - TRANSPORT.md. One fidelity gap: the role
-        gate reads the peer's true role, where the firmware reads a learned one.
+        Two gates, so a smaller store is less ambiguous - TRANSPORT.md, which notes the one gap.
         """
         if not relay_byte:
             return RESOLUTION_NONE, None
@@ -3495,8 +3489,7 @@ class Mesh:
     def get_next_hop(self, rx, destination, relay_byte):
         """NextHopRouter::getNextHop. None means flood.
 
-        A route decays on age or on three failures, unless its health record was evicted first -
-        which the firmware allows too. TRANSPORT.md.
+        A route decays on age or on three failures, health record permitting - TRANSPORT.md.
         """
         if destination == BROADCAST or not self.nodes[rx].profile.next_hop_routing:
             return None
@@ -3949,8 +3942,7 @@ class Mesh:
     def _traceroute_learn(self, rx, packet):
         """TraceRouteModule::updateNextHops on a returning reply.
 
-        A node in the route learns every node beyond it, and only from a corroborated relay -
-        TRANSPORT.md.
+        A node learns every node beyond it, from a corroborated relay only - TRANSPORT.md.
         """
         node = self.nodes[rx]
         if not node.profile.traceroute_learning or packet.route is None:
@@ -4320,20 +4312,7 @@ class Mesh:
     ):
         """Inject a packet from a node's application layer, as if it had composed it.
 
-        Mirrors Router::send: we add our own packet to the history first, so the copies we hear
-        coming back are recognised as our own, and set the next hop before it goes out.
-
-        `assume_key` skips the PKI gate for a peer whose key did not come from the hot store. It
-        exists for the admin path, and it is firmware-authentic rather than a convenience: admin
-        authorisation lives in `config.security.admin_key[3]` - three 32-byte keys in SecurityConfig,
-        compared directly at AdminModule.cpp:184 - which is separate persistent config, not NodeDB.
-        It is provisioned out of band or baked in via USERPREFS, and it survives every eviction the
-        hot store performs. Gating an admin session on NodeDB would measure eviction rather than
-        whether the session completes.
-
-        `pki` marks a DM that has to be encrypted to the destination's public key. Without a key in
-        any tier the packet is never composed, which is what evicting a peer actually costs: not a
-        worse route to it, but no conversation with it until its NodeInfo is heard again.
+        Router::send, plus what `assume_key` and `pki` mean here - TRANSPORT.md.
         """
         radio = self.nodes[node]
         if not radio.online:
@@ -4481,9 +4460,7 @@ def build(
 ):
     """A mesh with positions drawn from `rng` and a share of the nodes promoted to ROUTER.
 
-    Routers are chosen by degree rather than at random: a deployment puts the repeater on the hill,
-    and choosing them randomly would understate how much a flood depends on a few well-sited nodes.
-    ROUTER_LATE and CLIENT_BASE are drawn from the same ranking, below the plain routers.
+    Routers are chosen by degree, as a deployment does, and the other roles from the same ranking.
     """
     # Real geometry decides the node count: the place is the input, not a shape to fit a count
     # into. Stretching it is refused rather than ignored. TRANSPORT.md.
