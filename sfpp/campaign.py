@@ -683,10 +683,7 @@ class Campaign:
     def _global_counter(self, message_hash):
         """Origination order across the whole mesh. A FICTION, kept only as an upper bound.
 
-        No canonical counter exists. StoreForwardPlusPlus.cpp:1364 reads "if we get an official
-        counter, use it. Otherwise, just increment", and there is no official counter to get: every
-        counter is a local increment off the local chain tip. This mode therefore describes a mesh
-        that cannot be built, and exists only to bound what bucket agreement would be worth.
+        No canonical counter exists, so this describes a mesh that cannot be built - MODEL.md.
         """
         counter = self.counter_of.get(message_hash)
         if counter is None:
@@ -712,10 +709,8 @@ class Campaign:
             return counter, bucket, bucket - 1 if bucket > 0 else None
 
         if mode == "local":
-            # What the firmware does, and the only mode that describes a real mesh: chain_end.counter
-            # + 1, every time, because no official counter is ever supplied. Both the bucket a
-            # message lands in and the moment a bucket fills are therefore per-server and effectively
-            # random - each server hears a different subset in a different order.
+            # What the firmware does, and the only mode describing a real mesh. Both the bucket
+            # and the moment it fills are per server. MODEL.md.
             server.next_counter += 1
             counter = server.next_counter
             bucket = bucket_of(counter)
@@ -729,9 +724,8 @@ class Campaign:
             due = server.next_counter % max(1, self.opts.window_size) == 0
             return server.next_counter, 0, 0 if due else None
 
-        # Time buckets: quantise the receive clock. Both servers heard the packet within a second or
-        # two, so any window wider than that agrees except for objects near a boundary - which is a
-        # bounded disagreement rather than a total one.
+        # Quantise the receive clock: any window wider than the spread between two servers
+        # agrees except at a boundary, which is a bounded disagreement.
         window = self.opts.time_bucket_s * 1000.0
         bucket = int(self.mesh.now // window)
         server.next_counter += 1
@@ -777,9 +771,7 @@ class Campaign:
     def _on_overheard_replay(self, node, packet):
         """A non-server node overhearing a replayed object gets to keep it.
 
-        This only works because the replay header sits outside the encryption wrapper: without
-        `heard_ago` the node could store the message but not place it, and without `replayed` it would
-        present an hour-old message as having just arrived.
+        Only because the replay header sits outside the encryption wrapper - MODEL.md.
         """
         message_hash = packet.payload.get("hash")
         if message_hash is None:
@@ -790,9 +782,8 @@ class Campaign:
             self.counters.bystander_pickups += 1
             if watch is not None:
                 watch["overheard"].add(message_hash)
-                # How far out is the replay header's account of when this was first heard? The
-                # claim is the archive's receive time, not the originator's, so some error is
-                # expected; this is whether it is small enough to file the message correctly.
+                # How far out the replay header's account is. The claim is the archive's receive
+                # time, so some error is expected; this asks whether filing stays correct.
                 claimed = self.mesh.now - packet.payload.get("heard_ago_s", 0) * 1000.0
                 true_ms = self.generator.objects[message_hash].rx_time
                 watch["placement_error_s"].append(abs(claimed - true_ms) / 1000.0)
@@ -819,15 +810,7 @@ class Campaign:
     def _unicast(self, src, dst, kind, payload, length, attempt=0):
         """An addressed SR message, by one of two routes.
 
-        `transport` hands it to the transport as a real DM: NextHopRouter picks the next hop from
-        what the sender has actually learned, falls back to flooding when it has learned nothing,
-        and runs the retry ladder. Costs are then whatever routing really costs, including being
-        wrong.
-
-        `hop-by-hop` walks a precomputed shortest path outside the transport, one addressed hop at a
-        time with a hand-written delay and no contention for the route decision itself. Every
-        published chain-arm cost was measured this way, so it stays the default until those numbers
-        are re-measured.
+        `transport` pays what routing really costs; `hop-by-hop` is the default - MODEL.md.
         """
         if self.dm_transport == "transport":
             packet = self.mesh.originate(
@@ -922,9 +905,8 @@ class Campaign:
             and payload["dst"] != node.index
             and kind != "sr:item_provide"
         ):
-            # Everything except a replayed object is a two-party conversation. A replay is not: a
-            # server that overhears one addressed to a different peer should keep it, which is most
-            # of the argument for broadcasting them at all.
+            # A replay is the one thing that is not a two-party conversation: a server should
+            # keep one addressed elsewhere, which is most of the argument for broadcasting them.
             return
         if payload["src"] == node.index:
             return
@@ -948,10 +930,7 @@ class Campaign:
     def _in_catch_up_window(self):
         """Is now inside the configured quiet period?
 
-        The argument for a catch-up window is that reconciliation is delay-tolerant and contention is
-        not: an archive that waits for the small hours pays for its airtime when the channel is cheap
-        and nobody is waiting on a text message. The cost is latency - a message missed at the evening
-        peak is not replicated until the small hours - which is why it is an arm and not a default.
+        Reconciliation is delay-tolerant where contention is not; the cost is latency - MODEL.md.
         """
         if not self.catch_up:
             return True
@@ -1073,10 +1052,8 @@ class Campaign:
             body = summary
         if self.opts.signed:
             length += SR_SIGNATURE
-        # A broadcast advert is relayed by every node in earshot and is the reason adverts dominate
-        # the byte budget. Once a server knows its peers - and an advert is itself the discovery
-        # mechanism, so it does after the first one - the same information can go as a DM to each,
-        # paying per peer instead of per neighbourhood.
+        # A broadcast advert is relayed by every node in earshot, where a DM pays per peer.
+        # An advert is itself the discovery mechanism, so peers are known after the first.
         if self.opts.advert_transport == "dm":
             peers = [i for i in self.servers if i != server.index]
             for peer in peers:
@@ -1111,9 +1088,8 @@ class Campaign:
                 "sketch": body,
                 "checksum": summary.checksum,
                 "count": summary.count,
-                # Ground truth for the safety gate only, never read by the protocol. An advert is
-                # a snapshot: the sender keeps ingesting while it is in flight, so a checksum has
-                # to be judged against the set it was computed over, not the sender's later state.
+                # Ground truth for the safety gate only, never read by the protocol: an advert is
+                # a snapshot, judged against the set it was computed over.
                 "members": server.members(bucket),
             },
             length,
@@ -1197,9 +1173,7 @@ class Campaign:
     def _send_object(self, server, peer_index, message_hash):
         """Replay one object to a peer, carrying the outside-the-wrapper replay header.
 
-        The header is what makes a broadcast replay useful to anyone other than the addressee: a node
-        overhearing it learns when the archive first heard the message and that this is a replay, so
-        it can file it in its own history in the right place instead of at the current time.
+        The header is what makes a broadcast replay useful to a bystander - MODEL.md.
         """
         obj = self.generator.objects[message_hash]
         length = min(MAX_PAYLOAD, obj.wire_size + OBJECT_OVERHEAD + REPLAY_HEADER)
@@ -1219,8 +1193,7 @@ class Campaign:
             "replayed": True,
         }
         if self.opts.provide_transport == "broadcast":
-            # Broadcast costs the neighbourhood a relay, and pays it back: every node in earshot that
-            # lacks the message can file it correctly off the replay header. Whether that trade is
+            # Broadcast costs the neighbourhood a relay and pays it back; whether that trade is
             # worth it is what the bystander counters measure.
             self._sr_send(server.index, "sr:item_provide", payload, length)
             return
@@ -1244,10 +1217,8 @@ class Campaign:
 
     def _recv_item_provide(self, server, payload):
         message_hash = payload["hash"]
-        # Record the replay's account of when this was first heard *before* deciding whether to store
-        # the object. A server that already holds the message is exactly the case worth keeping both
-        # for: its own receive time and a peer's claim about the same message are what make drift
-        # between archives measurable, and what would expose a peer lying about heard_ago.
+        # Recorded before deciding whether to store: a server that already holds the message is
+        # the case worth keeping both for, since that is what makes drift measurable.
         claimed_ms = self.mesh.now - payload.get("heard_ago_s", 0) * 1000.0
         server.note_replay(message_hash, claimed_ms)
         if message_hash in server.held:
@@ -1257,9 +1228,8 @@ class Campaign:
         if counter is None:
             return
         if self.opts.replay_ordering == "heard":
-            # File the replay where it belongs in this server's own stream rather than at the tip.
-            # This is what lets an old bucket converge: numbered at the tip, a transferred object
-            # lands in the newest bucket and the bucket it came from can never agree with the peer's.
+            # Filed where it belongs in this server's own stream, not at the tip: otherwise the
+            # bucket it came from can never agree with the peer's. MODEL.md.
             placed = server.bucket_at(claimed_ms)
             if placed is not None:
                 bucket = placed
@@ -1339,8 +1309,7 @@ class Campaign:
     def _final_audit(self):
         """Every server pair, every bucket, at rest: does checksum equality imply set equality?
 
-        The in-flight check can only judge the exchanges that happened. This judges the end state,
-        where nothing is in flight and no snapshot is stale, so a disagreement here is unambiguous.
+        The end state, where nothing is in flight, so a disagreement here is unambiguous.
         """
         if self.opts.bucket_mode == "window":
             # There is no shared bucket to audit: the windows were never agreed. The in-flight gate
