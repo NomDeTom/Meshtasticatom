@@ -360,3 +360,117 @@ the amplifier's insertion loss sits ahead of the LNA and few boards switch clean
 the whole point: a node heard far further than it hears relays into places whose replies cannot
 reach it, and its rebroadcast cancels copies queued by nodes that could have carried the packet
 further. `cancelled_by_weaker_relay` is the counter that shows it.
+
+## The noise floor
+
+The vendored `NOISE_LEVEL` is one constant for every preset, and the sensitivity table beside it is
+not: those figures are kTB + 6 dB NF, each landing exactly on its spreading factor's demodulator
+limit (SF7 −7.5 dB, SF11 −17.5, SF12 −20.0). A fixed floor therefore misstates SNR by
+10·log₁₀(bw/anchor) - about 5 dB optimistic at 250 kHz and 8 at 500 kHz.
+
+That matters more than a few dB sounds, because the PER curve's p50 sits at −17.0 dB (CR5) to
+−19.4 (CR8), right on those limits. Under the fixed floor a LONG_FAST link at sensitivity computes
+SNR −12.25 and decodes 96% of the time; under a thermal floor it computes −17.5 and decodes 39%.
+The fixed floor is why this model had no marginal link at all: it puts every link the graph will use
+5 dB into the flat top of the curve.
+
+`EXTRA_PRESETS` are not upstream and in no firmware build, and their sensitivity is **extrapolated**
+rather than derived: the vendored figures fall about 2.5 dB per spreading factor across the 500 kHz
+rows, and these continue that slope one step past each end. Treat them as indicative of a direction,
+not as a link budget. SF5 and SF6 also need an SX126x or SX128x, so `EXTRA_SHORT_TURBO` is not a
+setting every board could take even if the firmware offered it.
+
+## Loss knobs
+
+`extra_loss` is a flat loss floor on every reception, standing in for what the model does not carry
+- interference from outside the mesh, fading, a receiver busy elsewhere.
+
+`burst_loss` is bursty deafness: a node periodically unable to receive for a stretch, standing in
+for a blocked antenna, a neighbour keying up nearby, or a radio busy elsewhere. The two are
+different problems for a sketch: flat loss spreads divergence evenly across buckets, and a burst
+puts a whole bucket's worth into one.
+
+A noise excursion is attributed both ways off one draw - lost where the static floor would have
+delivered, and delivered through a quieter-than-nominal band where the static floor would have
+dropped - so neither attribution costs an extra random number.
+
+## Links
+
+Per-pair asymmetry is drawn **once** for the life of a mesh and kept. A rebuild - after an amplifier
+is fitted, or to price a stretch - then draws nothing and moves nothing it was not asked to move.
+Redrawing re-randomised every link, including every pair with no amplifier near it, and advanced the
+RNG the traffic generator shares, so the before and after of any such comparison were two different
+meshes carrying two different schedules.
+
+Siting moves both directions together - a basement is a bad place to transmit from *and* to receive
+in - so it is carried separately from amplification, which does not. Both must arrive with the
+constructor, because links are computed once.
+
+Terrain is a grid rather than a per-node height, because the link budget asks what is *between* two
+nodes and a node's own elevation answers half of that. Lifting nodes onto it is a no-op without a
+grid: the nodes keep their sea-level default, every obstruction term returns 0.0, and a flat run
+computes exactly the budget it always did. With terrain there are two numbers - `ground_m` from the
+grid, and `antenna_height_m` above it, never absolute altitude.
+
+## The link budget
+
+Three loss terms, three separate claims, kept apart so a result can price them apart: distance is
+geometry, terrain is a public elevation model, clutter is a land-cover raster. Both obstruction
+functions return 0.0 with their grid disabled, which is what makes a no-terrain run bit-identical to
+every run made before the ground existed.
+
+The path is measured between antennas, not between map pins. Without terrain every altitude is zero
+and the 3-D distance is the 2-D one; with terrain, two nodes 3 km apart with 400 m of ridge between
+them are further apart than the map says, and the obstruction terms price the ridge itself.
+
+`rssi[i][j]` is *i* transmitting and *j* receiving, so it takes i's transmit gain and j's receive
+gain - separate numbers per node, not one siting figure used both ways. The per-pair Gaussian skew
+sits on top, for the asymmetry that is a property of the pair rather than of either end.
+
+**Calibration.** Where a scenario ships fitted coefficients it has measured what its links actually
+do, and that beats this budget: on Batumi the fit is trained on 296 observed links, and the raw
+budget disagrees with them badly enough to break the mesh into 15 pieces the observations show as
+one. The vendored function is called rather than reimplemented, so the number is exactly the one the
+preset was fitted to produce. Per-node gains go in as the endpoints' antenna gain, where the fit
+expects them - `raw_snr` is one of its features - and the snapshot's own gains are all zero, so a
+default run reproduces the preset and an `--amplifier-mix` run asks what an amplifier would do to a
+mesh measured without one.
+
+These coefficients are one city, 296 links and one window. They are not a better link model in
+general: taking them elsewhere transports Batumi's ridges and rooftops to a place that does not have
+them.
+
+**The envelope.** A fit answers any distance asked of it. Batumi's was trained on links reaching
+23.2 km - three past 20 km, none past 30 - with ground-elevation terms that are positive and
+unbounded against a log-distance penalty that grows far more slowly. Mirrored past one tile it stops
+being an approximation: at four tiles a tenth of the links run beyond 42 km and the longest reaches
+60.6 km. Past the envelope the raw budget answers instead - only a physical path loss, but a
+physical path loss everywhere (TRAPS 4).
+
+## Link quality
+
+Every directed link is graded twice.
+
+**By margin** - `comfortable` (≥10 dB), `adequate` (5-10), `fragile` (<5, so a little fading removes
+it). These are geometry and do not depend on the noise floor at all. `near_miss` counts the other
+side of the cliff: pairs within 6 dB below sensitivity, which a real radio would sometimes hear and
+this one never does.
+
+**By what it delivers**, which is the grading that answers "how many links here are genuinely
+marginal". Under a fixed noise floor the answer was none: the threshold sat 5 dB into the flat top
+of the PER curve, so every link the mesh would use delivered 96%+ and everything worse was not a
+link. Under the thermal floor the threshold lands on the knee - a LONG_FAST link at sensitivity
+delivers 39% - and a marginal band exists to measure. That band is the population every retry,
+coding-rate and repeat mechanism in this design exists to serve.
+
+**The denominator matters.** Quoting either grading against the live link count alone is a trap: a
+stretched mesh loses its worst links off the bottom of the graph, so the share of *surviving* links
+that are bad can improve while the mesh gets worse. Every share is reported twice - against live
+links, and per thousand ordered pairs, which is fixed whatever the stretch does. Read the second
+across a stretch sweep, with `sub_sensitivity` beside it for what fell off the cliff.
+
+Delivery probability is zero below sensitivity, because `neighbours` is thresholded there and such a
+pair is never offered a packet at all.
+
+Duct reach is precomputed from the widest lift any configured duct can produce, so a delivery
+filters a candidate set rather than scanning all *n* receivers per transmission.
