@@ -4217,12 +4217,7 @@ class Mesh:
     def start_adaptive_trace(self, interval_ms=1800_000.0, generator=None):
         """Sample every adaptive quantity per node on a timer, and keep the series.
 
-        An end-state mean cannot tell a value that settled from one still swinging between two,
-        and every quantity here is now in a feedback loop: the hop recommendation feeds what gets
-        sent, which feeds the histogram it came from; the congestion coefficient feeds how often a
-        node sends, which feeds how many peers everyone hears. Sampling per node over time is what
-        makes the difference visible, so it is a prerequisite for reading any of these results
-        rather than a follow-up to them.
+        A prerequisite for reading these results, not a follow-up to them - TRANSPORT.md.
         """
         self.adaptive_trace = []
 
@@ -4255,15 +4250,7 @@ class Mesh:
     def hop_report(self, index):
         """Truth, observation and estimate side by side for one node.
 
-        `truth` is the topological distance to every reachable node, which no device can know.
-        `observed` is every hop count this node actually saw, exhaustive and exact. `estimated` is
-        what the firmware's own structure would report - sampled, capped at 128 entries, hashed
-        into collisions and scaled back up by the sampling denominator.
-
-        All three are indexed by `hops_away`, where a direct neighbour is zero: getHopsAway is
-        hop_start - hop_limit, so a packet that has not been relayed reads 0. A BFS distance counts
-        the same neighbour as 1, so truth is shifted down to match rather than being reported in
-        units nothing else uses.
+        All three indexed by `hops_away`, where a direct neighbour is zero - TRANSPORT.md.
         """
         node = self.nodes[index]
         truth = [0] * (HopScaling.MAX_HOP + 1)
@@ -4297,12 +4284,9 @@ class Mesh:
         return report
 
     def _set_airtime_window(self):
-        """How far back an overlap scan has to look: one maximum-length frame at this preset, plus a
-        fifth. Derived rather than constant, because the span across presets is two orders of
-        magnitude - 0.175 s at SHORT_TURBO against 35.7 s at VERY_LONG_SLOW - and one number cannot
-        be both correct at the slow end and cheap at the fast end. A fixed 20 s was neither: it
-        dropped in-flight frames on the slow presets, and on the fast ones it made every delivery
-        scan a hundred times more history than could possibly still be on the air.
+        """How far back an overlap scan looks: one maximum-length frame at this preset, plus a fifth.
+
+        Derived, because the span across presets is two orders of magnitude - TRANSPORT.md.
         """
         self.max_airtime_ms = self.airtime_ms(MAX_PAYLOAD_BYTES) * 1.2
 
@@ -4421,8 +4405,7 @@ class Mesh:
 def assign_platforms(node_count, platform_mix, rng):
     """Draw a board for every node from a named mix.
 
-    Drawn rather than striped, so the small-store nodes are not evenly spaced by construction. A
-    mesh whose one STM32WL sits on the only bridge is a case striping would never produce.
+    Drawn, not striped: a mesh whose one STM32WL is the bridge is what striping never makes.
     """
     if platform_mix in PLATFORM_HOT_STORE:
         return [platform_mix] * node_count  # a single-board mesh, named directly
@@ -4436,8 +4419,7 @@ def assign_platforms(node_count, platform_mix, rng):
 def assign_sitings(node_count, siting_mix, rng):
     """Draw a siting for every node from a named mix, or name one siting for the whole mesh.
 
-    Drawn rather than striped, for the reason assign_platforms is: a mesh whose one basement node
-    sits on the only bridge is a case striping would never produce.
+    Drawn, not striped, for the reason assign_platforms is.
     """
     if siting_mix in SITINGS:
         return [siting_mix] * node_count
@@ -4503,10 +4485,8 @@ def build(
     and choosing them randomly would understate how much a flood depends on a few well-sited nodes.
     ROUTER_LATE and CLIENT_BASE are drawn from the same ranking, below the plain routers.
     """
-    # A scenario carrying real geometry decides where the nodes are, and therefore how many there
-    # are: the place is the input, not a shape to fit a requested count into. Stretching it is
-    # refused rather than silently ignored - moving Batumi's nodes apart makes it somewhere else,
-    # and a result labelled `batumi` would no longer be about Batumi.
+    # Real geometry decides the node count: the place is the input, not a shape to fit a count
+    # into. Stretching it is refused rather than ignored. TRANSPORT.md.
     if scenario is not None and scenario.fixed_geometry:
         if stretch != 1.0:
             raise ValueError(
@@ -4599,9 +4579,8 @@ def build(
         profile=profile,
         terrain=terrain,
     )
-    # Antenna heights the scenario measured, before the mesh is lifted onto the ground: a real
-    # snapshot knows which nodes are on a mast and which are on a windowsill, and that difference
-    # decides more links than any of the generated mixes do.
+    # Measured heights, applied before the mesh is lifted onto the ground: mast against windowsill
+    # decides more links than any generated mix does.
     if scenario is not None and scenario.antenna_height:
         for node, height in zip(mesh.nodes, scenario.antenna_height):
             if height is not None:
@@ -4615,13 +4594,8 @@ def build(
     mesh.hop_assign = hop_assign
 
     if hop_spread:
-        # Operators do not all set the same hop limit: a node in a dense middle reaches what it
-        # needs at 3 or 4 and its owner leaves the default alone, while one on the edge raises it
-        # until the rest of the mesh answers, and field guidance tops out at 7.
-        #
-        # `centrality` reproduces that correlation and so confounds hop limit with position: a table
-        # of receptions-by-hop-limit then measures siting under a hop-limit label. `random` breaks
-        # the correlation as a control, and is not how operators behave.
+        # `centrality` reproduces how operators actually set this, and so confounds hop limit
+        # with position; `random` breaks that correlation as a control. TRANSPORT.md.
         if hop_assign == "random":
             order = list(range(node_count))
             rng.shuffle(order)
@@ -4635,16 +4609,11 @@ def build(
             min(7, 3 + int(rank[i] * 4 + rng.random() * 1.5)) for i in range(node_count)
         ]
 
-    # `degree` is what an operator does: the repeater goes on the hill. `inverse` is the adversarial
-    # control - the router is the node in the basement with three neighbours, which is what actually
-    # happens when someone flashes ROUTER onto the node they already own. `random` separates the
-    # role's own effect from the siting that usually comes with it.
+    # `degree` is what an operator does, `inverse` is the adversarial control, `random` separates
+    # the role from the siting that usually comes with it. TRANSPORT.md.
     if amplify_worst > 0:
-        # The pathology in the field: the node nobody can hear gets an amplifier bolted on, which
-        # fixes its outbound reach and nothing else. It is now heard by everyone and still hears
-        # almost nobody - so it relays into a mesh it cannot receive replies from, and its
-        # rebroadcasts cancel copies queued by nodes that could have carried them further. Fitted
-        # after the links exist, because "hears worst" is a property of the mesh, not the node.
+        # The field pathology: the node nobody can hear gets an amplifier, fixing its outbound
+        # reach and nothing else. Fitted after the links exist, since "hears worst" needs them.
         worst = sorted(range(node_count), key=lambda i: len(mesh.neighbours[i]))
         for i in worst[: int(round(node_count * amplify_worst))]:
             mesh.tx_gain[i] += AMPLIFIERS["high"][0]
@@ -4658,9 +4627,8 @@ def build(
         rng.shuffle(by_degree)
     if role_mix:
         shares = ROLE_MIXES[role_mix] if isinstance(role_mix, str) else role_mix
-        # Router-like roles go to the head of that order. CLIENT_MUTE is drawn at random from the
-        # rest: muting a node is a decision about power or noise, not about siting, and handing it
-        # to the worst-connected nodes would make it look free.
+        # Router-like roles take the head of that order; CLIENT_MUTE is drawn at random from the
+        # rest, because handing muting to the worst-connected nodes would make it look free.
         taken = 0
         for role in (ROUTER, ROUTER_LATE, CLIENT_BASE):
             want = int(round(node_count * shares.get(role, 0.0)))
@@ -4686,10 +4654,8 @@ def build(
                 nodes[i].role = role
             taken += want
 
-    # A real snapshot knows what each node is configured as, and that beats anything derived from
-    # degree: `--router-fraction` and `--role-mix` are ways of guessing at a role distribution, and
-    # a mesh that recorded its own has nothing to guess. Applied over whichever of those ran, and
-    # before the version filter below so an old-profile node still downgrades correctly.
+    # Recorded roles beat anything derived from degree. Applied over whichever guess ran, and
+    # before the version filter, so an old-profile node still downgrades correctly.
     if scenario is not None and scenario.roles:
         for node, role in zip(nodes, scenario.roles):
             if role:
@@ -4709,9 +4675,8 @@ def build(
             mesh.stats["role_unavailable_in_version"] += 1
 
     if favourite_routers:
-        # Hop preservation only fires between nodes that have favourited each other, which in the
-        # field means one operator running both ends of a spine. Every router-like node favouriting
-        # every other is the upper bound on how much relaying can be free.
+        # Hop preservation fires only between mutual favourites, so every router-like node
+        # favouriting every other is the upper bound on how much relaying can be free.
         spine = [i for i in range(node_count) if nodes[i].is_router_like()]
         for i in spine:
             nodes[i].favourites = {j for j in spine if j != i}

@@ -678,3 +678,60 @@ sends a retry that already failed at a slower rate - base, then one step slower,
 `(from, id)` so every copy of the same retransmission picks the same rate. **M4** starts flooding
 one retry sooner when a route is not proven healthy, trading airtime for recovery latency and
 leaving a fresh, never-failed route on the unchanged path.
+
+## Building a mesh
+
+**Boards, sitings and roles are drawn, not striped.** A mesh whose one STM32WL or one basement node
+sits on the only bridge is a case striping would never produce.
+
+Router-like roles go to the head of the placement order; CLIENT_MUTE is drawn at random from the
+rest, because muting a node is a decision about power or noise rather than siting, and handing it to
+the worst-connected nodes would make it look free.
+
+`--router-placement` chooses what a router is: `degree` is what an operator does - the repeater goes
+on the hill; `inverse` is the adversarial control, the router in the basement with three neighbours,
+which is what happens when someone flashes ROUTER onto the node they already own; `random` separates
+the role's own effect from the siting that usually comes with it.
+
+`--amplify-worst` is the field pathology: the node nobody can hear gets an amplifier bolted on,
+which fixes its outbound reach and nothing else. It is now heard by everyone and still hears almost
+nobody, so it relays into a mesh it cannot receive replies from and its rebroadcasts cancel copies
+queued by nodes that could have carried them further. Fitted after the links exist, because "hears
+worst" is a property of the mesh rather than of the node.
+
+**Hop limits.** Operators do not all set the same one: a node in a dense middle reaches what it needs
+at 3 or 4 and leaves the default alone, while one on the edge raises it until the rest of the mesh
+answers, and field guidance tops out at 7. `centrality` reproduces that correlation and therefore
+confounds hop limit with position - a table of receptions by hop limit then measures siting under a
+hop-limit label. `random` breaks the correlation as a control, and is not how operators behave.
+
+Hop preservation only fires between nodes that have favourited each other, which in the field means
+one operator running both ends of a spine. Every router-like node favouriting every other is the
+upper bound on how much relaying can be free.
+
+**A scenario overrides all of it.** Real geometry decides where the nodes are and therefore how many
+there are: the place is the input, not a shape to fit a requested count into. Stretching it is
+refused rather than silently ignored - moving Batumi's nodes apart makes it somewhere else, and a
+result labelled `batumi` would no longer be about Batumi. Recorded roles beat anything derived from
+degree, and measured antenna heights beat any generated mix: a real snapshot knows which nodes are
+on a mast and which are on a windowsill, and that difference decides more links than the mixes do.
+
+## Reading adaptive behaviour
+
+Every adaptive quantity is in a feedback loop - the hop recommendation feeds what gets sent, which
+feeds the histogram it came from; the congestion coefficient feeds how often a node sends, which
+feeds how many peers everyone hears. An end-state mean cannot tell a value that settled from one
+still swinging between two, so sampling per node over time is a prerequisite for reading any of
+these results rather than a follow-up to them.
+
+`hop_report` puts three things side by side for one node: `truth`, the topological distance to every
+reachable node, which no device can know; `observed`, every hop count this node actually saw,
+exhaustive and exact; and `estimated`, what the firmware's own structure would report - sampled,
+capped, hashed into collisions and scaled back up. All three are indexed by `hops_away`, where a
+direct neighbour is zero, because `getHopsAway` is `hop_start − hop_limit`; a BFS distance counts
+that neighbour as 1, so truth is shifted down to match rather than reported in units nothing else
+uses.
+
+The overlap window is derived per preset - one maximum-length frame plus a fifth - because the span
+across presets is two orders of magnitude, 0.175 s at SHORT_TURBO against 28.6 s at VERY_LONG_SLOW,
+and one number cannot be both correct at the slow end and cheap at the fast end.
