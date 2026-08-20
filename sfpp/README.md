@@ -191,7 +191,9 @@ daily parts - two cells and one mesh - and which part runs is decided by the arc
 rotation marches on regardless, so a day that failed or never fired left its part missing until the
 cycle came round again, with nothing to notice it. This way a failed part still has no digest, so the
 next firing picks it again; once it lands, coverage advances. Stateless - there is no cursor to get out
-of step, only the record of what has run - and `--cells` / `--mesh` still override it by hand.
+of step, only the record of what has run. The workflows' `cells` and `mesh` dispatch inputs still
+override it by hand; they are workflow inputs rather than command-line flags, which is why they
+carry no dashes.
 
 Two consequences: an in-flight run has no digest yet, so two firings close together could choose the
 same part - the workflows' concurrency groups serialise them, and by the time the second plans, the
