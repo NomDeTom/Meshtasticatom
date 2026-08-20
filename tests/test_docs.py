@@ -27,5 +27,23 @@ class TestDocumentation(unittest.TestCase):
             self.assertEqual(int(spreading_factor), preset["sf"])
 
 
+class TestVersionPins(unittest.TestCase):
+    """A pin comment a reader trusts has to be checkable against the code beside it."""
+
+    def test_the_documented_pin_matches_the_one_in_the_code(self):
+        pin = "51eadb7"
+        docs = Path("DISCRETE_EVENT_SIM.md").read_text(encoding="utf-8")
+        self.assertIn(pin, docs)
+        for source in ("lib/mac.py", "lib/phy.py", "lib/config.py"):
+            with self.subTest(source=source):
+                self.assertIn(pin, Path(source).read_text(encoding="utf-8"))
+
+    def test_the_documented_daemon_image_is_the_one_that_runs(self):
+        # Read rather than import: lib.interactive pulls in lib.gui, which forces a Tk backend.
+        source = Path("lib/interactive.py").read_text(encoding="utf-8")
+        tag = re.search(r'MESHTASTICD_IMAGE_TAG = "([^"]+)"', source).group(1)
+        self.assertIn(tag, Path("DISCRETE_EVENT_SIM.md").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()
