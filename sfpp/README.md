@@ -9,6 +9,11 @@ thing.
 
 ---
 
+The companion documents: [MODEL.md](MODEL.md) for the arithmetic and the campaign's own
+definitions, [TRANSPORT.md](TRANSPORT.md) for the firmware behaviour the transport
+reproduces, and [TRAPS.md](TRAPS.md) for the ways this tree has produced a confident wrong
+number.
+
 ## 1. What it is, and what it is not
 
 A discrete-event simulator for a Meshtastic mesh, with the SF++ archive protocols running on top as
