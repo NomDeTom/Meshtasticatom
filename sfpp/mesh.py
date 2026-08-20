@@ -3198,8 +3198,7 @@ class Mesh:
     def articulation_nodes(self):
         """The nodes whose loss would split the mesh - the bridges worth breaking.
 
-        Hopcroft-Tarjan over the link graph. Killing random nodes mostly does nothing on a
-        well-connected mesh; these are the ones whose loss changes its shape.
+        Hopcroft-Tarjan; killing random nodes mostly does nothing on a well-connected mesh.
         """
         n = len(self.nodes)
         depth = [None] * n
@@ -3243,12 +3242,7 @@ class Mesh:
     def break_mesh(self, mode, count=3, rng=None):
         """Damage the mesh in a named way, and report what was done.
 
-        The modes are ordered by how targeted they are. `random` is the null hypothesis and usually
-        does nothing on a well-connected mesh. `bridge` is the sharpest, but a mesh at degree 8 has
-        no articulation points to take, so it falls back to `degree` and reports that it did.
-
-        `split` removes no node: it cuts every link across a geographic line, and is the only mode
-        guaranteed to partition a healthy mesh.
+        Ordered by how targeted they are; `split` removes no node and always partitions.
         """
         rng = rng or self.rng
         live = [n.index for n in self.nodes if n.online]
@@ -3298,8 +3292,7 @@ class Mesh:
     def note_heard(self, rx, peer, hops_away=None):
         """Record a peer in rx's hot store, trimming it if that pushed it over the cap.
 
-        Counted here rather than on the Node so the loss is visible: a route dropped by eviction
-        never expires, never fails and never shows up as a fallback - it stops existing.
+        Counted here so eviction is visible: a route dropped this way never expires or fails.
         """
         node = self.nodes[rx]
         was_warm = peer in node.warm
@@ -3320,14 +3313,8 @@ class Mesh:
     def _signature_policy_admits(self, rx, packet):
         """Router::checkXeddsaReceivePolicy - does this node accept the packet as it arrived?
 
-        COMPATIBLE takes anything. STRICT takes only what it can verify. BALANCED sits between:
-        it accepts unsigned traffic in general, but drops an unsigned broadcast from a node it has
-        already seen sign, when that payload would have fitted a signature.
-
-        The size test is the sharp edge. It is the mirror of the sender's gate, so a payload big
-        enough to push a signature over the frame is exempt from the downgrade rule - which is what
-        an attacker inflates to evade it, and what makes an honest unsigned broadcast get dropped
-        if a signable type ever grows past the budget.
+        COMPATIBLE, BALANCED and STRICT, and the size test that is BALANCED's sharp edge:
+        TRANSPORT.md.
         """
         node = self.nodes[rx]
         if not node.profile.signing or packet.pki_encrypted:
@@ -3340,18 +3327,13 @@ class Mesh:
                 # peer record to update - a node does not keep a NodeDB entry about itself here.
                 return True
             if node.warm_key(packet.origin):
-                # Verification succeeds: nothing here forges a signature. Remember that the sender
-                # signs, which is what the downgrade rule later reads. The policy runs before the
-                # store is updated for this packet, so the record is created here as
-                # getOrCreateMeshNode does.
+                # Nothing here forges a signature. Remembering that the sender signs is what the
+                # downgrade rule later reads; the record is created here, as getOrCreateMeshNode does.
                 self.note_heard(rx, packet.origin).xeddsa_signed = True
                 return True
             if packet.portnum == NODEINFO_PORTNUM:
-                # verifyFirstContactNodeInfo: a signed NodeInfo carries the sender's own key, and
-                # the node number is a CRC32 of that key, so the packet verifies against itself and
-                # nobody can claim another node's number with it. This is how a mesh bootstraps at
-                # all under STRICT - without it the NodeInfo that would teach the key is itself
-                # dropped for want of the key.
+                # verifyFirstContactNodeInfo: a signed NodeInfo verifies against itself, which is
+                # how a mesh bootstraps under STRICT at all. TRANSPORT.md.
                 record = self.note_heard(rx, packet.origin)
                 record.has_key = True
                 record.xeddsa_signed = True
@@ -3382,8 +3364,7 @@ class Mesh:
     def _cache_cold_key(self, rx, peer):
         """The cold tier: a key seen on the wire, kept for the decrypt path only.
 
-        Bounded like the cache it stands for, and evicted at random rather than by recency, since
-        nothing here tracks the per-entry timestamps that would make an LRU meaningful.
+        Evicted at random, since nothing here tracks the timestamps an LRU would need.
         """
         node = self.nodes[rx]
         if not node.cold_cache_size or peer == rx:
@@ -3397,23 +3378,7 @@ class Mesh:
     def resolve_last_byte(self, rx, relay_byte, require_direct_neighbour=False):
         """NodeDB::resolveLastByte. Returns (status, peer) - UNIQUE, AMBIGUOUS or NONE.
 
-        `relay_node` and `next_hop` are one byte of a 32-bit node number, so on a mesh of any size
-        they collide. Callers treat anything but UNIQUE as the safe branch: decrement the hop limit,
-        flood instead of unicasting, learn nothing. The two failures are kept apart because they say
-        different things - AMBIGUOUS is a dense mesh, NONE is a mesh this node has not learned.
-
-        Two gates decide the candidate set, and both shrink it well below "every node with this
-        byte". The candidate gate is the hot store, minus ourselves and any ignored node: an evicted
-        or never-heard peer is not a candidate. The relevance gate asks whether the peer is a
-        plausible relay for this question - on the send path a direct neighbour heard within two
-        hours, otherwise a direct neighbour, a favourite or a router-like node.
-
-        So a smaller store makes the byte less ambiguous rather than more, which is the opposite of
-        a birthday bound taken over the whole mesh. A large mesh costs knowledge, not resolution.
-
-        Only this tree scans for a second candidate. Under 2.6 and 2.7 the lookup takes the first
-        node it matches and the caller is never told it guessed, which is modelled by returning
-        UNIQUE on that first match.
+        A candidate gate and a relevance gate, so a smaller store is less ambiguous - TRANSPORT.md.
 
         One fidelity gap: the firmware reads the role recorded in its own `NodeInfoLite`, learned
         from a NodeInfo exchange this model does not run, so the role gate here reads the peer's
@@ -3489,8 +3454,7 @@ class Mesh:
     def role_allows_canceling_dupe(self, rx, packet):
         """FloodingRouter::roleAllowsCancelingDupe.
 
-        A ROUTER never drops a relay it has queued, however many other stations it hears do the
-        job: the role exists to be the copy that goes out regardless.
+        A ROUTER never drops a queued relay: the role exists to be the copy that goes out.
         """
         if not self.nodes[rx].profile.role_aware_cancel:
             return True
@@ -3504,14 +3468,7 @@ class Mesh:
     def should_decrement_hop_limit(self, rx, packet):
         """Router::shouldDecrementHopLimit - when a relay is free.
 
-        A hop between two favourited routers costs nothing, so a spine of them does not eat the
-        sender's hop budget. The first hop always pays.
-
-        The two implementations identify the previous relay differently. This tree resolves the
-        relay byte and preserves the hop only when exactly one node answers to it, so ambiguity
-        charges the hop. 2.7 walks its own store for favourited router-like nodes and preserves on
-        the first byte match, which on a dense mesh gives a free hop to a node that merely shares a
-        byte with a favourite.
+        A hop between favourited routers is free, and the first hop always pays - TRANSPORT.md.
         """
         node = self.nodes[rx]
         if not node.profile.preserve_hops:
@@ -3541,22 +3498,8 @@ class Mesh:
     def get_next_hop(self, rx, destination, relay_byte):
         """NextHopRouter::getNextHop. None means flood.
 
-        A stored route decays: unconfirmed for half an hour, or three failed directed deliveries in
-        a row, and it is cleared rather than trusted for one more DM. We also never hand a packet
-        back to the node that just relayed it, and never emit a byte that no longer resolves to a
-        single reachable neighbour.
-
-        Decay needs a health record that still matches the stored byte, and `route_health` is capped
-        at ROUTE_HEALTH_MAX with LRU eviction. A destination whose record has been evicted therefore
-        keeps its next_hop with no TTL and no failure count left to age it. That is the firmware's
-        behaviour, not a shortcut here: NextHopRouter.cpp:297 guards the same way on the same cap of
-        32, and its comment is explicit that "a next_hop set by another path (e.g. TraceRouteModule)
-        with no matching record is left authoritative". On a mesh holding more than 32 live routes
-        it means a dead hop can be trusted until something else routes around it - a real property
-        worth knowing when reading a large-mesh result, and reproduced here deliberately.
-
-        The route lives in the destination's own hot-store record, as `NodeInfoLite.next_hop` does,
-        so evicting a peer forgets the way to it - a separate cost from the relay byte's ambiguity.
+        A route decays on age or on three failures, unless its health record was evicted first -
+        which the firmware allows too. TRANSPORT.md.
         """
         if destination == BROADCAST or not self.nodes[rx].profile.next_hop_routing:
             return None
@@ -3590,10 +3533,7 @@ class Mesh:
     def _next_hop_from_cache(self, rx, destination, relay_byte):
         """The overflow cache, consulted once the hot store has no route to offer.
 
-        This is the case the cache exists for: a node past the hot store's capacity, whose route
-        traceroute or an ACK taught us and whose NodeInfoLite has since been evicted. A stale hint
-        is cleared here rather than tried, and a hint that no longer resolves to one reachable
-        neighbour is not emitted at all.
+        For a node past the store's capacity whose record was evicted - TRANSPORT.md.
         """
         node = self.nodes[rx]
         if not node.profile.route_cache:
@@ -3622,9 +3562,7 @@ class Mesh:
     def note_route_learned(self, rx, destination, next_hop):
         """NextHopRouter::noteRouteLearned - refresh a route, without forgiving it.
 
-        The failure count is cleared only when the hop itself changes. Re-learning the *same* hop
-        keeps the count, so an asymmetric reverse path that keeps re-teaching a dead forward hop
-        still ages that hop out instead of resetting the counter on every lesson.
+        The failure count clears only when the hop changes, so a dead hop still ages out.
         """
         node = self.nodes[rx]
         health = node.route_health.get(destination)
@@ -3680,10 +3618,8 @@ class Mesh:
         heard.rx_snr = snr
 
         if not heard.opaque and not self._signature_policy_admits(rx, heard):
-            # Router::perhapsDecode returns DECODE_POLICY_REJECT and handleReceived skips the
-            # packet, so it is neither delivered nor relayed. It deliberately does not cancel a
-            # queued rebroadcast of the same packet either: a policy rejection is attacker-
-            # controlled input, and letting it cancel would hand anyone a way to silence a relay.
+            # Neither delivered nor relayed, and deliberately not cancelling a queued rebroadcast
+            # either - that would hand an attacker a way to silence a relay. TRANSPORT.md.
             return
 
         if heard.opaque:
@@ -3694,9 +3630,8 @@ class Mesh:
 
         record = node.history.get(packet.id)
         if record is None and packet.id in node.seen:
-            # A caller marked this packet seen without going through originate() - the campaign's
-            # hop-by-hop DM walk does exactly that. Treat it as history, or we would relay our own
-            # packet back into the mesh the moment we overheard it.
+            # Marked seen without going through originate(), as the campaign's DM walk does.
+            # Treated as history, or we would relay our own packet back on overhearing it.
             record = SeenRecord(
                 packet.origin, packet.hop_limit, packet.next_hop, node.seen[packet.id]
             )
@@ -3728,9 +3663,8 @@ class Mesh:
             if node.hop_scaling.sample(self.nodes[packet.origin].node_num, hops):
                 self.stats["hop_samples"] += 1
         if packet.portnum == NODEINFO_PORTNUM:
-            # NodeInfo is what carries a peer's public key, so it is the only thing that makes a PKI
-            # DM to that peer possible. The cold cache keeps a copy for the decrypt path, bounded
-            # and non-authoritative, so a peer evicted from both other tiers can still be read.
+            # NodeInfo carries the key, so it is what makes a PKI DM possible. The cold cache
+            # keeps a non-authoritative copy, so an evicted peer can still be read.
             record.has_key = True
             self._cache_cold_key(rx, packet.origin)
         fresh = SeenRecord(packet.origin, packet.hop_limit, packet.next_hop, self.now)
@@ -3750,12 +3684,7 @@ class Mesh:
     def _mesh_too_busy_for_extra_repeats(self, rx):
         """meshTooBusyForExtraRepeats: three unvalidated constants, any one of which forces 1.
 
-        Channel utilisation over 10%, our own transmit share of the last hour over 4%, or more than
-        ten direct neighbours. The neighbour count is HopScalingModule::getLastPerHopCounts()'s
-        zero-hop bucket, which is a sampled and hourly-rolled estimate rather than the exact count -
-        so on a mesh whose sampling denominator has climbed, this threshold reads low and extra
-        repeats stay switched on longer than the exact count would allow. Falls back to the hot
-        store's neighbour count when the node's release has no such module.
+        The neighbour count is an estimate, so the threshold reads low - TRANSPORT.md.
         """
         node = self.nodes[rx]
         if node.channel_utilization_percent(self.now) > BUSY_CHANNEL_UTIL_PERCENT:
@@ -3774,8 +3703,7 @@ class Mesh:
     def _dupe_cancel_threshold(self, rx, packet):
         """RepeatScalingModule::getDupeCancelThreshold. Text tolerates one heard copy; nothing else.
 
-        An undecodable packet is classified from the plaintext header instead: flooded traffic is
-        treated as text-like, directed traffic as not.
+        An undecodable packet is classified from its plaintext header: flooded is text-like.
         """
         if packet.opaque:
             threshold = (
@@ -3795,8 +3723,7 @@ class Mesh:
     def _should_cancel_dupe(self, rx, packet):
         """RepeatScalingModule::shouldCancelDupe - count this copy, and say whether to give up.
 
-        Without the module the answer is always yes on the first duplicate, which is what every
-        release does today.
+        Without the module the answer is yes on the first duplicate, as every release does.
         """
         node = self.nodes[rx]
         if not node.profile.extra_repeats:
@@ -3862,8 +3789,7 @@ class Mesh:
     def _handle_upgraded(self, rx, packet):
         """FloodingRouter::perhapsHandleUpgradedPacket.
 
-        A copy with more hops left than the one we queued reached us by a shorter route. Swap it in:
-        relaying the copy with fewer hops left would strand everything beyond our own horizon.
+        A copy with more hops left came by a shorter route, so it replaces the queued one.
         """
         node = self.nodes[rx]
         if not (self.is_rebroadcaster(rx, packet) and packet.hop_limit > 0):
@@ -3972,8 +3898,7 @@ class Mesh:
     def send_traceroute(self, src, destination):
         """Start a route discovery. Each relay appends itself; the destination replies.
 
-        The reply is what teaches anything: a node that finds itself in the returned route learns a
-        next hop for every node beyond it, not just for its neighbour.
+        The reply is what teaches: a node in the returned route learns every node beyond it.
         """
         packet = self.originate(
             src,

@@ -529,3 +529,94 @@ one never does.
 `clampToLateRebroadcastWindow` is what ROUTER_LATE does when it hears someone else relay: it will
 not cancel - that is the role's point - but it moves to the back of the window, so it only speaks if
 the mesh still needs it.
+
+## Resolving a relay byte
+
+`NodeDB::resolveLastByte` returns UNIQUE, AMBIGUOUS or NONE. `relay_node` and `next_hop` are one
+byte of a 32-bit node number, so on a mesh of any size they collide. Callers treat anything but
+UNIQUE as the safe branch - decrement the hop limit, flood instead of unicasting, learn nothing -
+and the two failures are kept apart because they say different things: AMBIGUOUS is a dense mesh,
+NONE is a mesh this node has not learned.
+
+Two gates decide the candidate set, and both shrink it well below "every node with this byte". The
+**candidate** gate is the hot store, minus ourselves and any ignored node: an evicted or never-heard
+peer is not a candidate. The **relevance** gate asks whether the peer is a plausible relay for this
+question - on the send path a direct neighbour heard within two hours, otherwise a direct
+neighbour, a favourite or a router-like node.
+
+So a smaller store makes the byte *less* ambiguous rather than more, which is the opposite of a
+birthday bound over the whole mesh. A large mesh costs knowledge, not resolution.
+
+Only this tree scans for a second candidate. Under 2.6 and 2.7 the lookup takes the first node it
+matches and the caller is never told it guessed.
+
+## Hops and routes
+
+`Router::shouldDecrementHopLimit`: a hop between two favourited routers costs nothing, so a spine of
+them does not eat the sender's hop budget, and the first hop always pays. The two implementations
+identify the previous relay differently - this tree resolves the byte and preserves the hop only
+when exactly one node answers, so ambiguity charges the hop; 2.7 walks its own store for favourited
+router-like nodes and preserves on the first byte match, which on a dense mesh gives a free hop to a
+node that merely shares a byte with a favourite.
+
+`FloodingRouter::roleAllowsCancelingDupe`: a ROUTER never drops a relay it has queued, however many
+other stations it hears do the job. The role exists to be the copy that goes out regardless.
+
+`NextHopRouter::getNextHop` returns None for flood. A stored route decays - unconfirmed for half an
+hour, or three failed directed deliveries in a row, and it is cleared rather than trusted for one
+more DM. A packet is never handed back to the node that just relayed it, and a byte that no longer
+resolves to a single reachable neighbour is never emitted.
+
+Decay needs a health record still matching the stored byte, and `route_health` is capped with LRU
+eviction, so a destination whose record was evicted keeps its `next_hop` with no TTL and no failure
+count to age it. That is the firmware's behaviour, not a shortcut: `NextHopRouter.cpp:297` guards the
+same way on the same cap of 32, with a comment saying a next hop set by another path "is left
+authoritative". On a mesh holding more than 32 live routes a dead hop can be trusted until something
+routes around it - worth knowing when reading a large-mesh result.
+
+The route lives in the destination's own hot-store record, as `NodeInfoLite.next_hop` does, so
+evicting a peer forgets the way to it - a cost separate from the relay byte's ambiguity. The
+overflow cache covers exactly that case: a node past the store's capacity whose route traceroute or
+an ACK taught, and whose record has since gone. A stale hint there is cleared rather than tried.
+
+`noteRouteLearned` refreshes a route without forgiving it: the failure count clears only when the
+hop itself changes, so an asymmetric reverse path that keeps re-teaching a dead forward hop still
+ages that hop out.
+
+A traceroute reply is what teaches anything - a node finding itself in the returned route learns a
+next hop for every node beyond it, not just its neighbour.
+
+## Signature policy
+
+`Router::checkXeddsaReceivePolicy`. COMPATIBLE takes anything, STRICT only what it can verify, and
+BALANCED accepts unsigned traffic in general but drops an unsigned broadcast from a node it has
+already seen sign, when that payload would have fitted a signature.
+
+The size test is the sharp edge. It mirrors the sender's gate, so a payload big enough to push a
+signature over the frame is exempt from the downgrade rule - which is what an attacker inflates to
+evade it, and what would make an honest unsigned broadcast get dropped if a signable type grew past
+the budget.
+
+`verifyFirstContactNodeInfo` is how a mesh bootstraps under STRICT at all: a signed NodeInfo carries
+the sender's own key and the node number is a CRC32 of that key, so the packet verifies against
+itself and nobody can claim another node's number with it. Without it, the NodeInfo that would teach
+the key is dropped for want of the key.
+
+A policy rejection deliberately does not cancel a queued rebroadcast of the same packet: it is
+attacker-controlled input, and letting it cancel would hand anyone a way to silence a relay.
+
+## Repeat scaling
+
+`meshTooBusyForExtraRepeats` is three unvalidated constants, any one of which forces a single copy:
+channel utilisation over 10%, our own transmit share of the last hour over 4%, or more than ten
+direct neighbours. That neighbour count is `HopScalingModule`'s zero-hop bucket - a sampled,
+hourly-rolled estimate rather than the exact count - so on a mesh whose sampling denominator has
+climbed the threshold reads low and extra repeats stay on longer than the exact count would allow.
+
+`getDupeCancelThreshold`: text tolerates one heard copy and nothing else does. An undecodable packet
+is classified from the plaintext header instead - flooded traffic as text-like, directed traffic as
+not.
+
+`perhapsHandleUpgradedPacket`: a copy with more hops left than the one queued reached us by a
+shorter route, so it is swapped in. Relaying the copy with fewer hops left would strand everything
+beyond our own horizon.
