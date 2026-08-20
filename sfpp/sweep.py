@@ -49,25 +49,22 @@ BASE = [
     "hybrid",
 ]
 
-# What a retry-ladder arm needs before it does anything. An addressed message only exists once SR
-# traffic is routed through the transport, and a route is only learned once traceroutes seed one, so
-# an arm over --dm-mode or --coding-rate-ladder without these produces identical rows.
+# A retry ladder needs an addressed message and a learned route to act on, so an arm over
+# --dm-mode or --coding-rate-ladder without these produces identical rows.
 DM_LADDER = ["--dm-transport", "transport", "--traceroute-per-hour", "1"]
 
 BLOCKS = {
     "D-cadence": ("trigger", ["bucket", "interval", "aimd", "bucket+interval"], []),
     "D-resolve": ("resolve", ["sketch", "enum", "hybrid"], []),
-    # Every server seals the same bucket at nearly the same moment, because sealing follows the
-    # chain counter and the counter is global. If that synchronisation is why only 46% of
-    # bucket-close adverts reach a peer, spreading them should show it.
+    # Sealing follows a global counter, so every server seals at nearly the same moment. If that
+    # is why only 46% of bucket-close adverts land, spreading them should show it.
     "D-jitter": ("advert-jitter-s", [1, 30, 120, 600], []),
     "E-capacity": ("capacity", [4, 8, 16, 32, 50], []),
     "E-width": ("short-id-bits", [16, 24, 32, 64], []),
     "E-signed": ("signed", [False, True], []),
     "F-loss": ("extra-loss", [0.0, 0.1, 0.2, 0.3], []),
-    # Same nominal loss, delivered in 60-second stretches of deafness rather than spread evenly.
-    # A sketch cares about the difference: flat loss spreads divergence across every bucket, a
-    # burst puts a whole bucket's worth into one and can push it past the capacity in a single go.
+    # The same loss in 60-second stretches rather than spread evenly: a burst puts a whole
+    # bucket's divergence into one bucket and can pass its capacity in a single go.
     "F-burst": ("burst-loss", [0.0, 0.1, 0.2, 0.3], []),
     # A 60-second burst is nothing to a bucket that takes an hour to fill. This is the outage that
     # actually matters to an archive: a node away for half an hour, which is most of a bucket.
@@ -98,9 +95,8 @@ BLOCKS = {
     # The same node counts in a fixed area, so this one is density rather than size. Running both is
     # the only way to say which of the two any effect belongs to.
     "K-density": ("nodes", [40, 60, 90, 120, 150], ["--hop-spread"]),
-    # One hop limit for everyone, swept. --no-hop-spread is not optional here: with the spread on,
-    # every node takes a per-node limit from centrality and --hop-limit is never read, which made
-    # this block produce three identical rows.
+    # One hop limit for everyone. --no-hop-spread is not optional: with the spread on, --hop-limit
+    # is never read and this block produced three identical rows.
     "K-hopspread": ("hop-limit", [3, 5, 7], ["--no-hop-spread"]),
     # Uniform hop limit against per-node 3-7 by centrality, everything else fixed.
     "K-spread": ("hop-spread", [False, True], []),
@@ -148,12 +144,8 @@ BLOCKS = {
         ["", "02-06", "00-08"],
         ["--diurnal", "commuter", "--trigger", "bucket+interval"],
     ),
-    # The presets deployed meshes actually run. LONG_FAST is the default and the middle of the range;
-    # SHORT_FAST is the fast end. LONG_MODERATE is the slow end that is still used, and above about
-    # 30 nodes nothing slower than it is: LONG_SLOW at a full payload holds the channel for 21 s, so a
-    # mesh of that size on it spends its whole airtime budget on a handful of packets. LONG_SLOW and
-    # VERY_LONG_SLOW remain available to --preset, and a result on them is a result about a mesh
-    # nobody runs.
+    # The presets deployed meshes run. Nothing slower than LONG_MODERATE is, past about 30 nodes:
+    # a full LONG_SLOW payload holds the channel 14.3 s, so a few packets spend the whole budget.
     "P-preset": ("preset", ["SHORT_FAST", "LONG_FAST", "LONG_MODERATE"], []),
     # North America is heading for 500 kHz across the board. All three of these are BW500, so the arm
     # varies spreading factor with the bandwidth held at where the region is going.
@@ -191,11 +183,9 @@ BLOCKS = {
     # All six routers as servers, against three of them, against three nodes beside them. Same
     # mesh, same traffic; only who is holding the archive changes.
     "G-allrouters": ("servers", [3, 6], ["--place", "routers"]),
-    # What the 2.8 fold-in is worth against the pre-fold-in transport: same seed, same mesh, same
-    # traffic, only the MAC and routing rules change.
+    # What the 2.8 fold-in is worth: same seed, mesh and traffic, only the rules change.
     # --- round four: stress past the node database, and emit tuning numbers ---
-    # Mesh size against the store that has to hold it. The diagonal is where they match; every cell
-    # above it is the stressed case the firmware's throttle cannot see.
+    # Mesh size against the store holding it. Above the diagonal is what the throttle cannot see.
     "R-oversubscribed": (
         "nodes",
         [120, 250, 500],
@@ -217,17 +207,15 @@ BLOCKS = {
     # for the SF++ retry budget rather than R-repeats, which is the firmware's RepeatScalingModule.
     "R-srretries": ("sr-retries", [0, 1, 2, 4], ["--hours", "24"]),
     "R-firmware": ("profile", ["legacy", "2.8"], []),
-    # The feedback loop closed against the same loop held open: every node adopting a hop
-    # recommendation derived from a histogram of what other adopting nodes sent. Needs the trace,
-    # since a converged mean and an oscillating one are identical at the end of a run.
+    # Every node adopting a hop recommendation derived from what other adopters sent. Needs the
+    # trace: a converged mean and an oscillating one look identical at the end of a run.
     "R-adopt": (
         "no-adopt-hop-recommendation",
         [False, True],
         ["--nodes", "120", "--hop-spread", "--trace-interval-s", "1800"],
     ),
-    # Where the nodes physically are. The spread between a roof node and a basement one is 26 dB,
-    # wider than most parameters here, so this is either the largest uncontrolled variable in every
-    # other block or the one that says the others were measured on an unrealistically good mesh.
+    # Roof against basement is 26 dB, wider than most parameters here - so either the largest
+    # uncontrolled variable in every other block, or proof they ran on too good a mesh.
     "R-siting": (
         "siting-mix",
         ["uniform", "local-typical", "event", "backbone"],
@@ -246,9 +234,8 @@ BLOCKS = {
         [0.0, 1.0],
         ["--nodes", "120", "--max-num-nodes", "20"],
     ),
-    # The retry budget from both ends: M4 spends a directed attempt to flood sooner, the coding-rate
-    # ladder spends airtime to make each attempt more likely to land. Swept together because they
-    # trade against the same budget.
+    # The retry budget from both ends: a directed attempt to flood sooner, against airtime spent
+    # making each attempt likelier to land. Swept together because they trade off the same budget.
     "R-dmmode": (
         "dm-mode",
         ["flood-only", "directed-with-late-flood", "m4-early-flood"],
@@ -268,11 +255,8 @@ BLOCKS = {
     # 64 bytes on every signable broadcast, against the reliability that buys. Report the share of
     # signable traffic that was actually signed rather than assuming all of it was.
     "R-signing": ("signature-policy", ["COMPATIBLE", "BALANCED", "STRICT"], []),
-    # --signature-policy is a receive rule and never decides whether we sign, so it cannot price
-    # signing itself. Router.cpp signs every non-PKI broadcast, which puts 66 bytes on the packet
-    # and on each of its rebroadcasts; at LONG_FAST that is most of a doubling of channel airtime.
-    # This is the only arm that turns it off inside 2.8, and so the only way to tell "2.8 costs
-    # reach" apart from "signing costs reach".
+    # Signing puts 66 bytes on every non-PKI broadcast and each rebroadcast. The only arm that
+    # turns it off inside 2.8, so the only way to separate its cost from 2.8's.
     "R-signing-cost": (
         "profile-flag",
         ["signing=false", "signing=true"],
@@ -292,10 +276,8 @@ BLOCKS = {
         [0, 25, 100, 2000],
         ["--nodes", "120", "--max-num-nodes", "20"],
     ),
-    # The release series in order, each at its final release. Steps the whole rule set at once -
-    # contention window, roles, queue order, hop preservation, next-hop, store size and the
-    # congestion throttle - so it says what a mesh gained or lost per upgrade rather than what one
-    # rule is worth.
+    # Each series at its final release, stepping the whole rule set at once: what a mesh gained
+    # per upgrade, rather than what any one rule is worth.
     "R-versions": ("profile", ["2.4", "2.5", "2.6", "2.7", "2.8"], []),
     # A mesh that has not finished upgrading. The share below runs 2.6 while the rest run 2.8, which
     # is the case the release notes never describe.
@@ -330,15 +312,13 @@ BLOCKS = {
         ["degree", "inverse"],
         ["--role-mix", "no-mute", "--siting-mix", "local-typical", "--nodes", "120"],
     ),
-    # Amplifiers, as separate transmit and receive gain. An amplified node is heard where it cannot
-    # hear, so it relays into places whose replies never reach it - watch one_way_links and
-    # cancelled_by_weaker_relay, not just reception.
+    # Separate transmit and receive gain: an amplified node relays into places whose replies never
+    # reach it. Watch one_way_links and cancelled_by_weaker_relay, not just reception.
     "X-amplifiers": ("amplifier-mix", ["none", "sprinkled", "arms-race"], []),
     # The field pathology: a PA fitted to exactly the nodes that hear worst.
     "X-amplify-worst": ("amplify-worst", [0.0, 0.1, 0.3], []),
-    # Distance as its own variable, with the mesh otherwise identical. Read report["stretch"], which
-    # is quoted against the link set at stretch 1.0 - the share against live links is not readable
-    # across these arms, because the worst links leave the graph as the mesh is pulled apart.
+    # Distance as its own variable. Read report["stretch"], quoted against the links at 1.0: the
+    # share of live links is not comparable once the worst ones leave the graph.
     "X-stretch": ("stretch", [1.0, 1.25, 1.5, 2.0], []),
     # A noise floor that moves. `periodic` is the adversarial one and the one with real teeth on a
     # slow preset: a frame in flight when the emitter fires is gone regardless of link budget.
@@ -401,9 +381,8 @@ BLOCKS = {
     # A hop between two favourited routers is free in 2.8. On a mesh whose diameter already
     # exceeds the hop limit, that is the difference between reaching the far end and not.
     "R-favourites": ("favourite-routers", [False, True], ["--router-fraction", "0.15"]),
-    # The hot store is per-board and small, and everything routing knows is bounded by it. Run with
-    # its consumers engaged - hop preservation and a rebroadcast mode that consults the NodeDB -
-    # because with rebroadcast ALL and no favourites nothing reads the store and every mix ties.
+    # Everything routing knows is bounded by a small per-board store. Run with its consumers
+    # engaged, or nothing reads it and every mix ties.
     "R-platform": (
         "platform-mix",
         ["uniform", "baymesh-2026-08", "constrained"],
@@ -437,12 +416,8 @@ BLOCKS = {
 }
 
 
-# What each block changes, in one sentence, for a reader of the results rather than a maintainer of
-# the sweep. The comments above say why a block exists; these say what moved, which is the question
-# someone looking at a trend table is actually asking. `collate.py` puts them in the report and
-# `explorer.py` on the page, so a row is never just `arm=topology`.
-#
-# Held to the block list by test_mesh: every block has one, and every one names a block.
+# One sentence per block for a reader of the results: what moved, where the comments above say
+# why the block exists. test_mesh holds every block to having one.
 DESCRIPTIONS = {
     "D-cadence": "When an archive advertises: on a sealed bucket, a fixed interval, AIMD, or both.",
     "D-resolve": "How two archives settle a disagreement - send a sketch, enumerate, or sketch then fall back. Delivery should not move; what it costs should.",
@@ -537,10 +512,7 @@ DESCRIPTIONS = {
 def cell_argv(arm, value, extra):
     """The command line for one cell of a block.
 
-    A false arm cannot simply omit its flag. Omitting it lands on the parser's default, and a flag
-    that defaults to true - `--hop-spread` is one - then reads as true in both cells, so the block
-    produces two identical rows. Where the parser offers the negation, emit it; where it does not,
-    say so rather than quietly measuring the same thing twice.
+    A false arm emits the negation: omitting the flag lands on a default that may be true.
     """
     argv = list(BASE) + list(extra)
     if isinstance(value, bool):
@@ -572,9 +544,8 @@ def _flag_default(arm):
     return None
 
 
-# Named groups, so a batch can be launched by what it asks rather than by remembering which block
-# names belong together. Ordered cheap-to-expensive within each, so results accumulate rather than
-# waiting on the largest mesh in the group.
+# Named groups, so a batch is launched by what it asks rather than by which blocks belong
+# together. Cheap first within each, so results accumulate instead of waiting on the largest.
 BATCHES = {
     # ---- PROPOSED: things that could be adopted, each against its own control ------------------
     # Does this change earn its airtime? Every arm here has a "without it" cell.
@@ -755,14 +726,7 @@ def table(name, arm, values, results):
 def reception_table(name, arm, values, results):
     """What each arm did to delivery, read at the tails rather than the mean.
 
-    The archive table above answers whether reconciliation worked. This one answers whether the arm
-    was worth having at all, which is a different question and the one most of the feature blocks
-    exist for. p10 is the tenth-percentile node - the badly-placed one an arm has to help to be
-    worth its airtime - and p90 the well-placed one, which most arms move very little. A change that
-    lifts the mean by moving p90 has helped nobody who needed it.
-
-    `all` is every portnum together: an arm that lifts text by displacing telemetry is a trade, not
-    a gain, and only the aggregate row shows it.
+    p10 is the node an arm has to help to be worth its airtime; `all` catches displaced traffic.
     """
     print(f"\n=== {name} - reception ===")
     header = (
