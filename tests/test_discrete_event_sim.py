@@ -43,7 +43,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         # - nodes (list of nodes)
         # - packets (list of packets)
         # - delays (list of ...floats?)
-        # - messageSeq - total # of messages
+        # - packetIdsIssued - total # of packet ids allocated
         # - totalPairs (int)
         # - noLinks (int)
 
@@ -70,6 +70,7 @@ class TestDiscreteEventSim(unittest.TestCase):
             def __init__(self, nodeid: int):
                 self.nodeid = nodeid
                 self.usefulPackets = 0
+                self.usefulAppPackets = 0
                 self.txAirUtilization = 0.0
                 self.droppedByDelay = 0
                 self.isMoving = False
@@ -83,10 +84,16 @@ class TestDiscreteEventSim(unittest.TestCase):
                 self.dtpTxCount = 0
 
         class MockPacket:
-            def __init__(self, num_nodes: int):
+            def __init__(self, num_nodes: int, seq: int = 0):
                 self.collidedAtN = [False for _ in range(num_nodes)]
                 self.sensedByN = [False for _ in range(num_nodes)]
                 self.receivedAtN = [False for _ in range(num_nodes)]
+                # An original application broadcast: not an ACK, not relayed by anyone else.
+                self.seq = seq
+                self.isAck = False
+                self.destId = 0xFFFFFFFF
+                self.txNodeId = 0
+                self.origTxNodeId = 0
 
         # mock situation: 3 nodes who can all mutually see each other, no DMs,
         # moving nodes, asymmetric links (default config)
@@ -100,9 +107,10 @@ class TestDiscreteEventSim(unittest.TestCase):
         for n in mock_nodes:
             # just put some non-zero values in there
             n.usefulPackets = 10
+            n.usefulAppPackets = 10
             n.txAirUtilization = 1.0
 
-        mock_packets = [MockPacket(3) for i in range(10)]
+        mock_packets = [MockPacket(3, seq=i) for i in range(10)]
         # all packets were sensed by all nodes, no collisions (fudging it)
         for p in mock_packets:
             for i in range(3):
@@ -113,7 +121,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         r['nodes'] = mock_nodes
         r['packets'] = mock_packets
         r['delays'] = [1.0 for _ in range(10)]
-        r['messageSeq'] = 10 # total # of messages (not packets)
+        r['packetIdsIssued'] = 10 # ids allocated, messages and ACKs alike
 
         r['totalPairs'] = 3
         r['noLinks'] = 0
@@ -222,6 +230,7 @@ class TestDiscreteEventSim(unittest.TestCase):
             def __init__(self, nodeid: int):
                 self.nodeid = nodeid
                 self.usefulPackets = 0
+                self.usefulAppPackets = 0
                 self.txAirUtilization = 0.0
                 self.droppedByDelay = 0
                 self.isMoving = False
@@ -235,6 +244,11 @@ class TestDiscreteEventSim(unittest.TestCase):
                 self.phyLostAtN = [True, True, True]
                 self.collisionReasonAtN = [None, "capture", None]
                 self.terrainLossAtN = [0.0, 0.0, 0.0]
+                self.seq = 0
+                self.isAck = False
+                self.destId = 0xFFFFFFFF
+                self.txNodeId = 0
+                self.origTxNodeId = 0
                 self.clutterLossAtN = [0.0, 0.0, 0.0]
 
         conf = Config()
@@ -243,7 +257,7 @@ class TestDiscreteEventSim(unittest.TestCase):
             "nodes": [MockNode(0), MockNode(1), MockNode(2)],
             "packets": [MockPacket()],
             "delays": [],
-            "messageSeq": 1,
+            "packetIdsIssued": 1,
             "totalPairs": 0,
             "asymmetricLinks": 0,
             "symmetricLinks": 0,
@@ -280,7 +294,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         # collect & unpack results for easy copy/paste of asserts
         results = sim.get_results()
 
-        messageSeq = results["messageSeq"]
+        appMessages = results["appMessages"]
 
         # Begin actual tests, comparing against a hardcoded 'known
         # good' run. If these fail then a change has impacted the
@@ -291,7 +305,7 @@ class TestDiscreteEventSim(unittest.TestCase):
         # and modify your changes, or to update the hardcoded "known good"
         # simulation results is up to your judgement for which is
         # appropriate. Be cautious!
-        self.assertEqual(messageSeq, 179, "expected number of messages created")
+        self.assertEqual(appMessages, 179, "expected number of application messages created")
         sent = results['sent']
         potentialReceivers = results['potentialReceivers']
         self.assertEqual(sent, 786, "expected number of packets sent")

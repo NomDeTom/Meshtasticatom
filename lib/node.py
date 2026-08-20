@@ -248,7 +248,7 @@ class MeshNode:
         # using this more like a struct than a proper object.
         self.my_stats = MeshNodeStats(self.nodeid)
 
-        self.messageSeq = sim_state.messageSeq
+        self.packetIdSeq = sim_state.packetIdSeq
         self.connectivity_map = sim_state.connectivity_map
         self.baseline_pathloss_matrix = sim_state.baseline_pathloss_matrix
         self.env = sim_state.env
@@ -265,6 +265,9 @@ class MeshNode:
         self.isReceiving = []
         self.isTransmitting = False
         self.usefulPackets = 0
+        # Split out because an ACK is unicast and an application broadcast is not: mixing them
+        # gives a reach figure whose denominator counts receivers the ACK never addressed.
+        self.usefulAppPackets = 0
         self.txAirUtilization = 0
         self.airUtilization = 0
         self.dcrTxByCr = {5: 0, 6: 0, 7: 0, 8: 0}
@@ -440,7 +443,7 @@ class MeshNode:
         """We have created a new message and wish to send it to the network
         """
         # increment the shared counter
-        messageSeq = self.messageSeq.get()
+        messageSeq = self.packetIdSeq.get()
         self.messages.append(MeshMessage(self.nodeid, destId, self.env.now, messageSeq))
         p = MeshPacket(self.conf, self.nodes, self.nodeid, destId, self.nodeid, self.conf.PACKETLENGTH, messageSeq, self.env.now, True, False, None, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
         p.transmission_started_event = self.env.event()
@@ -463,6 +466,10 @@ class MeshNode:
             self.timesReceived[packet.seq] = 0 if ownTransmit else 1
             if not ownTransmit:
                 self.usefulPackets += 1
+                if not packet.isAck and packet.destId in (NODENUM_BROADCAST, self.nodeid):
+                    # Only a node the message was addressed to counts as reached. Overhearing a
+                    # DM meant for someone else is not delivery, and pushes reach past 100%.
+                    self.usefulAppPackets += 1
         else:
             self.timesReceived[packet.seq] += 0 if ownTransmit else 1
 
@@ -714,7 +721,7 @@ class MeshNode:
         # send real ACK if you are the destination and you did not yet send the ACK
         if p.wantAck and p.destId == self.nodeid and not any(pA.requestId == p.seq for pA in self.packets):
             logger.debug(f"{self.env.now:.3f} Node {self.nodeid} sends a flooding ACK.")
-            messageSeq = self.messageSeq.get()
+            messageSeq = self.packetIdSeq.get()
             self.messages.append(MeshMessage(self.nodeid, p.origTxNodeId, self.env.now, messageSeq))
             pAck = MeshPacket(self.conf, self.nodes, self.nodeid, p.origTxNodeId, self.nodeid, self.conf.ACKLENGTH, messageSeq, self.env.now, False, True, p.seq, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
             pAck.priorHopRssi = p.rssiAtN[self.nodeid]

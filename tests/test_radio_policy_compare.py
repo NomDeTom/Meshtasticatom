@@ -71,7 +71,7 @@ class TestRadioPolicyCompare(unittest.TestCase):
             "static",
             "static CR",
             {
-                "messageSeq": 10,
+                "appMessages": 10,
                 "sent": 100,
                 "nrReceived": 40,
                 "nrCollisions": 5,
@@ -90,7 +90,7 @@ class TestRadioPolicyCompare(unittest.TestCase):
             "dcr",
             "Dynamic Coding Rate",
             {
-                "messageSeq": 10,
+                "appMessages": 10,
                 "sent": 102,
                 "nrReceived": 45,
                 "nrCollisions": 4,
@@ -121,7 +121,7 @@ class TestRadioPolicyCompare(unittest.TestCase):
             "static",
             "static CR",
             {
-                "messageSeq": 10,
+                "appMessages": 10,
                 "sent": 100,
                 "nrReceived": 40,
                 "nrCollisions": 5,
@@ -199,7 +199,7 @@ class TestRadioPolicyCompare(unittest.TestCase):
             "static",
             "static CR",
             {
-                "messageSeq": 10,
+                "appMessages": 10,
                 "sent": 100,
                 "nrReceived": 40,
                 "nrCollisions": 5,
@@ -218,7 +218,7 @@ class TestRadioPolicyCompare(unittest.TestCase):
             "dcr",
             "Dynamic Coding Rate",
             {
-                "messageSeq": 10,
+                "appMessages": 10,
                 "sent": 102,
                 "nrReceived": 45,
                 "nrCollisions": 4,

@@ -834,7 +834,6 @@ def run_simulation(conf, node_config):
     results = sim.get_results()
 
     packets = results["packets"]
-    messageSeq = results["messageSeq"]
     messages = results["messages"]
 
     # collect second-order results from finalized results
@@ -852,9 +851,11 @@ def run_simulation(conf, node_config):
 
     print("*******************************")
     print(f"\nRouter Type: {conf.SELECTED_ROUTER_TYPE}")
-    print("Number of messages created:", messageSeq)
+    print("Application messages created:", results["appMessages"], "plus", results["ackMessages"], "ACKs")
     print(
-        "Number of packets sent:", sent, "to", potentialReceivers, "potential receivers"
+        "Transmissions:", sent,
+        f"({results['rebroadcasts']} rebroadcasts, {results['retransmissions']} retransmissions)",
+        "to", potentialReceivers, "receiver opportunities"
     )
     print("Number of collisions:", nrCollisions)
     print("Number of packets sensed:", nrSensed)
@@ -862,7 +863,10 @@ def run_simulation(conf, node_config):
     print("Delay average (ms):", round(meanDelay, 2))
     print("Average Tx air utilization:", round(txAirUtilizationRate * 100, 2), "%")
     print("Percentage of packets that collided:", round(collisionRate * 100, 2))
-    print("Average percentage of nodes reached:", round(nodeReach * 100, 2))
+    print(
+        "Percentage of addressed receivers reached:", round(nodeReach * 100, 2),
+        f"({results['uniqueAppDeliveries']} of {results['appReceiverOpportunities']})"
+    )
     print(
         "Percentage of received packets containing new message:",
         round(usefulness * 100, 2),
