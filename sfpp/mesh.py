@@ -1895,17 +1895,8 @@ AMPLIFIER_MIXES = {
 }
 
 
-# Presets that no release has, for asking what a different point on the SF/bandwidth curve would
-# buy. NOT UPSTREAM and not in any firmware build - the vendored MODEM_PRESETS table is the shipped
-# set, and these are added on top of it here so the vendored tree stays a clean copy.
-#
-# Sensitivity is EXTRAPOLATED, not calculated: the vendored figures come from an external
-# calculator, and across the 500 kHz rows they fall about 2.5 dB per spreading factor (SF7 -118.5 to
-# SF11 -128.5). These continue that slope one step past each end. Treat them as indicative of the
-# direction, not as a link budget.
-#
-# SF5 and SF6 also need an SX126x or SX128x - an SX127x cannot do them at all - so EXTRA_SHORT_TURBO
-# is not a setting every board could take even if the firmware offered it.
+# Presets no release has, for asking what a different point on the SF/bandwidth curve would buy.
+# NOT UPSTREAM, and their sensitivity is extrapolated rather than derived - TRANSPORT.md.
 EXTRA_PRESETS = {
     # SF12 at 500 kHz: the slowest spreading on the widest channel. Reach of a long preset with the
     # airtime penalty spread over four times the bandwidth.
@@ -1938,10 +1929,8 @@ def thermal_noise_floor(bw_hz, noise_figure_db=RECEIVER_NOISE_FIGURE_DB):
     return THERMAL_NOISE_DBM_PER_HZ + 10.0 * math.log10(bw_hz) + noise_figure_db
 
 
-# The presets deployed meshes actually run. LONG_FAST is the default and the middle of the range.
-# Anything slower than LONG_MODERATE is used, but not on a mesh of any size: at 14.3 s for a full
-# LONG_SLOW payload a few nodes exhaust the airtime budget between them, and the periodic-interference
-# profile shows LONG_MODERATE, at 7.9 s, already losing full payloads to a 10 s interferer.
+# The presets deployed meshes actually run. Nothing slower than LONG_MODERATE is, on a mesh of any
+# size: a full LONG_SLOW payload is 14.3 s, and a few nodes exhaust the airtime budget on it.
 DEPLOYED_PRESETS = (
     "SHORT_TURBO",
     "SHORT_FAST",
@@ -2020,16 +2009,8 @@ def make_config(
     conf.MODEM_PRESET = preset
     conf.MODEL = model
     conf.PHY_LOSS_MODEL_ENABLED = phy_loss
-    # The vendored NOISE_LEVEL is one constant for every preset, and the sensitivity table it sits
-    # beside is not: those figures are kTB + 6 dB NF, and each one lands exactly on its spreading
-    # factor's demodulator limit (SF7 -7.5 dB, SF11 -17.5, SF12 -20.0). A fixed floor therefore
-    # misstates SNR by 10log10(bw/anchor) - about 5 dB optimistic at 250 kHz and 8 at 500 kHz.
-    #
-    # It matters more than a few dB sounds, because the PER curve's p50 sits at -17.0 dB (CR5) to
-    # -19.4 (CR8), right on those demodulator limits. Under the fixed floor a LONG_FAST link at
-    # sensitivity computes SNR -12.25 and decodes 96% of the time; under a thermal floor it computes
-    # -17.5 and decodes 39%. The fixed floor is why this model has no marginal link: it puts every
-    # link the graph will use 5 dB into the flat top of the curve.
+    # A per-preset thermal floor. The vendored constant is one figure for every preset, which puts
+    # every usable link into the flat top of the PER curve - TRANSPORT.md.
     if noise_model == "thermal":
         conf.NOISE_LEVEL = thermal_noise_floor(conf.current_preset["bw"])
     elif noise_model != "fixed":
@@ -2058,10 +2039,7 @@ def make_config(
 class _CalNode:
     """What `lib.link_model.calculate_link_budget` reads off a node, and nothing else.
 
-    It wants `.position` with x/y/z, `.antenna_gain` and `.antenna_height`. This transport keeps
-    its nodes as flat records with separate transmit and receive gains, so one of these is built
-    per direction rather than per node: the same node is a different endpoint depending on which
-    way the packet is travelling.
+    Built per direction, not per node: transmit and receive gain differ. TRANSPORT.md.
     """
 
     __slots__ = ("position", "antenna_gain", "antenna_height")
@@ -2073,10 +2051,9 @@ class _CalNode:
 
 
 class Mesh:
-    """Event-driven flood over a fixed set of nodes.
+    """Event-driven flood over a fixed set of nodes, in milliseconds.
 
-    Time is milliseconds. The queue holds (time, sequence, callable) so ties break deterministically
-    on insertion order rather than on dict iteration.
+    The queue holds (time, sequence, callable), so ties break on insertion order.
     """
 
     def __init__(
@@ -2101,9 +2078,8 @@ class Mesh:
         self.rng = rng
         self.hop_limit = hop_limit
         self.area = area
-        # The ground under the mesh, or None for the flat world every earlier run assumed. It is a
-        # grid, not a per-node height: the link budget asks what is BETWEEN two nodes, and a node's
-        # own elevation answers only half of that. See `sfpp/terrain.py`.
+        # A grid, not a per-node height: the budget asks what is between two nodes, and an
+        # elevation answers half of that. None is the flat world. TRANSPORT.md.
         self.terrain = terrain
         self._lift_to_terrain()
         # The mesh-wide default. Individual nodes carry their own and may disagree with it; this
@@ -2115,20 +2091,15 @@ class Mesh:
         # A hook the traffic-management arm sets: fn(packet) -> bool, forcing one relay at
         # hop_limit 0 (TrafficManagementModule::shouldExhaustHops).
         self.should_exhaust_hops = None
-        # A flat loss floor on every reception, on top of the physics. It stands in for the things
-        # the model does not carry - interference from outside the mesh, fading, a receiver busy
-        # elsewhere - and is the knob the capacity-against-loss sweep turns.
+        # A flat loss floor on every reception, standing in for what the physics does not carry.
+        # The knob the capacity-against-loss sweep turns. TRANSPORT.md.
         self.extra_loss = extra_loss
-        # Bursty deafness: a node is periodically unable to receive for a stretch, standing in for
-        # a blocked antenna, a neighbour keying up nearby, or a radio busy elsewhere. Flat loss and
-        # bursty loss are different problems for a sketch - flat loss spreads the divergence evenly
-        # across buckets, a burst puts a whole bucket's worth into one.
+        # Bursty deafness: a blocked antenna, a neighbour keying up, a radio busy elsewhere. A
+        # different problem for a sketch than flat loss - TRANSPORT.md.
         self.burst_loss = burst_loss
         self.burst_ms = burst_ms
-        # Per-node gain offset in dB, from build()'s siting mix. Read by _build_links, so it has
-        # to arrive with the constructor rather than being set afterwards - links are computed once.
-        # Siting moves both directions together - a basement is a bad place to transmit from and to
-        # receive in. Amplification does not, so it is carried separately.
+        # Per-node gain in dB from build()'s siting mix, moving both directions together where
+        # amplification does not. Must arrive with the constructor: links are computed once.
         self.siting_gain = (
             list(siting_gain) if siting_gain is not None else [0.0] * len(nodes)
         )
@@ -2165,10 +2136,8 @@ class Mesh:
             "cancelled_reach_lost": 0,
             "receptions": 0,
             "lost_to_collision": 0,
-            # Lost with a noise excursion that the static floor would have delivered through, and
-            # delivered through a band quieter than nominal - the temporal field below zero - that
-            # the static floor would have dropped. Both are attributed off the same single draw, so
-            # neither costs an extra random number.
+            # Both sides of one draw: lost where a static floor would have delivered, and
+            # delivered where it would have dropped. Neither costs an extra random number.
             "lost_to_noise_excursion": 0,
             "saved_by_quiet_band": 0,
             # Periodic interference caught the frame in flight: a hard loss, not a probability.
@@ -2263,14 +2232,7 @@ class Mesh:
     def _lift_to_terrain(self):
         """Put every node on the ground, and its antenna above that ground.
 
-        A no-op without terrain: the nodes keep the sea-level default they were built with, every
-        obstruction term the vendored code computes returns 0.0 with the grid disabled, and a flat
-        run therefore computes exactly the link budget it always did.
-
-        With terrain, two separate numbers. `ground_m` is what the grid says is under the node.
-        `antenna_height_m` stays height ABOVE that ground and is filled from the model's own default
-        where a scenario did not carry one - the path-loss formulas take an antenna height term, and
-        handing them metres above sea level would silently make every node a mountaintop.
+        A no-op without terrain, and two separate numbers with it - TRANSPORT.md.
         """
         if self.terrain is None:
             return
@@ -2297,12 +2259,8 @@ class Mesh:
         self.neighbours = [[] for _ in range(n)]
         sensitivity = conf.current_preset["sensitivity"]
 
-        # The per-pair asymmetry is drawn ONCE for the life of the mesh and kept. A rebuild - after
-        # an amplifier is fitted, or to price a stretch - then draws nothing and moves nothing it was
-        # not asked to move. Redrawing it re-randomised every link in the mesh, including every pair
-        # with no amplifier anywhere near it, and advanced the RNG the traffic generator shares: the
-        # before and after of any such comparison were two different meshes carrying two different
-        # schedules.
+        # Drawn ONCE for the life of the mesh, so a rebuild moves nothing it was not asked to
+        # move and advances no shared stream. TRANSPORT.md.
         if self._skew is None:
             self._skew = [[0.0] * n for _ in range(n)]
             if conf.MODEL_ASYMMETRIC_LINKS:
@@ -2313,10 +2271,8 @@ class Mesh:
                             conf.MODEL_ASYMMETRIC_LINKS_STDDEV,
                         )
 
-        # The path is measured between antennas, not between map pins. Without terrain every
-        # altitude is zero and the 3-D distance is the 2-D one, so this is the same number the flat
-        # model computed; with terrain, two nodes 3 km apart with 400 m of ridge between them are
-        # further apart than the map says, and the obstruction terms below price the ridge itself.
+        # Between antennas, not between map pins: identical to the flat model without terrain,
+        # and with it a ridge makes two nodes further apart than the map says. TRANSPORT.md.
         points = [
             terrain_mod.Point(node.x, node.y, node.altitude) for node in self.nodes
         ]
@@ -2324,22 +2280,12 @@ class Mesh:
             node.antenna_height_m if node.antenna_height_m is not None else conf.HM
             for node in self.nodes
         ]
-        # Only where the scenario carried a fit. These coefficients are one city, 296 links and one
-        # window, so they are not a better link model in general - taking them somewhere else would
-        # be transporting Batumi's ridges and rooftops to a place that does not have them.
+        # Only where the scenario carried a fit, and only inside the distances it was trained on:
+        # past its envelope the raw budget answers instead. TRANSPORT.md, TRAPS 4.
         calibrated = bool(getattr(conf, "LINK_CALIBRATION_MODEL_ENABLED", False))
-        # A fit answers any distance it is asked about, including ones it has never seen. Batumi's
-        # was trained on 296 links reaching 23.2 km - three of them past 20 km and none past 30 -
-        # and its ground-elevation terms are positive and unbounded against a log-distance penalty
-        # that grows far more slowly. Mirrored past one tile that stops being an approximation: at
-        # four tiles a tenth of the links ran beyond 42 km and the longest reached 60.6 km, none of
-        # which the fit has any support for. Past the envelope the raw budget answers instead - it
-        # is only a physical path loss, but it is a physical path loss everywhere.
         calibration_max = getattr(conf, "LINK_CALIBRATION_MAX_M", None)
-        # Three loss terms, three separate claims, kept apart so a result can price them apart:
-        # distance is geometry, terrain is a public elevation model, clutter is a land-cover raster.
-        # Both obstruction functions return 0.0 with their grid disabled, which is what makes a
-        # no-terrain run bit-identical to every run made before the ground existed.
+        # Three loss terms kept apart so a result can price them apart. All return 0.0 with their
+        # grid disabled, which is what keeps a no-terrain run bit-identical. TRANSPORT.md.
         self.loss_terms = {
             "terrain_db": 0.0,
             "clutter_db": 0.0,
@@ -2368,33 +2314,17 @@ class Mesh:
                 self.loss_terms["clutter_db"] += clutter_db
                 self.loss_terms["pairs"] += 1
                 base = conf.PTX + 2 * conf.GL - loss - terrain_db - clutter_db
-                # rssi[i][j] is i transmitting and j receiving, so it takes i's transmit gain and
-                # j's receive gain. Those are separate numbers per node, not one siting figure used
-                # both ways: an amplified node can run +8 or +15 dB on transmit while its receive
-                # path is unchanged or worse, because the PA sits after the LNA and a cheap module
-                # often adds insertion loss on the way in. Such a node is heard much further than it
-                # hears - it relays into places whose replies never reach it, and it cancels
-                # rebroadcasts from nodes that could have carried the packet further than it can.
-                #
-                # The per-pair Gaussian skew is kept on top, for the asymmetry that is a property of
+                # i transmitting and j receiving, so i's transmit gain and j's receive gain - which
+                # differ on an amplified node. The per-pair skew sits on top, for the asymmetry of
                 # the link rather than of either radio. Drawn once, above, and reused.
                 skew = self._skew[i][j]
                 in_envelope = calibration_max is None or d <= calibration_max
                 if calibrated and not in_envelope:
                     self.loss_terms["beyond_calibration"] += 1
                 if calibrated and in_envelope:
-                    # A scenario that ships fitted coefficients has measured what its links
-                    # actually do, and that beats this budget: on Batumi the fit is trained on 296
-                    # observed links, and the raw budget disagrees with them badly enough to break
-                    # the mesh into 15 pieces that the observations show as one. The vendored
-                    # function is called rather than reimplemented so the number is exactly the one
-                    # the preset was fitted to produce; the obstruction terms above are already in
-                    # its cache, so the second pass over them is a lookup.
-                    #
-                    # Our per-node gains go in as the endpoints' antenna gain, which is where the
-                    # fit expects them - `raw_snr` is one of its features. The snapshot's own gains
-                    # are all zero, so a default run reproduces the preset and a run with
-                    # --amplifier-mix asks what an amplifier would do to a mesh measured without one.
+                    # A fitted scenario has measured what its links do, and that beats this budget.
+                    # The vendored function is called, not reimplemented, so the number is the one
+                    # the preset was fitted to produce. TRANSPORT.md.
                     self.rssi[i][j] = (
                         calculate_link_budget(
                             conf,
@@ -2415,9 +2345,8 @@ class Mesh:
                     self.rssi[i][j] = base + self.tx_gain[i] + self.rx_gain[j] + skew
                     self.rssi[j][i] = base + self.tx_gain[j] + self.rx_gain[i] - skew
 
-        # The widest lift any configured duct can produce, so the candidate set is built once and a
-        # delivery only has to filter it. Without this a ducted reception would mean scanning all n
-        # receivers per transmission instead of the handful that could ever come into range.
+        # The widest lift any configured duct can produce, so a delivery filters a candidate set
+        # rather than scanning every receiver per transmission.
         headroom = self.ducting.gain_db if self.ducting else 0.0
         self.duct_reach = [[] for _ in range(n)]
         for i in range(n):
@@ -2432,8 +2361,7 @@ class Mesh:
     def delivery_probability(self, i, j, length=60, coding_rate=None):
         """P(the payload decodes) on the directed link i->j, at a reference length.
 
-        Zero below sensitivity, because `neighbours` is thresholded there and such a pair is never
-        offered a packet at all. Above it, the vendored PER curve against the configured noise floor.
+        Zero below sensitivity, where a pair is never offered a packet; the PER curve above it.
         """
         sensitivity = self.conf.current_preset["sensitivity"]
         if self.rssi[i][j] < sensitivity:
@@ -2452,23 +2380,7 @@ class Mesh:
     def link_quality(self, length=60):
         """Every directed link graded twice: by dB margin, and by what it actually delivers.
 
-        The margin bands are the geometry - `comfortable` (>=10 dB), `adequate` (5-10), `fragile`
-        (<5, so a little fading removes it) - and they do not depend on the noise floor at all.
-        `near_miss` counts the other side of the cliff: pairs within 6 dB below sensitivity, which a
-        real radio would sometimes hear and this one never does.
-
-        `delivery` is the second grading and it is the one that answers "how many links here are
-        genuinely marginal". Under a fixed noise floor the answer was none: the threshold sat 5 dB
-        into the flat top of the PER curve, so every link the mesh would use delivered 96%+ and
-        everything worse was not a link. Under the thermal floor the threshold lands on the curve's
-        knee - a LONG_FAST link at sensitivity delivers 39% - and a marginal band exists to measure.
-
-        THE DENOMINATOR MATTERS, and quoting this against the live link count alone is a trap. A
-        stretched mesh loses its worst links off the bottom of the graph entirely, so the share of
-        *surviving* links that are bad can improve while the mesh gets worse. Every share here is
-        therefore reported twice: against live links, and per thousand ordered pairs, which is fixed
-        whatever the stretch does. Read the second one across a stretch sweep, and read
-        `sub_sensitivity` beside it for what fell off the cliff.
+        Read the per-thousand-pairs share, not the share of live links - TRANSPORT.md.
         """
         conf = self.conf
         sensitivity = conf.current_preset["sensitivity"]
@@ -2527,10 +2439,7 @@ class Mesh:
     def _delivery_census(self, probs, length):
         """What the links actually deliver, at one reference length.
 
-        `marginal` is the band that could not exist under a fixed noise floor: a link that works
-        sometimes. It is the headline of any stretch or noise result, because it is the population
-        every retry, coding-rate and repeat mechanism in this design exists to serve, and until the
-        floor was corrected it was empty.
+        `marginal` - a link that works sometimes - is the band a fixed noise floor left empty.
         """
         n = len(self.nodes)
         pairs = max(1, n * (n - 1))
