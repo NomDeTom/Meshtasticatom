@@ -291,32 +291,32 @@ class TestDiscreteEventSim(unittest.TestCase):
         # and modify your changes, or to update the hardcoded "known good"
         # simulation results is up to your judgement for which is
         # appropriate. Be cautious!
-        self.assertEqual(messageSeq, 181, "expected number of messages created")
+        self.assertEqual(messageSeq, 180, "expected number of messages created")
         sent = results['sent']
         potentialReceivers = results['potentialReceivers']
-        self.assertEqual(sent, 788, "expected number of packets sent")
-        self.assertEqual(potentialReceivers, 7092, "expected number of potential receivers")
+        self.assertEqual(sent, 804, "expected number of packets sent")
+        self.assertEqual(potentialReceivers, 7236, "expected number of potential receivers")
 
         nrCollisions = results['nrCollisions']
-        self.assertEqual(nrCollisions, 206, "expected number of collisions")
+        self.assertEqual(nrCollisions, 203, "expected number of collisions")
         nrSensed = results['nrSensed']
-        self.assertEqual(nrSensed, 2711, "expected number of packets sensed")
+        self.assertEqual(nrSensed, 2740, "expected number of packets sensed")
 
         nrReceived = results['nrReceived']
-        self.assertEqual(nrReceived, 2495, "expected number of packets received")
+        self.assertEqual(nrReceived, 2528, "expected number of packets received")
         meanDelay = results['meanDelay']
-        self.assertEqual(round(meanDelay, 2), 3850.63, "expected rounded delay average")
+        self.assertEqual(round(meanDelay, 2), 3957.15, "expected rounded delay average")
         txAirUtilizationRate = results['txAirUtilizationRate']
-        self.assertEqual(round(txAirUtilizationRate * 100, 2), 2.97, "expected rounded average tx air utilization")
+        self.assertEqual(round(txAirUtilizationRate * 100, 2), 3.04, "expected rounded average tx air utilization")
 
         nodeReach = results['nodeReach']
-        self.assertEqual(round(nodeReach*100, 2), 80.6, "expected rounded percentage of nodes reached")
+        self.assertEqual(round(nodeReach*100, 2), 81.67, "expected rounded percentage of nodes reached")
 
         usefulness = results['usefulness']
-        self.assertEqual(round(usefulness*100, 2), 52.63, "expected rounded 'usefulness' percentage")
+        self.assertEqual(round(usefulness*100, 2), 52.33, "expected rounded 'usefulness' percentage")
 
         delayDropped = results['delayDropped']
-        self.assertEqual(delayDropped, 1099, "expected number of packets dropped")
+        self.assertEqual(delayDropped, 1103, "expected number of packets dropped")
         # default config has both asymmetric links and movement enabled
         noLinkRate = results['noLinkRate']
         self.assertEqual(round(noLinkRate * 100, 2), 55.56, "expected rounded percentage of 'no' links")

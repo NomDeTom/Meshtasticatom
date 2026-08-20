@@ -96,3 +96,17 @@ run - including every run configured with interference explicitly disabled - def
 of its transmissions to a channel that nothing was using. The level is now validated as a
 probability in [0, 1] when set, so a level outside that range fails at configuration rather than
 silently saturating.
+
+## Contention window
+
+`set_transmit_delay` follows `RadioLibInterface::setTransmitDelay`: a node that heard the packet it
+is rebroadcasting draws an SNR-weighted delay, and a node that did not draws on channel utilization
+instead.
+
+The draws are half-open, because the firmware's are. Arduino `random(0, n)` returns 0..n-1, so a
+router waits at most `2·CWsize − 1` slots and a client at most `2^CWsize − 1` past the router
+window. The window itself is `2 · CWmax · slotTime`, which is what keeps the two roles from
+overlapping: the latest a router can transmit is strictly before the earliest a client can.
+
+`CWmin = 3`, `CWmax = 8`, and `getCWsize` maps a reported SNR of -20..10 dB onto that range. Both
+constants and the mapping are unchanged between v2.7.15 and 2.8.

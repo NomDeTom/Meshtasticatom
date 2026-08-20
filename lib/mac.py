@@ -7,6 +7,7 @@ from lib.radio_loss import estimate_snr
 logger = logging.getLogger(__name__)
 
 # checked as of tag v2.7.15.567b8ea in meshtastic-firmware repo
+# Firmware draws with Arduino random(0, n), which is half-open, so randrange is the match for it.
 CWmin = 3
 CWmax = 8
 PROCESSING_TIME_MSEC = 4500
@@ -36,11 +37,11 @@ def get_tx_delay_msec_weighted(node, rssi):  # from RadioInterface::getTxDelayMs
     CWsize = int((snr - SNR_MIN) * (CWmax - CWmin) / (SNR_MAX - SNR_MIN) + CWmin)
 
     if node.is_router:
-        delay = random.randint(0, 2 * CWsize) * slot_time_msec
+        delay = random.randrange(0, 2 * CWsize) * slot_time_msec
         logger.debug(f'{node.env.now:.3f} Node {node.nodeid} is router, has CW size {CWsize} and picked {delay=}')
     else:
         max_router_delay = 2 * CWmax * slot_time_msec
-        delay = max_router_delay + random.randint(0, 2 ** CWsize) * slot_time_msec
+        delay = max_router_delay + random.randrange(0, 2 ** CWsize) * slot_time_msec
         logger.debug(f'{node.env.now:.3f} Node {node.nodeid} is not router, has CW size {CWsize} and picked {delay=}')
     return delay
 
@@ -50,7 +51,7 @@ def get_tx_delay_msec(node):  # from RadioInterface::getTxDelayMsec
     # the utilization of those periods. In v2.7.15.567b8ea this macro is 6, with SECONDS_PER_PERIOD 3600
     channelUtil = node.airUtilization / node.env.now * 100
     CWsize = int(channelUtil * (CWmax - CWmin) / 100 + CWmin)
-    CW = random.randint(0, 2 ** CWsize)
+    CW = random.randrange(0, 2 ** CWsize)
     logger.debug(f'{node.env.now:.3f} Current channel utilization is {channelUtil}, so picked {CWsize=} and {CW=}')
     return CW * get_current_slot_time()
 
