@@ -22,8 +22,13 @@ name: Sim Sweep (matrix)
 
 on:
   schedule:
-    # 03:40 UTC on Sundays, clear of the nightly block sweep.
-    - cron: 40 3 * * 0
+    # Daily at 03:40 UTC, two cells a day, rotating - so the whole grid is covered every three days
+    # and a digest lands every morning rather than once a week. Clear of the nightly block sweep at
+    # 02:10 and the design rotation at 04:40.
+    #
+    # Which two is derived from the date, because a cron entry cannot carry its own inputs. Dispatch
+    # with the `cells` input to override.
+    - cron: 40 3 * * *
   workflow_dispatch:
     inputs:
       seeds:
@@ -32,7 +37,8 @@ on:
         required: false
         default: 7 11 13 17 23
       cells:
-        description: Space-separated cell names from `python3 -m sfpp.matrix --list`. Empty means all
+        description: Space-separated cell names from `python3 -m sfpp.matrix --list`. Empty rotates by
+          date; `all` runs the whole grid at once
         type: string
         required: false
         default: ""
@@ -71,10 +77,22 @@ jobs:
 
           known = cells()
           asked = (os.environ.get("IN_CELLS") or "").split()
-          unknown = [c for c in asked if c not in known]
-          if unknown:
-              sys.exit(f"unknown cell(s): {', '.join(unknown)}")
-          chosen = asked or sorted(known)
+          if asked == ["all"]:
+              chosen = sorted(known)
+          elif asked:
+              unknown = [c for c in asked if c not in known]
+              if unknown:
+                  sys.exit(f"unknown cell(s): {', '.join(unknown)}")
+              chosen = asked
+          else:
+              # Two cells a day, cycling through the grid, so it is covered every three days. Keyed on
+              # the date rather than a stored cursor: stateless, and re-running a failed day repeats
+              # that day rather than skipping its cells.
+              order = sorted(known)
+              per_day = 2
+              start = (datetime.date.today().toordinal() * per_day) % len(order)
+              chosen = [order[(start + i) % len(order)] for i in range(per_day)]
+              print(f"rotated to cells {' '.join(chosen)}", file=sys.stderr)
 
           # Seeds are fixed here rather than drawn. The matrix is a paired comparison across
           # presets and placements, and pairing is what makes it readable at five seeds instead of

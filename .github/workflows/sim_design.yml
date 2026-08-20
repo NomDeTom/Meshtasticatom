@@ -29,8 +29,13 @@ name: Sim Design (cross)
 
 on:
   schedule:
-    # Sunday 04:40 UTC. Weekly rather than nightly: a full round is 65 jobs of an hour or more, and
-    # the two nightly sweeps already have the runners between 02:10 and 06:20.
+    # Daily at 04:40 UTC, one **mesh** per day, rotating. Weekly-over-every-mesh was one 182-job
+    # batch that produced nothing until it finished and left six days idle; a mesh a day is 39 jobs
+    # (117 for the mirrored one), lands a digest every morning, and covers the whole axis every five
+    # days. The mesh axis is the outer coordinate precisely so a round can be cut this way.
+    #
+    # Which mesh is derived from the date, because a cron entry cannot carry its own inputs. Dispatch
+    # with the `mesh` input to override.
     #
     # An hour later than it reads in the history, and the hour is the point: this and
     # sim_sweep_matrix both used to fire at 03:40 on Sunday. Each file's comment reasoned only about
@@ -42,11 +47,11 @@ on:
   workflow_dispatch:
     inputs:
       mesh:
-        description: Which mesh's cells to run. `all` is the full round
+        description: Which mesh's cells to run. `rotate` follows the date; `all` is every mesh at once
         type: choice
         required: false
-        default: all
-        options: [all, batumi, batumi-x4, batumi-legacy-25, batumi-legacy-50, batumi-short-fast]
+        default: rotate
+        options: [rotate, all, batumi, batumi-x4, batumi-legacy-25, batumi-legacy-50, batumi-short-fast]
       rivals:
         description: Space-separated rival names. Empty means every rival the design declares
         type: string
@@ -115,9 +120,16 @@ jobs:
           meshes = [m for m, _ in MESHES]
           rivals = [r for r, _ in RIVALS]
 
-          asked_mesh = (os.environ.get("IN_MESH") or "all").strip() or "all"
-          if asked_mesh not in ("all", *meshes):
-              sys.exit(f"unknown mesh {asked_mesh!r}; have all, {', '.join(meshes)}")
+          asked_mesh = (os.environ.get("IN_MESH") or "rotate").strip() or "rotate"
+          if asked_mesh not in ("rotate", "all", *meshes):
+              sys.exit(f"unknown mesh {asked_mesh!r}; have rotate, all, {', '.join(meshes)}")
+          if asked_mesh == "rotate":
+              # One mesh a day, in the order the design declares them, cycling. Keyed on the date
+              # rather than a stored cursor so it is stateless and reproducible: any given day always
+              # picks the same mesh, and a re-run of a failed day repeats that day rather than
+              # skipping ahead.
+              asked_mesh = meshes[datetime.date.today().toordinal() % len(meshes)]
+              print(f"rotated to mesh {asked_mesh}", file=sys.stderr)
 
           asked_rivals = (os.environ.get("IN_RIVALS") or "").split()
           unknown = [r for r in asked_rivals if r not in rivals]
