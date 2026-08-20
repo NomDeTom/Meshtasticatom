@@ -128,6 +128,7 @@ A run leaves three things beside each other, and needs no post-processing step t
 | `knowledge.py`    | (library)              | per-node NodeDB state, partitions, stale beliefs                                  |
 | `analytic/`       | `-m sfpp.analytic.*`   | pre-transport closed-form and Monte-Carlo models, kept as a cross-check           |
 | `run-blocks.sh`   | `./run-blocks.sh`      | detached runner: `setsid`, a lock, a manifest, and a test gate                    |
+| `nextup.py`       | `-m sfpp.nextup`       | which part of a sweep has gone longest without a digest - what the schedules run next |
 
 **Two scripts in the tree are not part of any of this, and their numbers are not about this
 transport.** Both drive the vendored `lib/discrete_event_sim.py` - upstream's own simulator, roughly
@@ -183,6 +184,19 @@ from their coordinates. A cell without one cannot be added.
 | `matrix.py` cells | 6 | weekly Sun 03:40 UTC, one job per (cell, seed) | **Does a preset ordering survive scaling, and does any deliberate placement beat chance?** Three presets x two scales over real Batumi ground, crossed against placement and count, with a no-archive baseline per seed |
 | `design.py` cells | 65 | weekly Sun 04:40 UTC, one job per (cell, seed) | **Is the archive worth it, against what else you could spend instead?** Five meshes x thirteen rivals, each crossed against the archive off and at every placement and count - so every number is a difference against the same mesh at the same seed |
 | `explorer.py` | - | nightly 06:20 UTC | Rolls every run in the archive into one page. Runs no simulation |
+
+**Each firing checks what the one before actually produced.** The matrix and the cross are cut into
+daily parts - two cells and one mesh - and which part runs is decided by the archive, not the calendar:
+`sfpp/nextup.py` picks whatever has gone longest without a digest, never-run first. A date-keyed
+rotation marches on regardless, so a day that failed or never fired left its part missing until the
+cycle came round again, with nothing to notice it. This way a failed part still has no digest, so the
+next firing picks it again; once it lands, coverage advances. Stateless - there is no cursor to get out
+of step, only the record of what has run - and `--cells` / `--mesh` still override it by hand.
+
+Two consequences: an in-flight run has no digest yet, so two firings close together could choose the
+same part - the workflows' concurrency groups serialise them, and by the time the second plans, the
+first's digest exists. And a part that keeps failing keeps being chosen, which is intended: it is the
+part with no results, and it shows up as a run failing repeatedly rather than as a silent gap.
 
 **Durations differ and are not an oversight.** The blocks sweep runs 36 simulated hours, the matrix and
 the cross 72. Seventy-two is `campaign.py`'s own default and the minimum that shows a diurnal effect as

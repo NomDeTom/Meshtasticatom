@@ -29,13 +29,16 @@ name: Sim Design (cross)
 
 on:
   schedule:
-    # Daily at 04:40 UTC, one **mesh** per day, rotating. Weekly-over-every-mesh was one 182-job
-    # batch that produced nothing until it finished and left six days idle; a mesh a day is 39 jobs
-    # (117 for the mirrored one), lands a digest every morning, and covers the whole axis every five
-    # days. The mesh axis is the outer coordinate precisely so a round can be cut this way.
+    # Daily at 04:40 UTC, one **mesh** per day. Weekly-over-every-mesh was one 182-job batch that
+    # produced nothing until it finished and left six days idle; a mesh a day is 39 jobs (117 for the
+    # mirrored one) and lands a digest every morning. The mesh axis is the outer coordinate precisely
+    # so a round can be cut this way.
     #
-    # Which mesh is derived from the date, because a cron entry cannot carry its own inputs. Dispatch
-    # with the `mesh` input to override.
+    # **Which mesh is decided by what the archive already holds, not by the date.** A date-keyed
+    # rotation marches on regardless, so a day that fails leaves its mesh missing for five days and
+    # nothing notices. Each firing instead picks the mesh whose cells have gone longest without a
+    # digest - and a mesh with one cell missing outranks a merely older one, since the missing cell is
+    # the gap worth closing. See sfpp/nextup.py. Dispatch with `mesh` to override.
     #
     # An hour later than it reads in the history, and the hour is the point: this and
     # sim_sweep_matrix both used to fire at 03:40 on Sunday. Each file's comment reasoned only about
@@ -47,7 +50,7 @@ on:
   workflow_dispatch:
     inputs:
       mesh:
-        description: Which mesh's cells to run. `rotate` follows the date; `all` is every mesh at once
+        description: Which mesh's cells to run. `rotate` picks the stalest; `all` is every mesh at once
         type: choice
         required: false
         default: rotate
@@ -100,6 +103,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Fetch the archive, so the plan can see what has already run
+        # Shallow and read-only. Absent on the very first run of a fresh repository, which is not an
+        # error - an empty archive simply means nothing has run and everything is equally stale.
+        run: |
+          set -euo pipefail
+          mkdir -p archive
+          if git fetch --depth 1 origin sim-results 2>/dev/null; then
+            git --work-tree=archive checkout FETCH_HEAD -- runs 2>/dev/null || true
+            echo "archive holds $(find archive -name summary.json | wc -l) digest(s)"
+          else
+            echo "no sim-results branch yet - treating every mesh as never run"
+          fi
+
       - name: Draw a seed base and the cell list
         id: draw
         shell: bash
@@ -124,12 +140,13 @@ jobs:
           if asked_mesh not in ("rotate", "all", *meshes):
               sys.exit(f"unknown mesh {asked_mesh!r}; have rotate, all, {', '.join(meshes)}")
           if asked_mesh == "rotate":
-              # One mesh a day, in the order the design declares them, cycling. Keyed on the date
-              # rather than a stored cursor so it is stateless and reproducible: any given day always
-              # picks the same mesh, and a re-run of a failed day repeats that day rather than
-              # skipping ahead.
-              asked_mesh = meshes[datetime.date.today().toordinal() % len(meshes)]
-              print(f"rotated to mesh {asked_mesh}", file=sys.stderr)
+              # The mesh that has gone longest without a digest. This is the check that makes the
+              # chain self-healing: a mesh whose run failed still has no digest for those cells, so the
+              # next firing picks it again rather than moving on to the next mesh in a calendar.
+              from sfpp.nextup import design_parts
+
+              asked_mesh = design_parts("archive/runs", 1)[0]
+              print(f"stalest mesh: {asked_mesh}", file=sys.stderr)
 
           asked_rivals = (os.environ.get("IN_RIVALS") or "").split()
           unknown = [r for r in asked_rivals if r not in rivals]
