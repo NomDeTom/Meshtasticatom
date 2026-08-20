@@ -564,6 +564,18 @@ class Config:
         """Returns the currently selected modem preset configuration"""
         return self.MODEM_PRESETS[self.MODEM_PRESET]
 
+    @property
+    def INTERFERENCE_LEVEL(self):
+        """Probability the channel is already busy with non-Meshtastic traffic, in [0, 1]."""
+        return self._interference_level
+
+    @INTERFERENCE_LEVEL.setter
+    def INTERFERENCE_LEVEL(self, value):
+        value = float(value)
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"INTERFERENCE_LEVEL must be a probability in [0, 1], got {value}")
+        self._interference_level = value
+
     # Function that needs to be run to ensure the router dependent variables change appropriately
     def update_router_dependencies(self):
         # Example: Overwrite hop limit in the case of X new awesome routing algorithm

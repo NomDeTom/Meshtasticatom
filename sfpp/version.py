@@ -35,6 +35,18 @@ HISTORY = [
         "INVALIDATES every earlier result involving `random-any` or `random-clients`, and every "
         "matrix or design figure measured at the old durations.",
     ),
+    (
+        "1.2.0",
+        "Airtime and channel-busy corrections in `lib.phy`, which this transport calls for every "
+        "frame. Time on air multiplied by the coding-rate denominator plus four rather than the "
+        "denominator, inflating every preset by 37-60% (LONG_FAST 1042 ms against 682 ms at a "
+        "40-byte payload), and low data rate optimization was gated on bandwidth rather than "
+        "symbol time, so VERY_LONG_SLOW ran without it. The channel-busy draw was quantized and "
+        "floored at 10%, so a level of 0.00 still deferred a tenth of all transmissions.",
+        "INVALIDATES every earlier result: airtime sets contention, collision overlap, "
+        "retransmission timing and channel utilisation, and no run in the archive was measured "
+        "with the corrected figures.",
+    ),
 ]
 
 SIM_VERSION = HISTORY[-1][0]

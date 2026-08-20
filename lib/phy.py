@@ -36,7 +36,7 @@ def check_collision(conf, env, packet, rx_nodeId, packetsAtN):
     # Check for collisions at rx_node
     col = 0
     if conf.COLLISION_DUE_TO_INTERFERENCE:
-        if random.randrange(10) <= conf.INTERFERENCE_LEVEL * 10:
+        if random.random() < conf.INTERFERENCE_LEVEL:
             packet.collidedAtN[rx_nodeId] = True
 
     if packetsAtN[rx_nodeId]:
@@ -225,7 +225,9 @@ def _packet_was_decodable_at_rx(packet, rx_nodeId):
 
 
 def is_channel_active(node, env):
-    if random.randrange(10) <= node.conf.INTERFERENCE_LEVEL * 10:
+    # A continuous draw, so INTERFERENCE_LEVEL means what it says at every value. `randrange(10)
+    # <= level * 10` was inclusive at both ends: it never fell below 10%, even at a level of zero.
+    if random.random() < node.conf.INTERFERENCE_LEVEL:
         return True
     for p in node.packets:
         if p.detectedByN[node.nodeid]:
