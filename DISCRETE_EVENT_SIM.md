@@ -162,6 +162,13 @@ The LoRa modem ([see Meshtastic radio settings](https://meshtastic.org/docs/over
 | 7 | Long Moderate | 125 | 4/8 | 11 | 0.336 |
 | 8 | Long Slow | 125 | 4/8 | 12 | 0.183 |
 | 9 | Very Long Slow | 62.5 | 4/8 | 12 | 0.0916 |
+| 10 | Medium Turbo | 500 | 4/5 | 9 | 7.03 |
+| 11 | Lite Fast | 125 | 4/5 | 9 | 1.76 |
+| 12 | Lite Slow | 125 | 4/5 | 10 | 0.977 |
+| 13 | Narrow Fast | 62.5 | 4/6 | 7 | 2.28 |
+| 14 | Narrow Slow | 62.5 | 4/6 | 8 | 1.3 |
+| 15 | Tiny Fast | 15.6 | 4/5 | 7 | 0.682 |
+| 16 | Tiny Slow | 15.6 | 4/6 | 8 | 0.325 |
 
 The simulator stores coding rates as their LoRa denominators (`5` through
 `8`, meaning CR 4/5 through 4/8). This table shows the configured base CR; when

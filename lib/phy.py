@@ -10,7 +10,7 @@ conf = CONFIG
 
 logger = logging.getLogger(__name__)
 
-# checked as of tag v2.7.15.567b8ea in meshtastic-firmware repo
+# checked as of 2.8.0 (version.properties), commit 51eadb7, in the meshtastic-firmware repo
 NUM_SYM_CAD = 2
 NUM_SYM_CAD_24GHZ = 4
 

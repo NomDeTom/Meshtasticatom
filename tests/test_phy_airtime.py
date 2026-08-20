@@ -18,7 +18,7 @@ def lorawan_conf():
     return conf
 
 
-# Meshtastic presets at a 40-byte payload, 16 preamble symbols, 16 header bytes.
+# Every preset in the table at a 40-byte payload, 16 preamble symbols, 16 header bytes.
 PRESET_AIRTIME_MS = {
     "SHORT_TURBO": 28.992,
     "SHORT_FAST": 57.984,
@@ -30,6 +30,13 @@ PRESET_AIRTIME_MS = {
     "LONG_MODERATE": 2166.784,
     "LONG_SLOW": 4071.424,
     "VERY_LONG_SLOW": 8142.848,
+    "MEDIUM_TURBO": 95.488,
+    "LITE_FAST": 381.952,
+    "LITE_SLOW": 722.944,
+    "NARROW_FAST": 266.752,
+    "NARROW_SLOW": 484.352,
+    "TINY_FAST": 929.231,
+    "TINY_SLOW": 2432.821,
 }
 
 
