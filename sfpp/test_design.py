@@ -73,10 +73,8 @@ class TestReportFields(unittest.TestCase):
     """The coordinates a cell writes onto each report, checked against what the campaign writes."""
 
     def test_the_mesh_name_does_not_overwrite_the_mesh_statistics(self):
-        # The campaign writes `mesh` as a dict of the run's node count, mean degree and
-        # connectedness, and both the digest and the chart read it as one. An earlier draft of the
-        # cross stored the mesh's *name* under the same key, which replaced that dict with a string
-        # and would have taken the node count out of every cell in the round.
+        # `mesh` is the run's node count, degree and connectedness, read as a dict by the digest
+        # and the chart: storing the mesh's name there would take the count out of every cell.
         import inspect
 
         source = inspect.getsource(D.run_cell)
@@ -106,9 +104,8 @@ class TestReproducesBaseline(unittest.TestCase):
         self.assertEqual(T.CONGESTION_PIVOT, 40)
 
     def test_the_scalings_are_not_the_same_setting(self):
-        # These get conflated. Hop scaling moves how far a broadcast is told to travel; congestion
-        # scaling moves how often the periodic ones are sent. Nothing here would notice if one flag
-        # were wired to the other's target, so this asserts they land in different places.
+        # Easily conflated: hop scaling moves how far a broadcast travels, congestion scaling how
+        # often periodic ones are sent. Nothing else would notice a flag wired to the wrong target.
         hop_flag = self.flags_for("hop-scaling-80")[0]
         congestion_flag = self.flags_for("congestion-80")[0]
         self.assertNotEqual(hop_flag, congestion_flag)
@@ -140,10 +137,7 @@ if __name__ == "__main__":
 class ArchiveSharding(unittest.TestCase):
     """Splitting a cell's archive configurations, which this module's header used to warn against.
 
-    The warning was right until placement got its own RNG stream: with the archive arms drawing from
-    the run's shared stream, a randomised placement shifted the traffic generator's later draws, so the
-    control and the arms carried different offered load. `test_matrix.PlacementIsolation` pins the fix;
-    without it none of this is sound.
+    Sound only since placement got its own stream - TRAPS 12, pinned by test_matrix.
     """
 
     def test_the_shards_of_a_cell_cover_every_configuration_exactly_once(self):

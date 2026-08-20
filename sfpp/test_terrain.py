@@ -38,9 +38,8 @@ class IndexMatchesVendored(unittest.TestCase):
         self._assert_parity(T.load("batumi").terrain_rows, queries=150, reach=16000.0)
 
     def test_terrain_index_matches_vendored_on_scattered_samples(self):
-        """Irregular scatter is the case that broke it: the ring search has to keep widening until
-        it has actually covered every occupied bucket, and counting cells against the bucket count
-        does not prove that. It once exited with no candidate at all and divided by zero."""
+        """Irregular scatter is the case that broke it: counting cells against the bucket count
+        does not prove coverage, and it once exited with no candidate and divided by zero."""
         rng = random.Random(4)
         rows = [
             (rng.uniform(-5000, 5000), rng.uniform(-5000, 5000), rng.uniform(0, 900))

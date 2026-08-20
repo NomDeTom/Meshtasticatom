@@ -31,9 +31,7 @@ def quietly(fn, *args, **kwargs):
 def stub_report(opts, seed):
     """What run_once would have returned, without the ten minutes of simulation.
 
-    Stubbed deliberately: what these tests are about is matrix.py's own bookkeeping - which file a
-    shard lands in and what `block` it claims - and running the transport to check a filename would
-    make the test both slow and a test of something else.
+    These tests are about matrix.py's bookkeeping, not about the transport.
     """
     return {
         "seed": seed,
@@ -84,10 +82,7 @@ class TestGrid(unittest.TestCase):
 class TestDescriptions(unittest.TestCase):
     """Every cell says what it covers, and the saying is enforced rather than hoped for.
 
-    Mirrors the four checks `test_mesh` holds `sweep.DESCRIPTIONS` to. The failure this prevents is
-    quiet: `collate.describe()` returns None for a cell no producer declares, so a missing sentence
-    does not fail anything - it renders as a blank row in the digest and on the page, which reads as
-    "this cell does nothing interesting" rather than "nobody wrote it down".
+    A missing sentence fails nothing: it renders as a blank row, which reads as "nothing here".
     """
 
     def test_every_cell_has_an_explanation(self):
@@ -104,8 +99,7 @@ class TestDescriptions(unittest.TestCase):
     def test_sibling_cells_do_not_share_an_explanation(self):
         """Cells differ in exactly two coordinates, and both have to reach the sentence.
 
-        Composing the text from the preset and the scale is what makes this hold; writing six
-        sentences by hand is what would eventually break it.
+        Composing the text from those two is what holds; six hand-written sentences would drift.
         """
         seen = {}
         for name, text in M.describes().items():
@@ -169,16 +163,14 @@ class TestSharding(unittest.TestCase):
     def test_two_shards_of_one_cell_do_not_overwrite_each_other(self):
         """The whole point of --tag, exercised through run_cell rather than asserted about strings.
 
-        Without it both shards write `batumi-x1-LONG_FAST.json` into the directory the collate job
-        merges every artifact into, and one seed's data silently wears the whole cell's name.
+        Without it one seed's data silently wears the whole cell's name.
         """
         out = os.path.join(self.tmp.name, "shards")
         first = self.shard(out, 7, "s7")
         second = self.shard(out, 11, "s11")
         self.assertNotEqual(first, second)
-        # Both shards' JSON, side by side. Counted rather than merely named, because the failure this
-        # guards is one file where there should be two. (`figures/` is beside them either way -
-        # run_cell has always asked autochart for a chart, which no-ops without matplotlib.)
+        # Counted, not merely named: the failure this guards is one file where there should be
+        # two. `figures/` sits beside them either way and no-ops without matplotlib.
         self.assertEqual(
             sorted(f for f in os.listdir(out) if f.endswith(".json")),
             ["batumi-x1-LONG_FAST.s11.json", "batumi-x1-LONG_FAST.s7.json"],
@@ -235,14 +227,7 @@ if __name__ == "__main__":
 class PlacementIsolation(unittest.TestCase):
     """The placement stream, and why it has to be its own.
 
-    A randomised placement picks with `rng.sample`; a deliberate one sorts by degree and draws nothing.
-    While both drew from the run's shared stream, taking those samples shifted every later draw - so
-    the traffic generator produced a different schedule under `random-any` than under `off`. Measured
-    at seed 4242 before the fix: the control and every deliberate placement originated 31 texts and 298
-    positions, `random-any x2` originated 32 and 289, and reach read 0.371 against the control's 0.343.
-
-    An 8% gap, the same order as the effects these sweeps measure, sitting between the control and the
-    one arm whose entire job is to *be* the control.
+    An 8% reach gap between the control and the arm whose job is to be the control - TRAPS 12.
     """
 
     def offered_load(self, *flags):
@@ -271,9 +256,8 @@ class PlacementIsolation(unittest.TestCase):
             )
 
     def test_the_server_count_does_not_move_the_traffic_either(self):
-        """More servers means more samples drawn. If placement shared the run's stream, asking for six
-        would shift the schedule further than asking for two - so a --servers sweep would confound
-        count with load."""
+        """More servers means more samples drawn, so a shared stream would make a --servers sweep
+        confound count with offered load."""
         control = self.offered_load("--protocol", "none")
         for count in ("2", "4", "8"):
             self.assertEqual(

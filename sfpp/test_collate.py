@@ -146,12 +146,9 @@ class Inert(unittest.TestCase):
         self.assertTrue(C._inert(grouped))
 
     def test_a_numeric_arm_can_be_reported_inert(self):
-        """The blind spot that disabled this check for 40 of the 87 blocks.
+        """The blind spot that disabled this check for 40 of the 87 blocks - TRAPS 11.
 
-        `value` is the arm's own setting, and on an arm swept over numbers it is also a number - so it
-        counted as a measurement that distinguished the cells, and no numeric-valued block could ever
-        be called inert. It worked for string-valued arms, which is why nobody noticed: `D-cadence`
-        was protected and `E-capacity` was not.
+        It kept working for string-valued arms, which is why nobody noticed.
         """
         self.assertTrue(C._inert({1: [report(value=1)], 2: [report(value=2)]}))
 
@@ -192,11 +189,7 @@ class Cells(unittest.TestCase):
 class ShardedBlocks(unittest.TestCase):
     """A block that arrives in several files is one block, not several.
 
-    The cross shards a heavy cell one job per seed - the mirrored Batumi mesh is four times the
-    nodes and a whole cell in one job runs past the runner's ceiling - and the artifacts merge into
-    one directory, so the shards must be named apart on disk while carrying the same `block`. Read
-    per file instead of per block, the digest would enter the same block three times and average
-    nothing over seeds, which is the failure this guards.
+    Shards are named apart on disk and carry the same `block` - MODEL.md.
     """
 
     def setUp(self):
@@ -319,9 +312,8 @@ class Timing(unittest.TestCase):
         return next(b for b in summary["blocks"] if b["block"] == block)["seconds_per_sim_hour"]
 
     def drift(self, summary):
-        """Only the timing kinds. These fixtures are two identical cells, so they are legitimately
-        inert too - and asserting on the whole warning list would make every test here fail for the
-        wrong reason the moment any other check started firing."""
+        """Only the timing kinds: these fixtures are two identical cells and legitimately inert too,
+        so asserting on the whole warning list would fail for the wrong reason."""
         return {
             kind: counts
             for kind, counts in (summary["gate"]["warnings_by_kind"] or {}).items()
@@ -362,10 +354,7 @@ class Timing(unittest.TestCase):
     def test_changing_hours_alone_does_not_read_as_a_regression(self):
         """The interaction that would have made this gate useless.
 
-        The 2 h and 24 h sweeps are being raised to 72 h so a diurnal cycle and the slower build-ups
-        are visible. Gating on the raw `wall_seconds` sum would have flagged every block in the
-        archive the night that landed - a 3x total against an unchanged rate - and taught everyone to
-        ignore the gate before it ever caught anything.
+        Gating on raw wall_seconds would have flagged every block the night --hours was raised.
         """
         history = self.archive([5.0, 5.2, 4.9])
         # Three times the simulated hours, three times the wall clock: the same machine, same speed.
@@ -425,9 +414,6 @@ class Timing(unittest.TestCase):
     def test_a_drift_flag_is_a_sentence_not_a_pair(self):
         """The bug the page build died on, and it died in integration rather than here.
 
-        `check_timing` runs after `summarise_block` has already flattened its flags to sentences, so
-        appending a (kind, text) pair there left a tuple in a list of strings. JSON made it a list,
-        `explorer.py` put the flags in a set, and the whole rollup raised `unhashable type: 'list'`.
         Every flag must be a plain string by the time it reaches the digest.
         """
         summary = C.collate(
@@ -584,11 +570,8 @@ class Explorer(unittest.TestCase):
         )
         self.assertIn("2026-08-19-1", page)
         self.assertIn("2026-08-20-2", page)
-        # Self-contained means it loads nothing over the network, not that it links nowhere: the
-        # attribution block cites the repository and the licence, and a citation is a link the
-        # reader may follow rather than a resource the page pulls in. What must not appear is any
-        # construct that fetches - the page is served from a git branch and from a static site and
-        # has to render identically opened from disk.
+        # Self-contained means it fetches nothing, not that it links nowhere: a citation is a
+        # link the reader may follow. The page has to render identically opened from disk.
         for loader in (
             "<script src",
             '<link rel="stylesheet"',
@@ -748,9 +731,8 @@ class Tabs(unittest.TestCase):
         self.assertEqual(html.count('<section class="tab-panel"'), html.count("</section>"))
 
     def test_the_page_stays_readable_without_javascript(self):
-        """The panels carry `hidden` so the first paint shows one tab rather than all five, which
-        means the UA's own [hidden] rule has to be overridden for the no-JS case - otherwise the
-        page is four hidden panels and an inert nav."""
+        """The panels carry `hidden` so the first paint shows one tab, so the UA's own [hidden]
+        rule has to be overridden - or the page is four hidden panels and an inert nav."""
         runs = self.archive({"r1": self.digest()})
         html = E.render_html(runs, E.index_by_block(runs), E.leaderboard(E.index_by_block(runs)))
         override = html.find(".tab-panel[hidden] { display: block; }")
@@ -805,8 +787,7 @@ class ScenarioTruth(unittest.TestCase):
 class NewGates(unittest.TestCase):
     """The gates the handover names, each against the defect it caught.
 
-    Fatal means the run's other numbers cannot be trusted: a counter that falsifies the design, or a
-    figure a radio cannot physically produce. Everything else warns and is still readable.
+    Fatal means the run's other numbers cannot be trusted; everything else warns.
     """
 
     def _flags(self, **overrides):
@@ -882,8 +863,7 @@ class NewGates(unittest.TestCase):
     def test_every_kind_this_module_can_raise_is_in_the_vocabulary(self):
         """A check that invents a kind is a flag the run-health page silently will not group.
 
-        Exercised through the reports that trigger each gate rather than by reading the source, so a
-        new check with an unlisted kind fails here the first time it fires.
+        Exercised through the reports that trigger each gate, not by reading the source.
         """
         triggers = [
             {"traffic__node_channel_util_percent": {"p90": 9.0, "max": 184.0}},
@@ -976,9 +956,7 @@ class FourSuccesses(unittest.TestCase):
 class ThinDenominators(unittest.TestCase):
     """A measure with almost no observations must not decide where a block ranks.
 
-    One admin probe an hour over a two-hour run is two sessions. A single failed session then reads
-    as a 50% swing, which is larger than any real effect in the archive numbers and would top a
-    leaderboard built from them. The figure is still reported; it just cannot win.
+    Two sessions make one failure a 50% swing. Still reported, but it cannot win. MODEL.md.
     """
 
     def test_two_sessions_cannot_rank_a_block(self):
