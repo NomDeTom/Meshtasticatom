@@ -1,5 +1,23 @@
 # Discrete-event simulator
-The discrete-event simulator mimics the radio section of the device software. It is currently based on Meshtastic 2.1.
+The discrete-event simulator mimics the radio section of the device software.
+
+## What each part is pinned to
+
+Nothing here is pinned to "Meshtastic" in general. Different parts of this tree mirror different
+firmware, and a result is only about the version the part that produced it was written against.
+
+| surface | pinned to | how to check |
+| --- | --- | --- |
+| `lib/mac.py`, `lib/phy.py` | firmware **2.8.0**, commit `51eadb7` | stated at the top of each file |
+| `lib/config.py` regions, profiles, presets, frequency slots | firmware **2.8.0**, commit `51eadb7` | `tests/test_region_frequency.py` - 2.8 dropped `UA_868` and added the ITU ham regions, so the region set dates the table |
+| `sfpp/` | **2.4 through 2.8**, selected per run | `sfpp/mesh.py` `VERSIONS` and `FEATURE_TAG`, which name the release each mechanism shipped in |
+| `sfpp` `legacy` profile | **no firmware** | deliberately - see `sfpp/README.md` |
+| `interactiveSim` daemon | **meshtasticd 2.7.26** | pinned in `lib/interactive.py`, recorded per run in `out/versions.yaml`. 2.8 has no published release image |
+| `requirements.txt` `meshtastic~=2.6.1` | the **Python client**, not firmware | drives `interactiveSim` and the nodedb reader |
+| `lib/dcr.py`, `lib/dtp.py` | **no firmware** | dynamic coding rate and dynamic TX power are proposals; no release has either, and both are off by default |
+
+The two simulators therefore answer different questions: the discrete-event model is 2.8 radio
+behaviour, and an interactive run is a real 2.7.26 daemon.
 
 ## Usage
 Please `git clone` or download this repository, navigate to the Meshtasticator folder (optionally create a virtual environment) and install the necessary requirements using:

@@ -1842,8 +1842,8 @@ class NoiseField:
     TEMPORAL is a smooth field with a coherence time, sampled across the packet's own airtime and
     judged on the WORST excursion it spans. That is the whole point of it: a frame is decoded as one
     unit, so a single deep fade anywhere inside it corrupts enough coded symbols to fail the frame.
-    A 21 s LONG_SLOW packet at tau=500 ms spans forty independent excursions and is judged on the
-    deepest of forty draws; a 175 ms SHORT_TURBO packet spans less than one. The length penalty that
+    A 14.3 s LONG_SLOW packet at tau=500 ms spans twenty-eight independent excursions and is judged
+    on the deepest of twenty-eight draws; a 100 ms SHORT_TURBO packet spans less than one. The length penalty that
     falls out is superlinear, which is what the vendored curve's flat 0.8 dB per 100 bytes is not.
 
     TRANSIENT is episodic and spatial: a window of raised floor over part of the map, standing in for
@@ -2162,9 +2162,9 @@ def thermal_noise_floor(bw_hz, noise_figure_db=RECEIVER_NOISE_FIGURE_DB):
 
 
 # The presets deployed meshes actually run. LONG_FAST is the default and the middle of the range.
-# Anything slower than LONG_MODERATE is used, but not on a mesh of any size: at 21 s for a full
+# Anything slower than LONG_MODERATE is used, but not on a mesh of any size: at 14.3 s for a full
 # LONG_SLOW payload a few nodes exhaust the airtime budget between them, and the periodic-interference
-# profile shows LONG_MODERATE already losing every full payload to a 10 s interferer.
+# profile shows LONG_MODERATE, at 7.9 s, already losing full payloads to a 10 s interferer.
 DEPLOYED_PRESETS = (
     "SHORT_TURBO",
     "SHORT_FAST",

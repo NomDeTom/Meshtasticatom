@@ -1,7 +1,7 @@
-# Fourteen ways this simulator produced a confident wrong number
+# Seventeen ways this simulator produced a confident wrong number
 
 Companion to [README.md](README.md), which is the operating manual. This is the other half: not how
-to run the thing, but how it has lied. All fourteen are fixed. They are written down because the
+to run the thing, but how it has lied. All seventeen are fixed. They are written down because the
 **shapes** recur, and because someone extending this tree can assert against them rather than
 rediscover them one at a time.
 
@@ -254,6 +254,60 @@ transmitting on.
 > endpoint is a control that does not work.
 > **Enforced**: `tests/test_interference.py` checks both endpoints and four intermediate levels, and
 > `Config.INTERFERENCE_LEVEL` now rejects anything outside [0, 1] when set.
+
+## 15. Reach counted overhearers against addressees
+
+Found 2026-08-20, in the same review.
+
+`nodeReach` was `nrUseful / (messageSeq * (N - 1))`. The denominator's `messageSeq` was one counter
+incremented for application messages **and** for generated ACKs, so every unicast ACK added N-1
+addressees to it. The numerator counted the first arrival of any packet at any node - including a
+node that merely overheard a DM addressed to someone else.
+
+Neither half counted the same population as the other, and nothing bounded the ratio. Measured on an
+8-node DM run: 220% reach.
+
+It agreed with the corrected figure exactly on a broadcast-only run, which is every default run, and
+that is why it survived. The mixing only shows up where ACKs or DMs exist.
+
+> **Assert** that a rate's numerator and denominator count the same population, and that a
+> percentage cannot exceed 100.
+> **Enforced**: `tests/test_metrics.py` counts the six populations apart - messages, ACKs, packet
+> ids, transmissions, relays, receiver opportunities - and `docs/metrics.md` names each one.
+
+## 16. Every macOS node ran out of node 0's state directory
+
+Found 2026-08-20, by reading the review's report of it.
+
+The macOS Docker path started each additional node with `-d /home/node{n0.nodeid}` - `n0`, the first
+node, not `n`. Every meshtasticd process therefore shared one data directory, reading and writing
+the others' identity and configuration. The Linux path, three lines below, was correct.
+
+> **Assert** over the whole set of generated commands, not one of them: distinct data directories,
+> ports and hardware ids.
+> **Enforced**: `tests/test_interactive.py`, over commands built by one shared function so both
+> platforms cannot drift apart again.
+
+## 17. Files named a firmware version they did not implement
+
+Found 2026-08-20, while checking what each part of the tree was pinned to.
+
+`lib/mac.py` and `lib/phy.py` said "checked as of tag v2.7.15.567b8ea". The region table beside them
+said nothing and was v2.7.15's data. The frequency calculation matched no version at all - it
+omitted the half-bandwidth centre offset both versions have, putting US LongFast at 908.75 MHz
+where a device sits at 906.875. And `lib/mac.py`'s router test was *2.8's* behaviour, CLIENT_BASE
+having lost its early rebroadcast window after 2.7 - correct by accident, against a comment naming
+the version where it was wrong.
+
+Two more surfaces named no version at all: the interactive harness ran `meshtastic/meshtasticd`
+untagged, so it tracked whatever `latest` resolved to on the day, driven by a 2.6.1 client; and
+`lib/dcr.py` describes dynamic coding rate as "the firmware idea" when no released firmware has it.
+
+> **Assert** the pin, do not just write it down. A version claim that cannot fail is decoration.
+> **Enforced**: `tests/test_docs.py` checks the commit named in the docs is the one named in each
+> pinned file and that the documented daemon image is the one that runs;
+> `tests/test_region_frequency.py` checks the region set against the pinned tree, which is
+> checkable because 2.8 removed `UA_868` and added the ITU ham regions.
 
 ## What is still open
 
