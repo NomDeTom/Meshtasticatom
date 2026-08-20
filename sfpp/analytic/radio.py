@@ -34,10 +34,7 @@ PAYLOAD_BUDGET = 233  # Data.payload max_size
 def ldro_for(sf, bw):
     """Low data rate optimisation, on when a symbol lasts longer than 16 ms.
 
-    Strictly greater, matching the reference calculator at
-    nomdetom.github.io/lora-airtime-calculator.html. Nothing in the Meshtastic preset
-    table lands exactly on 16 ms, so the boundary is academic - but the two should not
-    disagree on a case either could hit.
+    Strictly greater, matching the reference calculator; no shipped preset sits on the boundary.
     """
     return 1 if (2**sf) / bw > 0.016 else 0
 
@@ -94,9 +91,7 @@ def airtime(payload_bytes, preset, toa=toa_radiolib):
 def bytes_per_hour_at_utilisation(fraction, frame_bytes, preset):
     """Payload bytes an hour that occupy `fraction` of the channel.
 
-    Airtime is per frame, not per byte, so this depends on the frame size carrying it -
-    a stream of 43-byte adverts buys fewer bytes per second than the same airtime spent
-    on full frames. Quote the frame size alongside any figure derived from this.
+    Airtime is per frame, so this depends on frame size: quote that alongside any figure from it.
     """
     per_frame = airtime(frame_bytes, preset)
     return (3600.0 * fraction / per_frame) * frame_bytes

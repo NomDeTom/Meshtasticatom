@@ -35,9 +35,7 @@ LINK_OVERHEAD = 2 + 6 + 16 + 16 + 4  # type + scope + commit + parent + counter
 class ChainServer:
     """One node's canon chain: an ordered list of commits and the objects behind them.
 
-    The chain is per-server and its counters are local, exactly as in the SR work - there is no
-    official counter here either. What differs is that a chain also carries a *parent link* per
-    object, so order is recoverable by walking, which is precisely what makes catch-up serial.
+    Local counters plus a parent link per object, which is what makes catch-up serial. MODEL.md.
     """
 
     def __init__(self, index, store):
@@ -73,8 +71,7 @@ class ChainServer:
 class ChainProtocol:
     """The chain half of a campaign: announce a tip, walk to close a gap.
 
-    Deliberately shares the campaign's transport, store and counters so the comparison against SR is
-    like for like - same mesh, same traffic, same airtime accounting, same silent-loss gate.
+    Shares the campaign's transport, store and counters, so the comparison against SR is like for like.
     """
 
     def __init__(self, campaign):
@@ -122,9 +119,8 @@ class ChainProtocol:
         tip = payload["tip"]
         peer = payload["src"]
         if server.holds(tip) or server.walking.get(peer):
-            # Already caught up with this peer, or a walk is already in flight. The firmware's
-            # single-walk-at-a-time behaviour matters to the cost: two overlapping walks would
-            # double the round trips without halving the latency.
+            # Caught up, or a walk is already in flight. One at a time, as the firmware does:
+            # two overlapping walks double the round trips without halving the latency.
             return
         self._request(server, peer, tip)
 

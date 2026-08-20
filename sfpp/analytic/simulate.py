@@ -133,12 +133,7 @@ SMALL_CAPACITY = 4  # 16 B of sketch, the routine advert
 def run_sketch_adaptive(missing, sizes, rng):
     """Advertise a small sketch; grow it only when the advert says growing is needed.
 
-    A full-capacity sketch on every advert is what makes the steady state expensive, and
-    the steady state is almost always d=0. So the routine advert carries capacity 4 and
-    the member count. If the sketches do not resolve, the count difference is a lower
-    bound on the divergence - that is what sr_count is for - so one directed request gets
-    a sketch sized to it. Capacity truncation is exact, so the small sketch is a prefix
-    of the large one and nothing already sent is wasted.
+    The steady state is almost always d=0, so routine adverts stay small - MODEL.md.
     """
     ex = Exchange()
     ex.send(
@@ -323,13 +318,9 @@ def chart_capacity(size_pool, n, trials, outdir, rng):
 
 
 def chart_breakeven(res, n, outdir):
-    """Advertising is the cost this design *adds*; resolution is what it saves.
+    """Advertising is the cost this design adds; resolution is what it saves.
 
-    SFPP already broadcasts CANON_ANNOUNCE on a cadence whether or not anything changed.
-    An advert carrying a sketch is roughly four times that size, so in a steady state
-    where nothing is ever missed this design is strictly worse. It pays for itself the
-    moment a node actually has to catch up - the question is how often that has to
-    happen, and the answer is the break-even below.
+    Strictly worse when nothing is ever missed, so the break-even is how often that fails. MODEL.md.
     """
     announce = 40  # CANON_ANNOUNCE: type, root hash, commit hash
     advert = WIRE["sr_envelope"] + WIRE["sr_checksum"] + WIRE["short_id"] * MAX_CAPACITY
@@ -384,14 +375,8 @@ def chart_breakeven(res, n, outdir):
             label=f"adaptive: {small_advert} B advert, grown on demand",
         )
 
-        # "Just send it again", on the same axes. If d objects are missed per hour at a
-        # per-transmission miss rate q, the underlying message rate is d/q, so the extra
-        # copies cost (k-1) * (d/q) * object. Only the extra copies count: the first
-        # transmission happens under every strategy.
-        #
-        # This flatters repetition and the chart says so: k copies leave q^k of messages
-        # unrecovered for good, while every other curve here converges. It is a cheaper
-        # mechanism for a weaker guarantee.
+        # "Just send it again", on the same axes and deliberately flattered - see MODEL.md.
+        # Only the extra copies count; the first transmission happens under every strategy.
         for copies, colour in ((2, "#C77B58"), (3, "#8C5A3B")):
             repeat = [(copies - 1) * (d / MISS_RATE) * MEAN_OBJECT for d in xs]
             ax.plot(
@@ -416,9 +401,8 @@ def chart_breakeven(res, n, outdir):
                 color="#333",
             )
 
-        # 50% utilisation is roughly thirty times the top of these curves, so it only
-        # reads on a log axis - which is the point: none of these saturate the channel,
-        # and the differences between them are ratios rather than absolute bytes.
+        # Thirty times the top of these curves, so it only reads on a log axis: none of
+        # these saturate the channel, and the differences are ratios, not absolute bytes.
         util = radio.bytes_per_hour_at_utilisation(0.5, 67, PRESET)
         ax.axhline(util, color="#444", lw=1.3, ls=(0, (6, 3)))
         ax.annotate(
@@ -472,9 +456,9 @@ def chart_breakeven(res, n, outdir):
 
 
 def chart_bucket_size(size_pool, trials, outdir, rng):
-    """The structural difference: enumeration scales with what you hold, a sketch with
-    what you differ by. At the frozen bucket of 32 the two are nearly tied, which makes
-    the bucket size the parameter that decides whether the sketch is worth having.
+    """Enumeration scales with what you hold, a sketch with what you differ by.
+
+    Nearly tied at the frozen bucket of 32, so bucket size decides this - MODEL.md.
     """
     sizes_n = [8, 16, 32, 64, 128, 256]
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.8))
@@ -490,9 +474,8 @@ def chart_bucket_size(size_pool, trials, outdir, rng):
                 trial(n, d, size_pool, min(max(d, 1), MAX_CAPACITY), rng)
                 for _ in range(max(trials // 4, 1))
             ]
-        # The pool's mean, not its first entry: [size_pool[0]] * d is a constant that ignores
-            # the runs it is nominally averaged over, and shifts every curve by however far the
-            # capture's first text packet sits from the true mean.
+        # The pool's mean, not its first entry: a constant there ignores the runs it is
+            # nominally averaged over and shifts every curve by the first packet's error.
             objects = d * (statistics.mean(size_pool) + WIRE["sfpp_overhead"])
             for k in curves:
                 curves[k].append(statistics.mean(r[k].bytes for r in runs) - objects)
@@ -578,9 +561,8 @@ def main():
             d: {k: round(res[k]["airtime"][d], 1) for k in STRATEGIES}
             for d in (1, 4, 16)
         },
-        # None means the sketch is never overtaken anywhere in the bucket - which holds
-        # only because capacity is sized to the divergence here. See capacity-choice.png
-        # for what a fixed capacity costs when the guess is wrong.
+        # None means the sketch is never overtaken in the bucket, which holds only because
+        # capacity is sized to the divergence; capacity-choice.png shows a wrong guess.
         "crossovers_within_bucket": {
             "sketch_vs_enum4": crossover(res["sketch"]["bytes"], res["enum4"]["bytes"]),
             "sketch_vs_enum32": crossover(

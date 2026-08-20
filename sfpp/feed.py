@@ -44,8 +44,7 @@ class Message:
 def message_hash_of(encrypted_bytes, to, frm, packet_id):
     """SHA-256(encrypted || to || from || id) truncated to 16 bytes.
 
-    Mirrors recalculateMessageHash(): the three integers are appended in their native little-endian
-    layout, which is what memcpy of a uint32_t produces on every platform SF++ builds for.
+    recalculateMessageHash(): the integers go in little-endian, as memcpy of a uint32_t gives.
     """
     h = hashlib.sha256()
     h.update(encrypted_bytes)
@@ -93,9 +92,7 @@ def parse_line(line):
 def load(path, root_hash, limit=None, text_only=True, broadcast_only=True):
     """Yield Messages in capture order.
 
-    The capture carries no receive timestamps, so rx_time is the object's position in the stream;
-    callers that need a clock impose one. Ordering is what matters here - the chain counter follows
-    it, and buckets follow the counter.
+    No receive timestamps in the capture, so rx_time is position: order is what counters follow.
     """
     opener = gzip.open if str(path).endswith(".gz") else open
     out = []
@@ -136,10 +133,9 @@ def load(path, root_hash, limit=None, text_only=True, broadcast_only=True):
 
 
 def synthetic(count, root_hash, seed=0, mean_size=53):
-    """Seeded stand-in for the capture, for runs that must be reproducible without the file.
+    """Seeded stand-in for the capture, for runs that must reproduce without the file.
 
-    A trace cannot be replayed into a different parameter set and still be the same experiment, so
-    sweeps run on this and the capture corroborates.
+    Sweeps run on this and the capture corroborates: a trace cannot be replayed into new parameters.
     """
     import random
 

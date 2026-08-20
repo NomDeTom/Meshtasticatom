@@ -64,8 +64,7 @@ def build_topology(node_count, area, seed, min_dist=300):
 def pick_servers(points, edges, count, node_count):
     """Spread the servers out: repeatedly take the node farthest from those already chosen.
 
-    A real deployment would not place them at random, and clustering them would flatter the
-    design by making every server's neighbourhood identical.
+    Clustering them would flatter the design by making every neighbourhood identical.
     """
     chosen = [max(range(node_count), key=lambda i: points[i][0] + points[i][1])]
     while len(chosen) < count:

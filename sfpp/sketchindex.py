@@ -93,8 +93,7 @@ class BucketSummary:
     def difference(self, peer):
         """The symmetric difference against a peer's sketch of the same bucket.
 
-        None when the two differ by more than the capacity, which is the signal to escalate. A
-        non-None return is not proof of anything until the objects arrive and the checksums match.
+        None past capacity, the signal to escalate; a result is unproven until checksums match.
         """
         merged = self.members.copy()
         if not merged.merge(peer):

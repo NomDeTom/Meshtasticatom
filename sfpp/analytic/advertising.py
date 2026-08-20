@@ -66,9 +66,7 @@ def pull_exchange_bytes(d, advert=SMALL_ADVERT):
 def push_exchange_bytes(d, advert=SMALL_ADVERT, duplicate_senders=1):
     """Advert, then whoever holds the missing objects simply sends them.
 
-    duplicate_senders models suppression: 1 is perfect suppression, higher is every
-    hearer answering. Push has no requester to address, so suppression is doing more work
-    here than in the pull case - which is the risk this trades the round trip for.
+    `duplicate_senders` is suppression: 1 is perfect, higher is every hearer answering.
     """
     if d == 0:
         return advert, 0
@@ -79,9 +77,10 @@ def push_exchange_bytes(d, advert=SMALL_ADVERT, duplicate_senders=1):
 
 
 def repetition_cost(lam, copies):
-    """Sender-side cost per hour, including the original transmission. One broadcast
-    serves every listener, so the node count does not appear - which is why blind
-    repetition is hard to beat on a small mesh."""
+    """Sender-side cost per hour, including the original transmission.
+
+    One broadcast serves every listener, so node count does not appear - see MODEL.md.
+    """
     return lam * copies * OBJECT
 
 
@@ -91,11 +90,7 @@ MISS_RATE = 0.15  # per-transmission miss rate this comparison is drawn against
 def recovery_fraction(miss_rate, nodes):
     """Share of messages that need a repair push at all.
 
-    A push is a broadcast, so one transmission serves every node in earshot that missed
-    the object - what matters is whether *anyone* missed it, not how many did. That
-    saturates: at 20 nodes and a 15% miss rate almost every message needs one push, while
-    at 2 nodes only a quarter do. Advertising has no such ceiling, which is why earshot
-    size decides this comparison.
+    Saturating, because a push is a broadcast: whether anyone missed it, not how many. MODEL.md.
     """
     return 1.0 - (1.0 - miss_rate) ** nodes
 
@@ -103,9 +98,7 @@ def recovery_fraction(miss_rate, nodes):
 def reconciliation_cost(lam, adverts_per_hour, nodes, miss_rate, advert=SMALL_ADVERT):
     """Every node advertises, and every message anyone missed is pushed once.
 
-    The original transmission is counted here too. Both strategies must put the message
-    on the air once; leaving it out of one side and not the other silently compares k
-    copies against k-1, which is a whole copy of every message.
+    The original transmission counts here too, or this compares k copies against k-1.
     """
     original = lam * OBJECT
     advertising = nodes * adverts_per_hour * advert
@@ -297,9 +290,10 @@ def chart_adverts_per_message(nodes, outdir):
 
 
 def chart_recovery_window(nodes, outdir):
-    """Repetition only reaches nodes that were listening. This is what buys the sketch
-    its place: recovery long after the fact, at a cost that does not grow with the
-    window."""
+    """Repetition only reaches nodes that were listening.
+
+    The sketch recovers later, at a cost flat in the window - MODEL.md.
+    """
     fig, ax = plt.subplots(figsize=(8.5, 4.8))
     windows = [0.5, 1, 2, 4, 8, 12, 24, 48]
     lam = 2
@@ -347,9 +341,9 @@ def chart_recovery_window(nodes, outdir):
 
 
 def chart_earshot(outdir):
-    """Everything above assumed 20 nodes in earshot. That is a dense mesh, and it is the
-    worst case for advertising: cost scales with earshot while repetition does not, and
-    the repair term saturates. Sparse deployments change the answer.
+    """Everything above assumed 20 nodes in earshot, which is the worst case for advertising.
+
+    Sparse deployments change the answer - MODEL.md.
     """
     fig, axes = plt.subplots(1, 2, figsize=(13.5, 4.8))
     counts = [1, 2, 3, 5, 8, 12, 20, 30, 40]
@@ -471,10 +465,8 @@ def main():
             "sfpp_today_adverts_per_message": round(12 / lam, 1),
         },
         "airtime_s_per_hour": {
-            # A push is a broadcast, so what matters is whether *anyone* in earshot missed the
-            # object, not whether a given node did. recovery_fraction saturates for exactly this,
-            # and charging the raw per-node miss rate instead understated the push cost by 6.4x at
-            # the default 20 nodes.
+            # recovery_fraction, not the raw per-node miss rate: a push is a broadcast, and
+            # charging per node understated push cost by 6.4x at the default 20 nodes.
             "advert_push_1_per_hour": round(
                 args.nodes * radio.airtime(SMALL_ADVERT, PRESET)
                 + lam

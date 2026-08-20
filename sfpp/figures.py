@@ -46,9 +46,7 @@ def style(ax, title, xlabel, ylabel):
 def load(runs_dir, block):
     """One block's saved cells, or None with a line saying which file was wanted.
 
-    A block run under --grid is written with the grid in its name, so a run directory can hold
-    `D-cadence-hours-24.json` and not `D-cadence.json`. Silently drawing nothing in that case was
-    indistinguishable from having no data at all.
+    A --grid run names the file for its grid, and drawing nothing silently looked like no data.
     """
     path = os.path.join(runs_dir, f"{block}.json")
     if not os.path.exists(path):
@@ -229,10 +227,7 @@ def fig_loss(runs_dir, out_dir):
 def recovery(reports):
     """Of everything an ordinary node missed, the share the archive holds. The payoff metric.
 
-    Guarded the way analyse.py's block_table is: a cell whose baseline reception approaches 1 has
-    almost nothing left to recover, and dividing by that headroom unguarded produced a -193%
-    reading there before the guard went in. At exactly 1.0 it is a divide by zero, which until now
-    only survived because fig_topology wraps the whole chart in a broad except and skips it.
+    Guarded like analyse.py: near-perfect baseline reception leaves no headroom to divide by.
     """
     rec = mean(reports, ("baseline", "text_reception_mean"))
     one = mean(reports, ("sfpp", "held_fraction_mean"))

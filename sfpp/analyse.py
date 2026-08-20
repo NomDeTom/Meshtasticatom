@@ -56,10 +56,8 @@ def block_table(path):
         )
         reception = mean(cells, "baseline", "text_reception_mean")
         union = mean(cells, "sfpp", "union_fraction")
-        # The payoff, stated the way it matters to a client: of everything an ordinary node failed
-        # to hear, how much does the archive between them actually hold?
-        # Meaningless when there is no archive: the formula reads a union of zero as a catastrophic
-        # loss rather than as "not applicable", and printed -193% for the baseline row.
+        # Of everything an ordinary node missed, how much does the archive hold? Undefined
+        # without an archive, where a zero union reads as catastrophic loss - it printed -193%.
         recovered = (
             (union - reception) / max(1e-9, 1.0 - reception) if union > 0 else None
         )

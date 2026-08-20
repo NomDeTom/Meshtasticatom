@@ -68,8 +68,7 @@ def load_all(runs_dir):
 def _arm(blocks, name):
     """The named block, plus any grid variant of it.
 
-    Matched on the exact name or on `name-<grid>`, never on a bare prefix: `R-repeats` would
-    otherwise pull in `R-repeats-busy`, and seven block names are a prefix of another.
+    Exact name or `name-<grid>`, never a bare prefix: seven block names prefix another.
     """
     return [k for k in blocks if k == name or k.startswith(name + "-hours")]
 
@@ -77,9 +76,7 @@ def _arm(blocks, name):
 def _sortable(value):
     """Order arm values numerically where they are numbers, lexically where they are not.
 
-    Sorting on float() crashed the whole tuning pass the first time a block with a boolean arm was
-    present, after every block had run and been pushed - so the results survived and the summary
-    did not.
+    float() alone crashed the summary the first time a block carried a boolean arm.
     """
     try:
         return (0, float(value), "")

@@ -39,11 +39,8 @@ def firmware_root():
             os.path.join(root, FIRMWARE_SOURCE, "PinSketch.cpp")
         )
 
-    # An explicit path is answered with itself or with an error, never with somewhere else. The
-    # first version fell through to the sibling search when the named path was wrong, so a typo in
-    # MESHTASTIC_FIRMWARE_ROOT produced 628 passing checks against a checkout the caller had not
-    # asked for - a default silently substituting for a request, which is trap 1 in this tree's
-    # own list.
+    # An explicit path is answered with itself or with an error, never with somewhere else:
+    # falling back to a sibling once gave 628 passing checks against the wrong checkout.
     named = os.environ.get("MESHTASTIC_FIRMWARE_ROOT")
     if named:
         if holds_firmware(named):
