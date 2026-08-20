@@ -259,7 +259,7 @@ for rt_i, routerType in enumerate(routerTypes):
             results = sim.get_results()
 
             packets = results["packets"]
-            messageSeq = results["messageSeq"]
+            appMessages = results["appMessages"]
             delays = results["delays"]
             totalPairs = results["totalPairs"]
             noLinks = results["noLinks"]
@@ -320,7 +320,7 @@ for rt_i, routerType in enumerate(routerTypes):
                 "SIMTIME": routerTypeConf.SIMTIME,
                 "PERIOD": routerTypeConf.PERIOD,
                 "PACKETLENGTH": routerTypeConf.PACKETLENGTH,
-                "nrMessages": messageSeq,
+                "nrMessages": appMessages,
                 "SELECTED_ROUTER_TYPE": routerTypeLabel
             }
             subdir = "hopLimit3"

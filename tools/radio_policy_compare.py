@@ -183,7 +183,7 @@ def summarize_results(policy_name, description, results, output):
     return PolicySummary(
         name=policy_name,
         description=description,
-        messages=int(results["messageSeq"]),
+        messages=int(results["appMessages"]),
         sent=int(results["sent"]),
         received=int(results["nrReceived"]),
         collisions=int(results["nrCollisions"]),

@@ -18,6 +18,48 @@ from lib.phy import estimate_path_loss
 
 logger = logging.getLogger(__name__)
 
+BROADCAST_DEST_ID = 0xFFFFFFFF
+
+
+def count_populations(conf, packets):
+    """Separate the things a mesh run counts, which are not interchangeable.
+
+    A physical transmission is not a message, a rebroadcast is not a new message, and an ACK
+    addresses one node where a broadcast addresses every other one. See docs/metrics.md.
+    """
+    app_seqs, ack_seqs, originated = set(), set(), set()
+    rebroadcasts = retransmissions = 0
+    receiver_opportunities = app_receiver_opportunities = 0
+    others = max(conf.NR_NODES - 1, 0)
+
+    for packet in packets:
+        addressed = others if packet.destId == BROADCAST_DEST_ID else 1
+        receiver_opportunities += addressed
+        if packet.isAck:
+            ack_seqs.add(packet.seq)
+        else:
+            if packet.seq not in app_seqs:
+                app_receiver_opportunities += addressed
+            app_seqs.add(packet.seq)
+        if packet.txNodeId != packet.origTxNodeId:
+            rebroadcasts += 1
+        elif packet.seq in originated:
+            retransmissions += 1
+        else:
+            originated.add(packet.seq)
+
+    return {
+        "appMessages": len(app_seqs),
+        "ackMessages": len(ack_seqs),
+        "uniquePacketIds": len(app_seqs | ack_seqs),
+        "transmissions": len(packets),
+        "rebroadcasts": rebroadcasts,
+        "retransmissions": retransmissions,
+        "receiverOpportunities": receiver_opportunities,
+        "appReceiverOpportunities": app_receiver_opportunities,
+    }
+
+
 class SimulationResults:
     """Class to hold simulation result data. Any interesting or relevant
     statistic/data from a simulation should wind up in here. Reporting
@@ -59,11 +101,9 @@ class SimulationResults:
         nodes = self.results["nodes"]
         packets = self.results["packets"]
         sent = len(packets)
-        if conf.DMs:
-            self.results["potentialReceivers"] = sent
-        else:
-            self.results["potentialReceivers"] = sent * (conf.NR_NODES - 1)
         self.results["sent"] = sent
+        self.results.update(count_populations(conf, packets))
+        self.results["potentialReceivers"] = self.results["receiverOpportunities"]
 
         # TODO: inefficient. Have nodes keep counters for these and just collect them
         self.results["nrCollisions"] = sum([1 for p in packets for n in nodes if p.collidedAtN[n.nodeid] is True])
@@ -101,6 +141,7 @@ class SimulationResults:
         self.results["meanClutterLossDb"] = float(np.nanmean(clutter_losses)) if clutter_losses else 0.0
         self.results["maxClutterLossDb"] = max(clutter_losses) if clutter_losses else 0.0
         self.results["nrUseful"] = sum([n.usefulPackets for n in nodes])
+        self.results["uniqueAppDeliveries"] = sum([n.usefulAppPackets for n in nodes])
 
         self.results["meanDelay"] = np.nanmean(self.results["delays"]) if self.results["delays"] else np.nan
 
@@ -115,8 +156,12 @@ class SimulationResults:
         else:
             self.results["collisionRate"] = np.nan
 
-        if self.results["messageSeq"] != 0 and conf.NR_NODES - 1 != 0:
-            self.results["nodeReach"] = self.results["nrUseful"]/(self.results["messageSeq"]*(conf.NR_NODES-1))
+        # Reach is application traffic only, over the receivers those messages actually addressed:
+        # a broadcast addresses every other node, a DM addresses one, and an ACK is not a message.
+        if self.results["appReceiverOpportunities"] > 0:
+            self.results["nodeReach"] = (
+                self.results["uniqueAppDeliveries"] / self.results["appReceiverOpportunities"]
+            )
         else:
             self.results["nodeReach"] = np.nan
 
@@ -243,7 +288,7 @@ class DiscreteEventSim:
         first_order_results = {
             "packets": self.mutated_state.packets,
             "packetsAtN": self.mutated_state.packetsAtN,
-            "messageSeq": self.mutated_state.messageSeq.peek(),
+            "packetIdsIssued": self.mutated_state.packetIdSeq.peek(),
             "messages": self.data_tracking.messages,
             "delays": self.data_tracking.delays,
             "totalPairs": self.data_tracking.totalPairs,

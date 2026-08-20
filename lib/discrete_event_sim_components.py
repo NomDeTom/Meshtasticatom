@@ -45,7 +45,9 @@ class SimulationState:
         self.bc_pipe = BroadcastPipe(self.env)
         self.packets = [] # used mostly for data tracking, but also for state
         self.packetsAtN = [[] for _ in range(conf.NR_NODES)]
-        self.messageSeq = Counter()
+        # One allocator for every packet id in the run: an ACK needs an id as much as a
+        # message does, and matching a reply to its request needs them globally unique.
+        self.packetIdSeq = Counter()
         self.nodes = []
         self.connectivity_map = {} # node_id -> set of nodes which can hear it. (list would be faster for lookup)
         self.baseline_pathloss_matrix = [[None for _ in range(conf.NR_NODES)] for _ in range(conf.NR_NODES)] # cache for later lookup
