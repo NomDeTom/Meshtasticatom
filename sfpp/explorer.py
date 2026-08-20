@@ -22,6 +22,7 @@ import os
 import statistics
 
 from .collate import COST
+from .version import SIM_VERSION
 
 # What the page shows per cell; the digest carries more. Eight numbers a cell is what keeps
 # thirty runs of 87 blocks a file a browser opens instantly.
@@ -59,6 +60,34 @@ def load_archive(archive_dir, window=None):
         runs.append(summary)
     runs.sort(key=lambda r: (r.get("run_id") or "", r.get("generated") or ""))
     return runs[-window:] if window else runs
+
+
+def comparable_series(version):
+    """The MAJOR.MINOR a run has to carry to be readable against `version`.
+
+    version.py bumps MINOR when a change makes existing results incomparable and PATCH when nothing
+    can move a number, so the patch component is exactly what may differ.
+    """
+    parts = str(version or "").split(".")
+    return ".".join(parts[:2]) if len(parts) >= 2 else str(version or "")
+
+
+def comparable_runs(runs, version=SIM_VERSION):
+    """Split the archive into runs measured under `version` and runs superseded by it.
+
+    A superseded run is not wrong, it answered a different question: an airtime correction or a
+    changed default moves every metric it carries. Pooling the two into one mean or one trend line
+    is the shape TRAPS.md keeps recording - a well-formed number nothing marks as incomparable.
+    Returns (comparable, superseded), both oldest first.
+    """
+    want = comparable_series(version)
+    current, stale = [], []
+    for run in runs:
+        got = run.get("sim_version")
+        # A digest predating versioning, or one straddling a bump, cannot claim to be comparable.
+        series = comparable_series(got) if isinstance(got, str) else None
+        (current if series == want else stale).append(run)
+    return current, stale
 
 
 def index_by_block(runs):
@@ -655,7 +684,7 @@ def render_health(health):
     return out
 
 
-def render_html(runs, blocks, board, for_pages=False):
+def render_html(runs, blocks, board, for_pages=False, superseded=()):
     scenarios = sorted({r.get("scenario_requested") or "flat" for r in runs})
     transports = sorted(
         {
@@ -730,11 +759,20 @@ def render_html(runs, blocks, board, for_pages=False):
         f"<span>latest <b>{_esc(run_ids[-1]) if run_ids else '-'}</b></span>",
         f"<span>ground <b>{_esc(', '.join(scenarios))}</b></span>",
         f"<span>transport <b class='mono'>{_esc(', '.join(transports) or '-')}</b></span>",
+        f"<span>sim <b class='mono'>{_esc(SIM_VERSION)}</b></span>",
         "</div>",
     ]
+    if superseded:
+        # Named, not silently dropped: a reader who remembers a number that is no longer on the
+        # page needs to know it was superseded rather than lost.
+        out.append(
+            f'<p class="sub">{len(superseded)} earlier run(s) are excluded from every metric '
+            f"below: they were measured before sim {_esc(SIM_VERSION)}, which changed what the "
+            "numbers mean. They still appear under run health, whose costs remain comparable.</p>"
+        )
 
     sched = schedule(runs)
-    health = run_health(runs)
+    health = run_health(list(runs) + list(superseded))
     pending = sum(su["never_run"] for su in sched["surfaces"])
     flagged = sum(h["warnings"] for h in health)
     out += [
@@ -892,7 +930,7 @@ def render_html(runs, blocks, board, for_pages=False):
     return "\n".join(out)
 
 
-def render_markdown(runs, blocks, board):
+def render_markdown(runs, blocks, board, superseded=()):
     latest = runs[-1] if runs else {}
     out = [
         "# SF++ sweep explorer",
@@ -903,6 +941,12 @@ def render_markdown(runs, blocks, board):
         f"- **latest** `{latest.get('run_id', '-')}` on {latest.get('scenario_requested') or 'flat'} "
         f"ground, seed base `{latest.get('seed_base', '-')}`",
         f"- **transport** `{latest.get('transport', '-')}`",
+        f"- **sim version** `{SIM_VERSION}`"
+        + (
+            f", excluding {len(superseded)} superseded run(s) from every metric below"
+            if superseded
+            else ""
+        ),
         "",
         "## What moves a delivery measure",
         "",
@@ -958,25 +1002,35 @@ def main(argv=None):
     )
     opts = ap.parse_args(argv)
 
-    runs = load_archive(opts.archive, opts.window)
-    if not runs:
+    archive = load_archive(opts.archive, opts.window)
+    if not archive:
         print(f"no run digests under {opts.archive} - nothing to roll up")
         return 1
+    # Metrics come from the runs measured under this sim version; run health reads the whole
+    # archive, because seconds per simulated hour does not care what the airtime was.
+    runs, superseded = comparable_runs(archive)
     blocks = index_by_block(runs)
     board = leaderboard(blocks)
+    if superseded:
+        print(
+            f"{len(superseded)} run(s) superseded by sim {SIM_VERSION} and excluded from the "
+            f"metrics: {', '.join(r.get('run_id') or r['_name'] for r in superseded)}"
+        )
+    if not runs:
+        print(f"no run digests at sim {SIM_VERSION} yet - the trend and block views will be empty")
 
     os.makedirs(opts.out, exist_ok=True)
     # Links are written relative to the page, which does not sit in the archive: the page is at the
     # results root and the runs are a directory below it.
-    for r in runs:
+    for r in archive:
         if opts.link_base:
             r["_href"] = opts.link_base.rstrip("/") + "/" + r["_name"]
         else:
             r["_href"] = os.path.relpath(r["_dir"], opts.out).replace(os.sep, "/")
     with open(os.path.join(opts.out, opts.name), "w") as f:
-        f.write(render_html(runs, blocks, board, for_pages=opts.for_pages))
+        f.write(render_html(runs, blocks, board, opts.for_pages, superseded))
     with open(os.path.join(opts.out, "INDEX.md"), "w") as f:
-        f.write(render_markdown(runs, blocks, board) + "\n")
+        f.write(render_markdown(runs, blocks, board, superseded) + "\n")
     print(
         f"rolled {len(runs)} run(s), {len(blocks)} block(s) -> {opts.out}/{opts.name}, {opts.out}/INDEX.md"
     )
