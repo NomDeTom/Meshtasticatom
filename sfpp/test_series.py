@@ -21,11 +21,7 @@ from .campaign import build_parser, run_once
 def fingerprint(report):
     """Everything the *simulation* decided, with what only the observer produced removed.
 
-    Three things are dropped and no more, because the point of this fingerprint is to be narrow: the
-    machine's own timings, the series itself, and the two per-node fields that exist only because the
-    series was sampled. Dropping `hops_away` wholesale would have been easier and would have stopped
-    the fingerprint noticing if sampling ever changed what a node believed - which is exactly the
-    failure it is here to catch.
+    Three things dropped and no more: dropping `hops_away` wholesale would blind it to the failure.
     """
     r = json.loads(json.dumps(report))
     for key in ("wall_seconds", "transport", "series"):
@@ -49,9 +45,8 @@ class Inertness(unittest.TestCase):
     """The sampler must be an observer and nothing else."""
 
     def test_sampling_changes_nothing_a_node_believed(self):
-        """Narrower than the fingerprint and worth its own name: the estimator's *state* - what it
-        recommends, how full its table is, what denominator it settled on - must be what it would have
-        been unsampled. Reading a histogram must not change it."""
+        """Narrower than the fingerprint: the estimator's own state must be what it would have been
+        unsampled. Reading a histogram must not change it."""
         plain = {r["node"]: r for r in run()["hops_away"]["typical_nodes"]}
         sampled = {
             r["node"]: r for r in run(reception_bin_s=1800)["hops_away"]["typical_nodes"]
@@ -63,9 +58,8 @@ class Inertness(unittest.TestCase):
                 self.assertEqual(row[key], sampled[node][key], f"node {node} {key}")
 
     def test_asking_for_the_series_does_not_change_the_run(self):
-        """The whole guarantee. If this fails, every series run is a different experiment from the
-        run it claims to describe, and the arms of a sweep would differ in the sampling as well as
-        the arm."""
+        """The whole guarantee: without it a series run is a different experiment from the run it
+        claims to describe."""
         self.assertEqual(
             fingerprint(run()), fingerprint(run(reception_bin_s=1800)),
             "enabling the series perturbed the simulation - the sampler's events reordered ties",
@@ -225,9 +219,7 @@ class SeriesChart(unittest.TestCase):
 class TypicalNodes(unittest.TestCase):
     """The handful of nodes the hop histograms are actually printed for.
 
-    The selection is the work here: all 60-500 nodes is what nobody reads, and the mean node is the
-    wrong one to pick - SS7.3's standing instruction is to prefer the worst node to the mean, and the
-    node the archive argument is about is the one whose receptions stop above two hops.
+    The selection is the work: not all 500, and not the mean node - MODEL.md.
     """
 
     @classmethod
@@ -281,9 +273,8 @@ class TypicalNodes(unittest.TestCase):
             self.assertEqual(row["estimate_samples"], 0)
 
     def test_the_recommendation_comes_with_the_state_it_was_derived_from(self):
-        """A suggestion off a full table with a raised denominator is a different claim from the same
-        number off a table with room in it - TRAPS.md's shape of a request and a result recorded as
-        one number."""
+        """A suggestion off a full table with a raised denominator is a different claim from the
+        same number off a table with room in it - TRAPS.md's request-and-result shape."""
         for row in self.rows:
             self.assertIsNotNone(row["suggested_hop"])
             self.assertIsNotNone(row["table_fill_percent"])
