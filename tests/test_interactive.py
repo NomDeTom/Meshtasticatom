@@ -13,7 +13,7 @@ class Graph:
     pass
 
 
-def load_interactive_sim():
+def load_interactive_module():
     """Load interactive.py with a GUI stub without poisoning lib.interactive."""
     module_name = "_interactive_shutdown_test"
     gui_stub = types.ModuleType("lib.gui")
@@ -26,7 +26,7 @@ def load_interactive_sim():
     module = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(module)
-        return module.InteractiveSim
+        return module
     finally:
         sys.modules.pop(module_name, None)
         if previous_gui is None:
@@ -35,7 +35,8 @@ def load_interactive_sim():
             sys.modules["lib.gui"] = previous_gui
 
 
-InteractiveSim = load_interactive_sim()
+interactive = load_interactive_module()
+InteractiveSim = interactive.InteractiveSim
 
 
 class TestInteractiveInterfaceClose(unittest.TestCase):
@@ -174,3 +175,49 @@ class TestInteractiveShutdown(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNodeStartCommands(unittest.TestCase):
+    """Two meshtasticd processes sharing a -d directory read and write each other's state."""
+
+    class Node:
+        def __init__(self, nodeid):
+            self.nodeid = nodeid
+            self.hwId = 0x1000 + nodeid
+            self.TCPPort = 4403 + nodeid
+
+    def commands(self, log=False):
+        node_start_command = interactive.node_start_command
+
+        nodes = [self.Node(i) for i in range(6)]
+        return [
+            node_start_command(
+                n, remove_config=True, log_path=f"/home/out_{n.nodeid}.log" if log else None
+            )
+            for n in nodes
+        ]
+
+    def data_dirs(self, commands):
+        return [c.split("-d ")[1].split()[0] for c in commands]
+
+    def test_every_node_gets_its_own_data_directory(self):
+        for log in (False, True):
+            with self.subTest(log_path=log):
+                dirs = self.data_dirs(self.commands(log))
+                self.assertEqual(len(set(dirs)), 6, dirs)
+
+    def test_the_data_directory_names_the_node_it_belongs_to(self):
+        for nodeid, directory in enumerate(self.data_dirs(self.commands())):
+            self.assertEqual(directory, f"/home/node{nodeid}")
+
+    def test_every_node_gets_its_own_port_and_hardware_id(self):
+        commands = self.commands()
+        ports = [c.split("-p ")[1].split()[0] for c in commands]
+        hw_ids = [c.split("-h ")[1].split()[0] for c in commands]
+        self.assertEqual(len(set(ports)), 6)
+        self.assertEqual(len(set(hw_ids)), 6)
+
+    def test_the_daemon_image_is_pinned_to_a_tag(self):
+        image = interactive.DEVICE_SIM_DOCKER_IMAGE
+        self.assertIn(":", image)
+        self.assertFalse(image.endswith(":latest"))

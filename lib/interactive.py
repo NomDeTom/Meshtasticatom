@@ -31,8 +31,24 @@ HW_ID_OFFSET = 16
 TCP_PORT_OFFSET = 4404
 TCP_PORT_CLIENT = 4402
 MAX_TO_FROM_RADIO_SIZE = 512
-DEVICE_SIM_DOCKER_IMAGE = "meshtastic/meshtasticd"
+# Pinned, not `latest`: an interactive result is a result about one firmware. 2.7.26 is the newest
+# published release; the discrete-event model is pinned to 2.8, which has no release image yet.
+MESHTASTICD_IMAGE_TAG = "2.7.26"
+DEVICE_SIM_DOCKER_IMAGE = f"meshtastic/meshtasticd:{MESHTASTICD_IMAGE_TAG}"
 MESHTASTICD_PATH_DOCKER = "/usr/bin/meshtasticd"
+
+
+def node_start_command(node, remove_config=False, log_path=None):
+    """The meshtasticd invocation that boots one simulated node inside the container.
+
+    Every node needs its own `-d` directory: two processes sharing one would read and write each
+    other's identity and configuration state.
+    """
+    command = (
+        f"{MESHTASTICD_PATH_DOCKER} {'-e ' if remove_config else ''}"
+        f"-s -d /home/node{node.nodeid} -h {node.hwId} -p {node.TCPPort}"
+    )
+    return f"sh -cx '{command} > {log_path}'" if log_path else command
 
 
 class InteractiveNode:
@@ -352,6 +368,7 @@ class InteractiveSim:
         self.nodeThread = None
         self.clientThread = None
         self.wantExit = False
+        self.container = None
 
         # argument handling
         self.script = args.script
@@ -389,11 +406,26 @@ class InteractiveSim:
             self.nodes.append(node)
             self.graph.add_node(node)
 
-        print("Booting nodes...")
+        print(f"Booting nodes on {DEVICE_SIM_DOCKER_IMAGE}...")
 
         self.init_nodes(args)
+        self.record_versions()
         iface0 = self.init_forward()
         self.init_communication(iface0)
+
+    def record_versions(self):
+        """Write down which firmware and client this run used, beside the node config."""
+        import meshtastic
+
+        versions = {
+            "meshtasticd_image": DEVICE_SIM_DOCKER_IMAGE if self.docker else "native",
+            "meshtastic_python_client": getattr(meshtastic, "__version__", "unknown"),
+            "container_image_id": getattr(getattr(self.container, "image", None), "id", None),
+        }
+        os.makedirs("out", exist_ok=True)
+        with open(os.path.join("out", "versions.yaml"), "w") as handle:
+            yaml.safe_dump(versions, handle, default_flow_style=False)
+        print(f"Versions for this run written to out/versions.yaml: {versions}")
 
     def init_nodes(self, args):
         if self.docker:
@@ -404,21 +436,18 @@ class InteractiveSim:
                 exit(1)
             n0 = self.nodes[0]
             dockerClient = docker.from_env()
-            startNode = f"{MESHTASTICD_PATH_DOCKER} "
-            if self.removeConfig:
-                startNode += "-e "
 
             if sys.platform == "darwin":
                 self.container = dockerClient.containers.run(
                     DEVICE_SIM_DOCKER_IMAGE,
-                    f"{startNode} -s -d /home/node{n0.nodeid} -h {n0.hwId} -p {n0.TCPPort}",
+                    node_start_command(n0, self.removeConfig),
                     ports=dict(zip((f'{n.TCPPort}/tcp' for n in self.nodes), (n.TCPPort for n in self.nodes))),
                     name="Meshtastic", detach=True, auto_remove=True, user="root"
                 )
                 for n in self.nodes[1:]:
                     if self.emulateCollisions:
                         time.sleep(2)  # Wait a bit to avoid immediate collisions when starting multiple nodes
-                    self.container.exec_run(f"{startNode} -s -d /home/node{n0.nodeid} -h {n.hwId} -p {n.TCPPort}", detach=True, user="root")
+                    self.container.exec_run(node_start_command(n, self.removeConfig), detach=True, user="root")
                 print(f"Docker container with name {self.container.name} is started.")
             else:
                 # Start container with infinite loop so it stays alive between node restarts.
@@ -434,7 +463,8 @@ class InteractiveSim:
                     # start node processes in container
                     if self.emulateCollisions:
                         time.sleep(2)  # Wait a bit to avoid immediate collisions when starting multiple nodes
-                    self.container.exec_run(f"sh -cx '{startNode} -s -d /home/node{n.nodeid} -h {n.hwId} -p {n.TCPPort} > /home/out_{n.nodeid}.log'",
+                    self.container.exec_run(
+                        node_start_command(n, self.removeConfig, log_path=f"/home/out_{n.nodeid}.log"),
                         detach=True,
                         user="root"
                     )
