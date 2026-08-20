@@ -574,3 +574,67 @@ The final audit takes every server pair and every bucket at rest and asks whethe
 implies set equality. The in-flight check can only judge the exchanges that happened; this judges
 the end state, where nothing is in flight and no snapshot is stale, so a disagreement is
 unambiguous.
+
+### Traceroutes
+
+A traceroute is what seeds next-hop routing on a mesh that has not been talking: its reply teaches a
+route for every node beyond the learner, where an ACK teaches one hop. It is not free - the request
+grows five bytes per hop it records - so the rate is a swept parameter.
+
+### Administering a node
+
+A configuration change is not a broadcast some nodes may miss. It is a round trip that has to
+complete: the AdminMessage reaches the target, the target answers, and the answer gets back. Either
+leg failing means the session failed, and a mesh whose text reach looks healthy can still be one
+where nothing beyond two hops can be configured.
+
+Modelled as a PKI-encrypted DM with `want_ack` to a node at a chosen hop distance, and a reply on
+the same terms. PKI is what makes it different from a text: no key for the target means the packet
+is never composed at all, which is a real failure mode of an evicted peer and the one an operator
+hits first on a large mesh. That path is only reachable with `--no-admin-preloaded-keys`, and it is
+not a failure a retry can fix.
+
+A **session** is one thing the operator wanted; an **attempt** is one request on the air. Rates are
+per session, because a change that took on the third press is a change that took;
+`attempts_per_session` is how much pressing that cost, and failure is attributed once per session on
+its last attempt, by cause.
+
+*Simplification:* the firmware's admin flow also carries a session key with its own expiry and a
+nonce exchange, and its multi-packet config payloads are larger than the single request modelled
+here. This measures whether the round trip is deliverable, not whether the whole session protocol
+completes.
+
+### Sampling
+
+Channel utilisation is read every half-window, because the firmware's ring holds sixty seconds and
+has to be read while traffic is still in it. Half keeps every bucket represented without
+over-weighting a quiet stretch.
+
+Air-util-TX is sampled on the same tick but is a different measurement, not a second view of the
+first: channel utilisation is what a node **heard** busy over the last minute, air-util-TX is what
+it **transmitted** over the last hour. The firmware keeps them in separate rings over separate
+windows and gates on both, and it is the second that a duty cycle is enforced against - so a run
+reporting only the first cannot say whether its nodes were legal.
+
+Cumulative counters are read at each bin boundary so a per-bin figure is a difference. On a timer
+rather than per event: loss counters are per reception *opportunity*, and one broadcast heard by
+fifty nodes produces fifty of them, so incrementing a per-bin structure on each would put a dict
+write in the busiest path in the simulator to produce what is a subtraction of two totals.
+
+The hop estimator's *scaled* histogram is what gets summed - counts divided by its own filtering
+denominator - because that is the array the recommendation walk actually reads.
+
+### Two utilisation numbers, again
+
+`channel_utilisation` in the report is **aggregate demand**, not the firmware's
+`ChannelUtilization`: every node's transmit time summed over elapsed time. One channel-second per
+second reads as 1.0, so a mesh asking for more than one radio can carry reads above it, and that is
+the useful signal rather than an error. The per-node figure beside it is
+`AirTime::channelUtilizationPercent`. Confusing the two is TRAPS 10.
+
+A run reports both its `SIM_VERSION` - whether it is comparable with another - and its transport
+pin, which says exactly which code made it. A commit does not order and does not survive a rebase,
+which is why the version exists as well.
+
+`ground` is null on a flat run, which is the honest label for one: every figure rests on the
+geometry, so a report that does not say which geometry cannot be compared with one that does.

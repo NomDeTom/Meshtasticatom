@@ -1394,9 +1394,7 @@ class Campaign:
     def _schedule_traceroutes(self):
         """Route discovery on a Poisson timer per node, to whoever it has heard of.
 
-        A traceroute is what seeds next-hop routing on a mesh that has not been talking: its reply
-        teaches a route for every node beyond the learner, where an ACK teaches one hop. It is not
-        free - the request grows five bytes per hop it records - so the rate is a swept parameter.
+        What seeds next-hop routing on a quiet mesh, and not free - MODEL.md.
         """
         rate = getattr(self.opts, "traceroute_per_hour", 0.0)
         if rate <= 0:
@@ -1422,28 +1420,14 @@ class Campaign:
     def _schedule_admin_sessions(self):
         """Can an operator actually administer a node this far away?
 
-        A configuration change is not a broadcast that some nodes may miss - it is a round trip that
-        has to complete: the AdminMessage reaches the target, the target answers, and the answer gets
-        back. Either leg failing means the session failed, and a mesh whose text reach looks healthy
-        can still be one where nothing beyond two hops can be configured.
-
-        Modelled as a PKI-encrypted DM with want_ack to a node at a chosen hop distance, and a reply
-        on the same terms. PKI is what makes this different from a text: no key for the target means
-        the packet is never composed at all, which is a real failure mode of an evicted peer and the
-        one an operator hits first on a large mesh.
-
-        SIMPLIFICATION: the firmware's admin flow also carries a session key with its own expiry and
-        a nonce exchange (AdminModule), and the multi-packet config payloads are larger than the one
-        request modelled here. This measures whether the round trip is deliverable, not whether the
-        whole session protocol completes.
+        A round trip that has to complete, not a broadcast some nodes may miss - MODEL.md.
         """
         rate = getattr(self.opts, "admin_probes_per_hour", 0.0)
         if rate <= 0:
             return
         max_hops = int(getattr(self.opts, "admin_max_hops", 5))
-        # A session is one thing the operator wanted; a try is one request on the air. With
-        # --admin-attempts above 1 they differ, and the difference is the whole point: how often a
-        # configuration change needs pressing again.
+        # A session is one thing the operator wanted; an attempt is one request on the air.
+        # The difference is how often a change needs pressing again.
         self.admin_sessions = {h: 0 for h in range(1, max_hops + 1)}
         self.admin_attempts = {h: 0 for h in range(1, max_hops + 1)}
         self.admin_delivered = {h: 0 for h in range(1, max_hops + 1)}
@@ -1487,14 +1471,7 @@ class Campaign:
     def _admin_session(self, src, target, hops, attempt=1):
         """One request out, one reply back, retried until the operator gives up.
 
-        The firmware has no retry loop here - `--admin-attempts` is an assumption about the person,
-        who presses the button again when the setting does not take and stops after a few goes. The
-        round trip has to land inside ADMIN_SESSION_TIMEOUT_MS, which is the firmware's own
-        outstanding-request window (AdminModule.h:109): past it the request's slot has expired and
-        the reply is no longer vouched for by anything, so a late answer is not a completed session.
-
-        Failure is attributed once per session, on the last attempt, and by cause - a session that
-        failed twice and worked on the third is a success, not two failures.
+        The round trip must land inside the firmware's own window; failure is per session - MODEL.md.
         """
         if attempt == 1:
             self.admin_sessions[hops] += 1
@@ -1524,9 +1501,8 @@ class Campaign:
             assume_key=bool(getattr(self.opts, "admin_preloaded_keys", True)),
         )
         if request is None:
-            # Only reachable with the preloaded-key assumption turned off. The firmware never
-            # composes a PKI packet for a peer whose key it does not hold, so this never reached the
-            # air - a different failure from one the mesh dropped, and not one a retry can fix.
+            # Only reachable with --no-admin-preloaded-keys: the packet was never composed, so
+            # this is a different failure from one the mesh dropped, and no retry fixes it.
             self.admin_no_key[hops] += 1
             self.admin_failure[hops]["no_key"] += 1
             return
@@ -1573,9 +1549,7 @@ class Campaign:
     def _admin_report(self):
         """Whether an operator can configure a node this far away, and when not, why not.
 
-        Rates are per SESSION - one thing the operator wanted - not per request on the air, because
-        a change that took on the third press is a change that took. `attempts_per_session` is how
-        much pressing that cost, and `failed_because` says what stopped the ones that never took.
+        Rates are per session, not per request on the air - MODEL.md.
         """
         if not getattr(self, "admin_sessions", None):
             return None
@@ -1599,9 +1573,8 @@ class Campaign:
                 "completed_on_attempt": {
                     str(k): v for k, v in sorted(self.admin_on_attempt[hops].items())
                 },
-                # Counted once per failed session, on its last attempt. `no_key` is only reachable
-                # with --no-admin-preloaded-keys: it means the packet was never composed, so no
-                # amount of retrying would have helped.
+                # Once per failed session, on its last attempt. `no_key` means the packet was
+                # never composed, so no amount of retrying would have helped.
                 "failed_because": dict(reasons),
                 "failed": sum(reasons.values()),
                 "keys_preloaded": bool(
@@ -1613,14 +1586,7 @@ class Campaign:
     def _start_util_sampling(self, interval_ms=30000.0):
         """Every node's channel utilisation, on a cadence, for the run's own mean.
 
-        The firmware's ring holds sixty seconds, so it has to be read while traffic is still in it.
-        Half the window keeps every bucket represented without over-weighting a quiet stretch.
-
-        Air-util-TX is sampled on the same tick but is a different measurement, not a second view of
-        the first: channel utilisation is what a node HEARD busy over the last minute, air-util-TX
-        is what it TRANSMITTED over the last hour. The firmware keeps them in separate rings over
-        those separate windows and gates on both, and it is the second one a duty cycle is enforced
-        against - so a run that reports only the first cannot say whether its nodes were legal.
+        Half the firmware's window, and air-util-TX beside it as a different measurement - MODEL.md.
         """
         self._util_samples = [[] for _ in self.mesh.nodes]
         self._tx_util_samples = [[] for _ in self.mesh.nodes]
@@ -1642,14 +1608,7 @@ class Campaign:
     def _start_counter_sampling(self):
         """Read the cumulative counters at each bin boundary, so a per-bin figure is a difference.
 
-        On a timer rather than counted per event: the loss counters are per reception *opportunity*
-        and one broadcast heard by fifty nodes produces fifty of them, so incrementing a per-bin
-        structure on each would put a dict write in the busiest path in the simulator to produce a
-        number that is a subtraction of two totals.
-
-        The channel-utilisation distribution is sampled here too rather than at the end, because
-        `AirTime`'s ring covers sixty seconds - a single read after the last packet returns zero, and
-        the whole point of a series is that it is not read at the end.
+        On a timer, not per event, and utilisation with them because its ring is sixty seconds.
         """
         if not self.bin_ms:
             return
@@ -1678,10 +1637,8 @@ class Campaign:
                     "chutil_max": round(utils[-1], 2) if utils else 0.0,
                 }
             )
-            # The estimator's own view, summed so the report can divide it back to a mean. This is
-            # the module's *scaled* histogram - counts divided by its own filtering_denominator -
-            # because that is the array the recommendation walk actually reads, and an unscaled one
-            # would not be the histogram the device works from.
+            # The estimator's own view, summed so the report can divide it back to a mean, and
+            # scaled because that is the array the recommendation walk reads.
             for node in self.mesh.nodes:
                 scaling = node.hop_scaling
                 if scaling is None:
@@ -1747,9 +1704,8 @@ class Campaign:
 
         report = {
             "seed": self.seed,
-            # Two answers to two questions: the version says whether this run is comparable with
-            # another, the transport pin (stamped in run_once) says exactly which code made it. See
-            # sfpp/version.py - a commit does not order and does not survive a rebase.
+            # Two questions: whether this run is comparable with another, and exactly which code
+            # made it. A commit does not order and does not survive a rebase.
             "sim_version": SIM_VERSION,
             "wall_seconds": round(wall_seconds, 1),
             "opts": {
@@ -1777,9 +1733,8 @@ class Campaign:
                 "diameter": self.mesh.diameter(),
             },
             "link_quality": self.mesh.link_quality(),
-            # The ground this result was computed over, and what each loss term cost. Null on a flat
-            # run, which is the honest label for one: every figure here rests on the geometry, so a
-            # JSON that does not say which geometry cannot be compared with one that does.
+            # The ground this was computed over, null on a flat run: a report that does not say
+            # which geometry cannot be compared with one that does.
             "ground": self._ground_report(),
             # Null unless DMs were asked for. Delivery judged at the addressed recipient.
             "dm": self._dm_report(),
@@ -1809,10 +1764,8 @@ class Campaign:
                 "observed_senders": T.observed_senders(self.mesh),
                 "text_objects": total,
                 "airtime_ms": round(self.mesh.stats["airtime_ms"], 1),
-                # Aggregate demand, NOT the firmware's ChannelUtilization: every node's transmit
-                # time summed and divided by elapsed time. One channel-second per second reads as
-                # 1.0, so a mesh asking for more than one radio can carry reads above it, and that
-                # is the useful signal rather than an error.
+                # Aggregate demand, NOT the firmware's ChannelUtilization: above 1.0 means a mesh
+                # asking for more than one radio can carry, which is the signal. TRAPS 10.
                 "channel_utilisation": round(
                     self.mesh.stats["airtime_ms"] / self.duration_ms, 3
                 ),
