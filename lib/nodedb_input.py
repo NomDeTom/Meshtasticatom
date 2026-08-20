@@ -12,9 +12,7 @@ from lib.map_input import (
 def fetch_nodedb_payload(host=None, port=None, serial_port=None):
     """Read positioned nodes from a local Meshtastic device.
 
-    This uses the same Python client state that powers `meshtastic --nodes`.
-    The CLI pretty-prints `interface.nodesByNum`; the simulator wants that raw
-    structure so it can project node positions without parsing a terminal table.
+    The raw `interface.nodesByNum` behind `meshtastic --nodes`, not its printed table.
     """
     if host is not None and serial_port is not None:
         raise ValueError("--nodedb-host and --nodedb-serial-port are mutually exclusive")

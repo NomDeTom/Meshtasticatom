@@ -12,12 +12,7 @@ class Point:
         self.z = z
 
     def euclidean_distance(self, p2) -> float:
-        """
-        calculate the eucliden distance/euclidean norm between
-        this point and a second point p2
-
-        p2: another Point object
-        """
+        """Euclidean distance between this point and another."""
         x_diff = self.x - p2.x
         y_diff = self.y - p2.y
         z_diff = self.z - p2.z

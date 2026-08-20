@@ -7,16 +7,9 @@ from lib.discrete_event import BroadcastPipe
 # by other classes, to avoid circular imports
 
 class Counter:
-    """simple shared counter, so we have a more ergonomic way to get
-    a strictly increasing integer for message IDs than manually handling an
-    integer. Can add locking later if necessary (very likely won't be).
-    """
+    """A shared strictly-increasing integer, for packet ids."""
     def __init__(self, start: int=0):
-        """Create a counter
-
-        Arguments:
-        start -- integer to start counter at. First value from 'get' is start+1. Default 0.
-        """
+        """Create a counter. The first value from `get` is start + 1."""
         self.counter = start
 
     def get(self):
@@ -35,12 +28,7 @@ class SimulationState:
     node-specific state such as the position of a moving node.
     """
     def __init__(self, conf: Config, env: SimpyEnvironment):
-        """Constructor
-
-        Arguments:
-        conf -- Config object of global sim constants. Only used for NR_NODES.
-        env -- SimPy Environment for simulation. Required for internal BroadcastPipe.
-        """
+        """Build the run's mutable state. `conf` is read for NR_NODES only."""
         self.env = env
         self.bc_pipe = BroadcastPipe(self.env)
         self.packets = [] # used mostly for data tracking, but also for state

@@ -59,11 +59,7 @@ def check_collision(conf, env, packet, rx_nodeId, packetsAtN):
 def check_capture_collision(conf, packet, rx_nodeId, packetsAtN):
     """Check overlap with a capture-aware same-SF collision model.
 
-    The legacy model is intentionally preserved unless explicitly enabled. This
-    path models the part that matters for real crowded meshes: a receiver can
-    keep a sufficiently stronger packet through a weaker overlap, but equal or
-    stronger interference during the preamble/header lock window destroys it.
-    Later payload-only overlap is tolerated when it is only a short tail.
+    Off by default; the legacy binary model is preserved. See docs/radio_model.md.
     """
     col = 0
     if conf.COLLISION_DUE_TO_INTERFERENCE and random.random() < conf.INTERFERENCE_LEVEL:
@@ -105,11 +101,9 @@ def frequency_collision(p1, p2):
 
 
 def _frequency_delta_khz(p1, p2):
-    """Return center-frequency separation in kHz.
+    """Return center-frequency separation in kHz, from Hz- or MHz-scale inputs.
 
-    Meshtasticator stores modem frequencies in Hz. Some small tests and older
-    LoRaSim-derived snippets use MHz-scale values, so normalize both shapes here
-    instead of making the collision predicate depend on caller units.
+    Normalized here so the collision predicate does not depend on caller units.
     """
     delta = abs(p1.freq - p2.freq)
     if max(abs(p1.freq), abs(p2.freq)) > 1e6:
@@ -182,10 +176,7 @@ def overlaps_preamble_lock(conf, victim, interferer):
 def packet_survives_overlap(conf, victim, interferer, rx_nodeId):
     """Return whether `victim` survives this one overlapping interferer.
 
-    This is still a compact simulator model, not a chip-level LoRa demodulator.
-    It encodes the two big effects the binary model misses: capture by a packet
-    that is at least COLLISION_CAPTURE_THRESHOLD_DB stronger at this receiver,
-    and small late-tail overlap that does not destroy an already-locked packet.
+    Capture above the threshold, and a short late tail. See docs/radio_model.md.
     """
     desired_margin_db = victim.rssiAtN[rx_nodeId] - interferer.rssiAtN[rx_nodeId]
     if desired_margin_db >= conf.COLLISION_CAPTURE_THRESHOLD_DB:
@@ -213,10 +204,7 @@ def capture_collision_casualties(conf, p1, p2, rx_nodeId):
 def _packet_was_decodable_at_rx(packet, rx_nodeId):
     """Return whether collision loss is meaningful for this packet.
 
-    Capture mode tracks CAD-detectable-but-undecodable packets as interference
-    energy. Those packets can jam another packet, but they should not inflate
-    collision counters as failed decodes because they were below the receiver's
-    demodulation threshold before overlap was considered.
+    A packet under the demodulation threshold jams but was never going to decode.
     """
     sensed_by_node = getattr(packet, "sensedByN", None)
     if sensed_by_node is None:
@@ -240,8 +228,7 @@ def is_channel_active(node, env):
 def airtime(conf, sf, cr, pl, bw):
     """Time on air in ms. `cr` is the coding-rate denominator 5..8, as the firmware stores it.
 
-    The Semtech payload-symbol formula multiplies by that denominator directly, so no index
-    conversion belongs here. See docs/radio_model.md for the derivation and the reference vectors.
+    The Semtech formula multiplies by that denominator directly - see docs/radio_model.md.
     """
     pl = pl + conf.HEADERLENGTH  # add Meshtastic header length
     H = 0  # implicit header disabled (H=0) or not (H=1)
@@ -261,25 +248,12 @@ def airtime(conf, sf, cr, pl, bw):
 
 
 def estimate_path_loss(conf, dist, freq, txZ=None, rxZ=None, model=None):
-    '''Calculate path loss between transmitter and receiver using a specific model
+    """Path loss in dB, over metres and MHz, by one of the models in docs/radio_model.md.
 
-    Arguments:
-    conf -- config object
-    dist -- distance between nodes in meters
-    freq -- frequency in MHz
-    txZ -- height of transmitter. Default: conf.HM
-    rxZ -- height of receiver. Default: conf.HM
-    model -- choice of model (currently integer in [0,6], default: conf.MODEL)
-
-    Returns:
-    path loss as float
-    '''
-    # With randomized movements we may end up on top of another node which is problematic for log(dist)
-    #
-    # Some real-mesh presets can also set a larger floor as an empirical
-    # near-field/clutter calibration. The 3GPP/Hata formulas are not meaningful
-    # at apartment-scale separations, and map node positions are coarse enough
-    # that "two pins are close" does not mean "two antennas have clear 20 m RF".
+    `model` is an integer in [0, 6]; heights and model default to the config's.
+    """
+    # Two nodes can land on one point, and log(0) is not a path loss. A preset can raise
+    # the floor further as a near-field calibration - see docs/configuration.md.
     dist = max(dist, conf.PATH_LOSS_DISTANCE_FLOOR_M)
     if txZ is None:
         txZ = conf.HM

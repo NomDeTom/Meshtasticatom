@@ -12,17 +12,9 @@ def node_antenna_height(node):
     return getattr(node, "antennaHeight", getattr(node, "antenna_height", node.position.z))
 
 def find_random_position(conf, node_configs) -> (float, float):
-    """Given a simulation config and list of existing node configs/nodes, find a
-    randomly chosen position for the next node such that it is within the
-    simulation bounds, within radio range of at least one existing node, and
-    not within the minimum distance of any existing node.
+    """Pick a random (x, y) for the next node.
 
-    Arguments:
-    conf -- Config object defining simulation
-    node_configs -- list of NodeConfig objects, or node objects, defining pre-existing nodes
-
-    Returns:
-    (x, y) - x and y coordinates of location for next node
+    Inside the area, in range of at least one existing node, and no closer than MINDIST to any.
     """
     foundMin = True
     foundMax = False
@@ -80,10 +72,8 @@ def setup_asymmetric_links(conf, nodes):
     for a in range(conf.NR_NODES):
         for b in range(conf.NR_NODES):
             if a != b:
-                # Calculate the same directed budget MeshPacket will use later:
-                # per-direction random offset, both endpoint antenna gains, and
-                # any enabled terrain/clutter/calibration layers. The summary
-                # graph should not be more optimistic than packet delivery.
+                # The same directed budget MeshPacket will use, so the summary graph cannot
+                # be more optimistic about a link than delivery turns out to be.
                 nodeA = nodes[a]
                 nodeB = nodes[b]
                 budgetAB = calculate_link_budget(conf, nodeA, nodeB, conf.LINK_OFFSET[(a, b)])

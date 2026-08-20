@@ -85,9 +85,8 @@ def role_name_for_node(node):
     if role_name:
         return str(role_name).upper()
 
-    # Fallback for map rows where the numeric role is known but the name is not
-    # populated. Public map rows may carry this as either an integer or a string.
-    # Unrecognized roles stay CLIENT-like unless explicitly mapped.
+    # Public map rows carry the role as an integer or a string, and sometimes only
+    # numerically. Anything unrecognized stays CLIENT-like.
     try:
         role_value = int(node.get("role"))
     except (TypeError, ValueError):
@@ -104,11 +103,7 @@ def role_name_for_node(node):
 
 
 def payload_nodes(payload):
-    """Return node rows from accepted public-map payload shapes.
-
-    Current map data is normally wrapped as {"nodes": [...]}, but accepting a
-    top-level list keeps tests and cached exports from needing a fake envelope.
-    """
+    """Return node rows from either payload shape: {"nodes": [...]} or a bare list."""
     if isinstance(payload, dict):
         nodes = payload.get("nodes", [])
     elif isinstance(payload, list):
@@ -177,9 +172,8 @@ def node_configs_from_positioned_rows(
         node_dict = {
             "x": round(x, 2),
             "y": round(y, 2),
-            # Meshtastic map altitude is absolute altitude, not antenna height.
-            # Keep z as antenna height unless SRTM is present to sanity-check
-            # and apply the optional absolute altitude per node.
+            # Map altitude is absolute, not antenna height, so z stays antenna height
+            # unless SRTM is present to check the absolute figure against.
             "z": antenna_height,
             "absoluteAltitude": decode_map_altitude(node.get("altitude")),
             "isRouter": role_name in {"ROUTER", "ROUTER_CLIENT", "ROUTER_LATE"},

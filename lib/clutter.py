@@ -108,10 +108,7 @@ def _class_loss_db_per_km(conf, clutter_class):
 def clutter_path_features(conf, tx_point, rx_point):
     """Return coarse land-cover fractions along a radio path.
 
-    The radio calibration model needs reusable features, not node-pair lookup
-    tables. These fractions let a fitted model learn patterns such as "urban
-    lowland paths behave differently from open coastal paths" and apply that
-    lesson to new generated node pairs.
+    Reusable features, so a fit generalizes to new pairs instead of replaying known links.
     """
     grid = _clutter_grid(conf)
     if grid is None:

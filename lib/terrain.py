@@ -57,9 +57,8 @@ def xy_to_latlon(x, y, origin_lat, origin_lon):
 class TerrainGrid:
     """Small scattered terrain sample grid with inverse-distance interpolation."""
 
-    # Grids are compared by this token in the terrain loss cache key. Object
-    # ids can be reused after garbage collection, so a recycled address must
-    # not revive cache entries computed against an earlier grid.
+    # The cache key identifies a grid by this token, not by id(): a recycled address
+    # would otherwise revive entries computed against an earlier grid.
     _cache_token_counter = itertools.count(1)
 
     def __init__(self, samples):
@@ -146,11 +145,9 @@ def node_antenna_height(node):
 
 
 def apply_terrain_altitude(terrain_grid, node):
-    """Lift one node z coordinate to absolute antenna altitude from terrain.
+    """Lift one node's z to absolute antenna altitude from terrain.
 
-    `node.antenna_height` remains antenna height above local ground. That keeps
-    path-loss models with explicit antenna-height terms from receiving absolute
-    MSL altitude by mistake.
+    `antenna_height` stays height above local ground, which is what the path-loss terms want.
     """
     ground = terrain_grid.elevation_at(node.position.x, node.position.y)
     map_altitude = map_altitude_if_plausible(node, ground)
@@ -188,9 +185,8 @@ def terrain_obstruction_loss(conf, tx_point, rx_point, freq):
     if grid is None:
         return 0.0
 
-    # Packet objects are created often and ask for every receiver. In a static
-    # topology the terrain term is a pure function of the two endpoint
-    # coordinates, so cache it on Config and keep the packet hot path cheap.
+    # In a static topology the terrain term is a pure function of the two endpoints,
+    # and every packet asks for every receiver, so it is cached on the Config.
     cache = getattr(conf, "_terrain_loss_cache", None)
     if cache is None:
         cache = {}
@@ -237,9 +233,8 @@ def terrain_obstruction_loss(conf, tx_point, rx_point, freq):
         d2 = horizontal_distance - d1
 
         fresnel_radius = math.sqrt(wavelength * d1 * d2 / horizontal_distance)
-        # A straight local projection makes long links look too flat. Apply the
-        # usual 4/3 effective Earth radius bulge at each path sample before
-        # measuring Fresnel clearance against the line between antennas.
+        # A flat projection makes long links look too clear, so each sample gets the
+        # 4/3 earth bulge before Fresnel clearance is measured against the antenna line.
         earth_bulge = curvature_scale * fraction * (1.0 - fraction)
         obstruction_height = (
             ground

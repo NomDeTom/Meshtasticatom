@@ -23,23 +23,9 @@ class MeshPacket:
         MeshPacket.unique_packet_counter = Counter()
 
     def __init__(self, conf, nodes, origTxNodeId, destId, txNodeId, plen, seq, genTime, wantAck, isAck, requestId, now, connectivity_map, baseline_pathloss_matrix):
-        """Create a new packet and calculate which nodes sense and receive it
+        """Create a packet and work out which nodes sense and receive it.
 
-        Arguments:
-        conf -- simulation Config
-        nodes -- set of all nodes in the simulation. For calculating which nodes receive the packet
-        origTxNodeId -- ID of originating node
-        destId -- ID of destination node (specific node or broadcast)
-        txNodeId -- ID of currently transmitting node
-        plen -- packet length
-        seq -- message sequence number
-        genTime -- sim time of original packet generation (different from acks/rebroadcasts)
-        wantAck -- this packet wants an ACK
-        isAck -- this packet is an ACK packet
-        requestId -- ID of packet requesting ACK (only valid for ACK packets)
-        now -- current sim time when called, always `env.now`
-        connectivity_map -- map of nodeid -> set of reachable nodeids
-        baseline_pathloss_matrix -- pre-computed matrix of pathloss between nodes
+        `seq` is the mesh packet id, shared by every copy; `genTime` is the original's.
         """
         self.unique_packet_seq = MeshPacket.unique_packet_counter.get()
         self.conf = conf
@@ -102,10 +88,7 @@ class MeshPacket:
     def refresh_link_budgets(self):
         """Recompute receiver-side RF state for the current TX power.
 
-        Per-packet power changes only alter transmitter output level. Terrain,
-        clutter, and pair calibration remain the same path; RSSI, CAD
-        detection, sensitivity, and empirical PHY loss must be recalculated
-        before collision handling.
+        The path is unchanged; RSSI, CAD, sensitivity and PHY loss are not.
         """
         self.detected_node_ids = []
         for rx_node in self.nodes:
@@ -147,8 +130,7 @@ class MeshPacket:
     def set_coding_rate(self, cr):
         """Change only physical CR and recompute airtime.
 
-        LoRa explicit-header packets carry CR in the PHY header, so changing the
-        selected CR does not alter Meshtastic payload bytes in this experiment.
+        An explicit-header packet carries CR in the PHY header, so payload bytes are unchanged.
         """
         self.cr = cr
         self.timeOnAir = self.airtime_for_cr(cr)
@@ -157,8 +139,7 @@ class MeshPacket:
     def set_tx_power(self, tx_power_dbm):
         """Change temporary TX power and recompute RF visibility.
 
-        The configured region power remains the packet's baseTxPower. This
-        method only models a per-transmission reduction.
+        A per-transmission reduction only; baseTxPower stays the region's.
         """
         self.txpow = int(tx_power_dbm)
         self.refresh_link_budgets()
@@ -166,9 +147,7 @@ class MeshPacket:
     def refresh_phy_reception(self):
         """Recompute payload-loss state after the selected CR changes.
 
-        Reception remains gated by the configured modem sensitivity. Stronger
-        coding rates improve payload decode probability near that edge, but they
-        do not resurrect packets whose preamble/header would not be heard.
+        Sensitivity still gates reception: a stronger CR cannot resurrect an unheard preamble.
         """
         self.sensed_node_ids = []
         for rx_node_id, rssi in enumerate(self.rssiAtN):

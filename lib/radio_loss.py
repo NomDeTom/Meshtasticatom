@@ -27,12 +27,9 @@ def estimate_snr(conf, rssi):
 
 
 def apply_link_calibration(conf, rssi, features):
-    """Map raw path-loss output plus reusable features to calibrated RSSI.
+    """Map raw path loss plus reusable features to calibrated RSSI.
 
-    This deliberately does not accept node IDs. Observed directed links may be
-    used to fit the coefficients stored in a preset, but runtime simulation
-    applies the same coefficient transform to every generated pair. That keeps
-    the model reusable for new points instead of replaying known links.
+    No node ids by design: one transform for every pair, not a replay of known links.
     """
     if not conf.LINK_CALIBRATION_MODEL_ENABLED or not conf.LINK_CALIBRATION_COEFFICIENTS:
         return rssi
@@ -51,12 +48,9 @@ def apply_link_calibration(conf, rssi, features):
 
 
 def payload_success_probability(conf, rssi, cr, packet_len):
-    """Return probability that a heard packet's payload decodes.
+    """Return the probability that a heard packet's payload decodes.
 
-    RSSI/sensitivity still gates preamble/header hearing elsewhere. This
-    function only models payload decode once the receiver was able to hear the
-    packet at all. CR therefore improves weak-link payload survival, but it does
-    not extend the model below the basic receive threshold.
+    Sensitivity gates hearing elsewhere; CR helps a weak link but cannot go below that.
     """
     snr = estimate_snr(conf, rssi)
     p50_by_cr = conf.PHY_LOSS_SNR_P50_BY_CR
