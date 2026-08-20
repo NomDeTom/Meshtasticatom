@@ -153,6 +153,23 @@ under `--grid` carries the grid in its filename, which is the usual reason one i
 cells of the cross. `python3 -m sfpp.matrix --list` prints the matrix cells and, since each carries a
 sentence, what each one covers.
 
+### 3.0 Version, and whether two runs are comparable
+
+Every report, digest, figure footer and CI artifact carries **`sim_version`** beside the transport
+commit, because they answer different questions: the commit says exactly which code produced a run, the
+version says whether two runs measured the same thing. A commit does not order, does not survive a
+rebase, and cannot tell you that a confound was fixed in between.
+
+`sfpp/version.py` holds the number and its history, and the history is the changelog to check when a
+stored result looks wrong. **MINOR is bumped whenever a change makes earlier results incomparable** - a
+fixed confound, a changed default, a corrected measurement; PATCH for anything that cannot move a
+number. `collate.py` warns when one round contains more than one version, because those blocks cannot be
+read against each other.
+
+Current: **1.1.0** - placement draws from its own RNG stream (TRAPS.md #12), and the matrix and cross run
+72 simulated hours rather than 2 and 24. **Both invalidate earlier figures**: anything involving
+`random-any` or `random-clients`, and every matrix or design number measured at the old durations.
+
 ### 3.1 The four sweep surfaces, and what each is for
 
 Four things declare cells, they answer different questions, and a result from one does not substitute
@@ -330,7 +347,7 @@ rest of the mesh keeps believing routes through a node that has gone. Not yet ex
 | `--protocol`          | `sr`        | `none` (paired baseline, servers still _sited_ and instrumented), `chain` (today's SF++), `sr` (the sketch)            |
 | `--baseline`          | off         | no servers **and no observers** - a plain mesh. `--protocol none` is the paired control; this is the unpaired one     |
 | `--servers`           | 3           | archive count                                                                                                          |
-| `--place`             | `spread`    | see §5.2                                                                                                               |
+| `--place`             | `spread`    | see §5.2. Placement draws from its own RNG stream, so a randomised strategy carries the same offered load as the control - it did not before 1.1.0 (TRAPS.md #12) |
 | `--hops-apart`        | 3           | target separation for `hops-apart`                                                                                     |
 | `--bucket-mode`       | `local`     | `local` is what the firmware does; `global` is a labelled fiction; `time` and `window` need no agreement               |
 | `--capacity`          | 32          | sketch capacity                                                                                                        |

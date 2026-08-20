@@ -67,7 +67,7 @@ jobs:
           set -euo pipefail
           python3 - >> "$GITHUB_OUTPUT" <<'PY'
           import datetime, json, os, sys
-          from sfpp.matrix import cells
+          from sfpp.matrix import SHARDS_BY_MIRROR, cells
 
           known = cells()
           asked = (os.environ.get("IN_CELLS") or "").split()
@@ -84,11 +84,19 @@ jobs:
           if bad:
               sys.exit(f"seeds must be numbers, got {', '.join(repr(b) for b in bad)}")
 
-          # One entry per (cell, seed) - the archive configurations stay inside the job, because they
-          # are what a cell is a comparison *across* and splitting them would draw the baseline
-          # control from a different job than the arms it is subtracted from. Seeds are safe to split
-          # because each is an independent draw already. Same reasoning, same shape, as sim_design.
-          jobs = [{"cell": c, "seed": int(s)} for c in chosen for s in seeds]
+          # One entry per (cell, seed, shard). Seeds were always safe to split - each is an
+          # independent draw. The arms are safe now too, because placement draws from its own stream
+          # (Campaign._place_servers), so every arm carries the control's offered load whichever job
+          # it lands in. Measured: an x1 cell's ten arms at 72 h is 110 min on a runner, and x4 is
+          # 3.15x that - 346 min, past this ceiling and near the platform's own 360-minute limit. Only
+          # the x4 cells are split, and only as far as matrix.SHARDS_BY_MIRROR says.
+          jobs = [
+              {"cell": c, "seed": int(sd), "shard": f"{i}/{n}", "tag": f"s{sd}-{i}"}
+              for c in chosen
+              for sd in seeds
+              for n in [SHARDS_BY_MIRROR.get(known[c][1], 1)]
+              for i in range(n)
+          ]
           if len(jobs) > 256:
               sys.exit(f"{len(jobs)} jobs exceeds the 256 a matrix may hold; run fewer cells or "
                        f"seeds at a time")
@@ -101,18 +109,16 @@ jobs:
           PY
 
   matrix:
-    name: ${{ matrix.cell }} @${{ matrix.seed }}
+    name: ${{ matrix.cell }} @${{ matrix.seed }} ${{ matrix.shard }}
     needs: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Ten archive configurations at one seed, at 72 simulated hours each. Extrapolating from the
-    # 24-hour figures in sim_design's header - 128 s unmirrored, 511 s mirrored, of which the link
-    # build is paid once per run either way - that is roughly an hour for an x1 cell's shard and four
-    # for an x4's. 330 leaves a runner half this speed inside the limit while staying clear of the
-    # platform's own 360-minute hard ceiling. If a real round comes back tighter than that, the next
-    # axis to shard on is the archive configuration, not the seed.
-    timeout-minutes: 330
+    # Measured on a real runner rather than extrapolated: an x1 cell's ten arms at 72 h took 110
+    # minutes (660 s a run - 1.9x this tree's own container). x4 is 3.15x per run, so its arms are
+    # split three ways and every job is now ~110-120 minutes whatever the scale. 240 leaves room for a
+    # runner half this speed and stays well clear of the platform's 360-minute hard limit.
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       max-parallel: 6
@@ -122,7 +128,7 @@ jobs:
       # `--mirror` writes a mirrored clutter CSV into the cache. Two jobs racing to write the same
       # one is worth avoiding, and a per-job cache costs nothing but a rebuild - and with the cells
       # sharded by seed there are now five jobs per cell, so the key has to carry the seed too.
-      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}-${{ matrix.seed }}
+      SFPP_SCENARIO_CACHE: ${{ github.workspace }}/.cache/${{ matrix.cell }}-${{ matrix.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -137,21 +143,24 @@ jobs:
       - name: Install the scenario loader
         run: pip install --quiet "PyYAML>=6.0"
 
-      - name: ${{ matrix.cell }} at seed ${{ matrix.seed }}
+      - name: ${{ matrix.cell }} at seed ${{ matrix.seed }} shard ${{ matrix.shard }}
         env:
           CELL: ${{ matrix.cell }}
           SEED: ${{ matrix.seed }}
+          SHARD: ${{ matrix.shard }}
+          TAG: ${{ matrix.tag }}
         run: |
           set -euo pipefail
-          # --tag names the file apart from the cell's other seeds. The reports keep the cell's name,
-          # so the digest reads the shards as one block. Without it every shard writes {cell}.json and
-          # the collate job's `merge-multiple: true` download silently keeps whichever arrived last.
-          python3 -u -m sfpp.matrix --cell "$CELL" --seeds "$SEED" --tag "s$SEED" --out out
+          # --tag names the file apart from the cell's other seeds and shards. The reports keep the
+          # cell's name, so the digest reads them all as one block. Without it every shard writes
+          # {cell}.json and the collate job's `merge-multiple: true` download silently keeps whichever
+          # arrived last.
+          python3 -u -m sfpp.matrix --cell "$CELL" --seeds "$SEED" --shard "$SHARD"             --tag "$TAG" --out out
 
       - uses: actions/upload-artifact@v4
         if: always() # a shard that failed halfway still wrote the configurations it finished
         with:
-          name: matrix-${{ matrix.cell }}-s${{ matrix.seed }}
+          name: matrix-${{ matrix.cell }}-${{ matrix.tag }}
           path: out
           if-no-files-found: warn
           retention-days: 90

@@ -35,6 +35,7 @@ from . import mesh as M
 from . import terrain as TR
 from . import traffic as T
 from .sketchindex import BUCKET_OBJECTS, bucket_of, checksum_contribution, short_id
+from .version import SIM_VERSION
 from .store import SfppStore
 
 # Wire sizes from the frozen format. See sfpp-sr-wire-format.md.
@@ -530,6 +531,10 @@ class Campaign:
             telemetry_throttle=opts.telemetry_throttle,
             congestion_pivot=getattr(opts, "congestion_pivot", T.CONGESTION_PIVOT),
         )
+        # Its own stream, for the reason spelled out on _place_servers: a randomised placement drawing
+        # from self.rng moved the traffic schedule, so the arms of a placement sweep differed in their
+        # offered load as well as their placement. 0x504C4143 is "PLAC".
+        self.placement_rng = random.Random(int(seed) ^ 0x504C4143)
         self.counters = Counters()
         # packet id -> (hops, latency_ms) for DMs that reached the node they were addressed to.
         self.dm_delivered = {}
@@ -616,10 +621,27 @@ class Campaign:
     def _place_servers(self, archive=True):
         """Choose the archive positions. With `archive=False` they are marked and instrumented but
         run nothing, so the same nodes in the same places can be measured as ordinary nodes.
+
+        **Placement draws from its own stream, not the run's.** `random-any` and `random-clients` pick
+        with `rng.sample`; the deliberate strategies sort by degree and draw nothing. Taking those
+        samples from `self.rng` shifted every later draw, so the traffic generator - built before this
+        runs but scheduled after it - produced a *different schedule* under a randomised placement than
+        under a deliberate one. Measured at seed 4242: `off`, `spread` and `beside-router` all
+        originated 31 texts and 298 positions, and `random-any x2` originated 32 and 289, for a
+        reach of 0.371 against the control's 0.343.
+
+        That put an 8% difference - the same order as the effects these sweeps measure - between the
+        control and the one arm that exists to *be* the control: `random-any` is the honest baseline
+        for any claim that a deliberate arrangement beat chance, and it was the only arm not carrying
+        the control's traffic.
+
+        The fix is the pattern `_noise_field` and `_ducting` already use: a stream seeded off the run's
+        seed through its own constant, so it is reproducible without being correlated with anything
+        else the seed decides, and consuming from it cannot move anything else.
         """
         strategy = Placement.BY_NAME[self.opts.place]
         wanted = self.server_count()
-        indexes = strategy(self.mesh, wanted, self.rng, self.opts.hops_apart)
+        indexes = strategy(self.mesh, wanted, self.placement_rng, self.opts.hops_apart)
         self.designated = sorted(indexes)
         # What was asked for against what the mesh could offer. A role-bounded strategy silently
         # returning a shorter list is how "6 servers" and "4 servers" end up as the same row in a
@@ -1838,6 +1860,10 @@ class Campaign:
 
         report = {
             "seed": self.seed,
+            # Two answers to two questions: the version says whether this run is comparable with
+            # another, the transport pin (stamped in run_once) says exactly which code made it. See
+            # sfpp/version.py - a commit does not order and does not survive a rebase.
+            "sim_version": SIM_VERSION,
             "wall_seconds": round(wall_seconds, 1),
             "opts": {
                 k: v

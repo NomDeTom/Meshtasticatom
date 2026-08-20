@@ -122,7 +122,40 @@ def cell_argv(preset, mirror, place=None, servers=None, baseline=False):
     return argv + ["--place", place, "--servers", str(servers)]
 
 
-def run_cell(name, preset, mirror, seeds, out_dir, tag=None):
+# How many jobs a cell's arms are split across, by scale. Measured on a GitHub runner rather than
+# guessed: an x1 cell's ten arms at 72 h took 110 minutes, and x4 is 3.15x that per run - about 346
+# minutes, past this workflow's ceiling and close to the platform's own 360-minute hard limit, which
+# no timeout can raise. Split three ways it is ~115 minutes, the same size as an x1 job.
+#
+# Splitting the arms is only sound because placement draws from its own stream (see
+# Campaign._place_servers): every arm carries the control's offered load whichever job it lands in, so
+# a cell reassembled from three shards is the same cell. Before that fix this split would have been
+# the confound it warns about.
+SHARDS_BY_MIRROR = {1: 1, 4: 3}
+
+
+def arms():
+    """Every (label, place, servers) this matrix runs, baseline first."""
+    return [("baseline", None, None)] + [
+        (f"{place} x{servers}", place, servers)
+        for place, servers in itertools.product(PLACES, SERVERS)
+    ]
+
+
+def shard_of(all_arms, index, total):
+    """The `index`-th of `total` contiguous slices of the arm list.
+
+    Contiguous rather than strided so a half-finished round is a readable partial - the baseline lands
+    in the first shard, and reading shard 0 alone gives the control plus the first placements rather
+    than every third arm.
+    """
+    if total <= 1:
+        return list(all_arms)
+    size = -(-len(all_arms) // total)  # ceiling, so the last shard is the short one
+    return list(all_arms)[index * size : (index + 1) * size]
+
+
+def run_cell(name, preset, mirror, seeds, out_dir, tag=None, shard=None):
     """Every placement and count at one preset and one scale, plus the baseline control per seed.
 
     `tag` distinguishes the file when a cell is sharded across jobs, exactly as `design.run_cell` uses
@@ -134,11 +167,11 @@ def run_cell(name, preset, mirror, seeds, out_dir, tag=None):
     """
     parser = build_parser()
     results = []
-    arms = [("baseline", None, None)] + [
-        (f"{place} x{servers}", place, servers)
-        for place, servers in itertools.product(PLACES, SERVERS)
-    ]
-    for label, place, servers in arms:
+    chosen = arms()
+    if shard:
+        index, total = shard
+        chosen = shard_of(chosen, index, total)
+    for label, place, servers in chosen:
         for seed in seeds:
             argv = cell_argv(preset, mirror, place, servers, baseline=place is None)
             opts = parser.parse_args(argv)
@@ -181,14 +214,33 @@ def main(argv=None):
         help="suffix this shard's filename. For splitting one cell over several jobs; the cell "
         "keeps its name in the reports, so the digest still reads the shards as one block",
     )
+    ap.add_argument(
+        "--shard",
+        help="run only part of a cell's arms, as i/n - e.g. 0/3 for the first third. Every shard "
+        "keeps the cell's name, so the digest reads them as one block. See SHARDS_BY_MIRROR",
+    )
     opts = ap.parse_args(argv)
+    shard = None
+    if opts.shard:
+        try:
+            index, total = (int(part) for part in opts.shard.split("/", 1))
+        except ValueError:
+            return ap.error(f"--shard wants i/n, got {opts.shard!r}")
+        if not 0 <= index < total:
+            return ap.error(f"--shard {opts.shard} is out of range")
+        shard = (index, total)
 
     known = cells()
     if opts.list:
         notes = describes()
         for name, (preset, mirror) in known.items():
-            runs = (len(PLACES) * len(SERVERS) + 1) * len(opts.seeds)
-            print(f"{name:28} {preset} x{mirror}  {runs} runs per invocation")
+            shards = SHARDS_BY_MIRROR.get(mirror, 1)
+            per_shard = len(shard_of(arms(), 0, shards)) * len(opts.seeds)
+            runs = len(arms()) * len(opts.seeds)
+            print(
+                f"{name:28} {preset} x{mirror}  {runs} runs, "
+                f"{shards} shard(s) of up to {per_shard}"
+            )
             print(f"{'':28} {notes[name]}")
         print(f"\n{len(known)} cells, {len(opts.seeds)} seeds each")
         return 0
@@ -197,7 +249,7 @@ def main(argv=None):
     if opts.cell not in known:
         return ap.error(f"unknown cell {opts.cell!r}; --list prints them")
     preset, mirror = known[opts.cell]
-    run_cell(opts.cell, preset, mirror, opts.seeds, opts.out, opts.tag)
+    run_cell(opts.cell, preset, mirror, opts.seeds, opts.out, opts.tag, shard)
     return 0
 
 

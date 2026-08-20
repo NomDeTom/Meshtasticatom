@@ -230,3 +230,112 @@ class TestSharding(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlacementIsolation(unittest.TestCase):
+    """The placement stream, and why it has to be its own.
+
+    A randomised placement picks with `rng.sample`; a deliberate one sorts by degree and draws nothing.
+    While both drew from the run's shared stream, taking those samples shifted every later draw - so
+    the traffic generator produced a different schedule under `random-any` than under `off`. Measured
+    at seed 4242 before the fix: the control and every deliberate placement originated 31 texts and 298
+    positions, `random-any x2` originated 32 and 289, and reach read 0.371 against the control's 0.343.
+
+    An 8% gap, the same order as the effects these sweeps measure, sitting between the control and the
+    one arm whose entire job is to *be* the control.
+    """
+
+    def offered_load(self, *flags):
+        from .campaign import build_parser, run_once
+
+        report = run_once(
+            build_parser().parse_args(
+                ["--hours", "2", "--nodes", "25", "--no-charts", "--hop-spread", *flags]
+            ),
+            4242,
+        )
+        by = report["by_class"]
+        return (
+            by["text"]["originated"],
+            by["position"]["originated"],
+            by["telemetry"]["originated"],
+        )
+
+    def test_a_randomised_placement_carries_the_controls_traffic(self):
+        control = self.offered_load("--protocol", "none")
+        for place in ("random-any", "random-clients"):
+            self.assertEqual(
+                self.offered_load("--protocol", "sr", "--place", place, "--servers", "2"),
+                control,
+                f"{place} does not carry the control's offered load",
+            )
+
+    def test_the_server_count_does_not_move_the_traffic_either(self):
+        """More servers means more samples drawn. If placement shared the run's stream, asking for six
+        would shift the schedule further than asking for two - so a --servers sweep would confound
+        count with load."""
+        control = self.offered_load("--protocol", "none")
+        for count in ("2", "4", "8"):
+            self.assertEqual(
+                self.offered_load(
+                    "--protocol", "sr", "--place", "random-any", "--servers", count
+                ),
+                control,
+                f"--servers {count} moved the offered load",
+            )
+
+    def test_a_deliberate_placement_still_carries_it(self):
+        control = self.offered_load("--protocol", "none")
+        for place in ("spread", "beside-router", "routers"):
+            self.assertEqual(
+                self.offered_load("--protocol", "sr", "--place", place, "--servers", "2"),
+                control,
+                place,
+            )
+
+
+class ArmSharding(unittest.TestCase):
+    """Splitting a cell's arms across jobs, which is what keeps a mirrored cell inside a runner."""
+
+    def test_the_shards_of_a_cell_cover_every_arm_exactly_once(self):
+        """A dropped arm is a missing row nobody would notice, and a duplicated one is a seed counted
+        twice in the digest's mean."""
+        for total in (1, 2, 3, 4, 11):
+            rebuilt = [a for i in range(total) for a in M.shard_of(M.arms(), i, total)]
+            self.assertEqual(rebuilt, M.arms(), f"{total} shards do not reassemble the cell")
+
+    def test_the_baseline_lands_in_the_first_shard(self):
+        """Contiguous, not strided, so reading shard 0 alone gives the control plus the first
+        placements rather than every third arm."""
+        first = M.shard_of(M.arms(), 0, 3)
+        self.assertEqual(first[0][0], "baseline")
+
+    def test_no_shard_is_empty(self):
+        for total in (2, 3, 4):
+            for index in range(total):
+                self.assertTrue(M.shard_of(M.arms(), index, total), f"{index}/{total} is empty")
+
+    def test_only_the_mirrored_cells_are_split(self):
+        """An x1 cell already fits; splitting it would triple the checkout and setup for nothing."""
+        self.assertEqual(M.SHARDS_BY_MIRROR[1], 1)
+        self.assertGreater(M.SHARDS_BY_MIRROR[4], 1)
+
+    def test_every_scale_in_the_grid_has_a_shard_count(self):
+        self.assertEqual(sorted(set(M.MIRRORS) - set(M.SHARDS_BY_MIRROR)), [])
+
+    def test_a_bad_shard_argument_is_refused_rather_than_guessed(self):
+        for bad in ("3/3", "4/3", "-1/3", "nonsense", "1"):
+            with self.assertRaises(SystemExit, msg=bad):
+                quietly(M.main, ["--cell", "batumi-x1-LONG_FAST", "--shard", bad, "--out", "/tmp/x"])
+
+    def test_a_sharded_run_writes_only_its_own_arms(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        with mock.patch.object(M, "run_once", stub_report):
+            path = quietly(
+                M.run_cell, "batumi-x4-LONG_FAST", "LONG_FAST", 4, [7], tmp.name, "s7-1", (1, 3)
+            )
+        with open(path) as f:
+            values = [r["value"] for r in json.load(f)]
+        self.assertEqual(values, [a[0] for a in M.shard_of(M.arms(), 1, 3)])
+        self.assertNotIn("baseline", values)  # that one is shard 0's

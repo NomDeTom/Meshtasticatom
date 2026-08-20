@@ -209,7 +209,34 @@ def cells():
     }
 
 
-def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir, tag=None):
+# How many jobs a cell's archive configurations are split across, per mesh. Measured rather than
+# guessed: on a GitHub runner an x1 cell's ten configurations at 72 h took 141 minutes, and the
+# mirrored mesh is 3.15x that per run - about 444 minutes, which is past this workflow's ceiling **and
+# past the platform's own 360-minute hard limit that no timeout can raise.** Split three ways it is
+# ~148 minutes, the same size as an x1 job.
+#
+# Sound only because placement draws from its own stream (see Campaign._place_servers): every archive
+# configuration carries the `off` control's offered load whichever job it lands in, so a cell
+# reassembled from three shards is the same cell. This module's own header used to warn against exactly
+# this split - "split those over runners and a cell's control comes from a different draw than the arms
+# it is subtracted from" - and it was right until that fix.
+SHARDS_BY_MESH = {"batumi-x4": 3}
+DEFAULT_SHARDS = 1
+
+
+def shards_for(mesh):
+    return SHARDS_BY_MESH.get(mesh, DEFAULT_SHARDS)
+
+
+def shard_of(items, index, total):
+    """The `index`-th of `total` contiguous slices, so the `off` control lands in the first shard."""
+    if total <= 1:
+        return list(items)
+    size = -(-len(items) // total)
+    return list(items)[index * size : (index + 1) * size]
+
+
+def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir, tag=None, shard=None):
     """One (mesh, rival) pair against every archive configuration, at each seed.
 
     `tag` distinguishes the file when a cell is sharded across jobs - the mirrored mesh is four
@@ -219,7 +246,11 @@ def run_cell(name, mesh, mesh_flags, rival, rival_flags, seeds, out_dir, tag=Non
     """
     parser = build_parser()
     results = []
-    for archive, archive_flags in archives():
+    chosen = archives()
+    if shard:
+        index, total = shard
+        chosen = shard_of(chosen, index, total)
+    for archive, archive_flags in chosen:
         for seed in seeds:
             opts = parser.parse_args(TRAFFIC + mesh_flags + rival_flags + archive_flags)
             started = time.time()
@@ -264,7 +295,22 @@ def main(argv=None):
         help="suffix this shard's filename. For splitting one cell over several jobs; the cell "
         "keeps its name in the reports, so the digest still reads the shards as one block",
     )
+    ap.add_argument(
+        "--shard",
+        help="run only part of a cell's archive configurations, as i/n - e.g. 0/3 for the first "
+        "third. Every shard keeps the cell's name, so the digest reads them as one block. See "
+        "SHARDS_BY_MESH",
+    )
     opts = ap.parse_args(argv)
+    shard = None
+    if opts.shard:
+        try:
+            index, total = (int(part) for part in opts.shard.split("/", 1))
+        except ValueError:
+            return ap.error(f"--shard wants i/n, got {opts.shard!r}")
+        if not 0 <= index < total:
+            return ap.error(f"--shard {opts.shard} is out of range")
+        shard = (index, total)
 
     known = cells()
     if opts.list:
@@ -275,7 +321,12 @@ def main(argv=None):
         if not shown:
             return ap.error(f"unknown mesh {opts.mesh!r}; one of {', '.join(m for m, _ in MESHES)}")
         for label in shown:
-            print(f"{label:28} {per_cell:3} runs per invocation")
+            mesh = known[label][0]
+            n = shards_for(mesh)
+            print(
+                f"{label:34} {per_cell:3} runs, {n} shard(s) of up to "
+                f"{len(shard_of(archives(), 0, n)) * len(opts.seeds)}"
+            )
         print(
             f"\n{len(MESHES)} meshes x {len(RIVALS)} rivals = {len(known)} cells,"
             f" each x {len(archives())} archive configurations x {len(opts.seeds)} seeds"
@@ -286,7 +337,7 @@ def main(argv=None):
         return ap.error("give --cell or --list")
     if opts.cell not in known:
         return ap.error(f"unknown cell {opts.cell!r}; --list prints them")
-    run_cell(opts.cell, *known[opts.cell], opts.seeds, opts.out, opts.tag)
+    run_cell(opts.cell, *known[opts.cell], opts.seeds, opts.out, opts.tag, shard)
     return 0
 
 
