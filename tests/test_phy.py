@@ -19,9 +19,8 @@ class TestPhy(unittest.TestCase):
         model = -10 # invalid model
         self.assertRaises(ValueError, lib.phy.estimate_path_loss, conf, 50, 915, 3, 3, model)
 
-        # TODO: hardcode some expected values for the calculations across different
-        # models, to detect unintended changes. This also requires verifying
-        # the calculations are correct.
+        # TODO: pin expected values per path-loss model, once each is verified against
+        # something outside this tree - the way test_phy_airtime.py pins airtime.
 
     def test_rootFinder(self):
         # double-check we can find the roots of some polynomials

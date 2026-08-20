@@ -52,6 +52,15 @@ When the simulation is started, you can send [commands](#list-of-commands) to le
 To predefine what you want to send, you can also modify the script *interactiveSim.py* in the 'try' clause. Then you will have to run the simulator with the '-s' argument, like: ```python3 interactiveSim.py 3 -s```.
 The nodes first exchange their NodeInfo. Afterwards, you can let them send messages. Once the nodes are done sending, you can close them by pressing Control+c or just wait for the timeout set at the end of the 'try' clause. 
 
+An admin message needs a shared admin channel before it will go anywhere, which the script does not
+set up by default:
+
+```python
+for n in sim.nodes:
+    n.addAdminChannel()  # or sim.getNodeById(n.nodeid).setURL('YOUR_URL')
+sim.sendFromTo(fromNode, toNode).setOwner(long_name="Test")  # any method on the Node class
+```
+
 ## Tips and tricks
 1. If you want the nodes to emulate packet collisions, add `"USERPREFS_SIMRADIO_EMULATE_COLLISIONS": "true"` to the `userPrefs.jsonc` file in the firmware. Then, add the '-c' argument when starting the simulation to also gather statistics like the number of bad packets received.
 2. Depending on the number of nodes, exchanging the NodeInfo might take quite some time. You can also disable these by removing ```new NodeInfoModule()``` (and other modules) in *src/modules/Modules.cpp* in the device firmware. This works because the simulator already knows the NodeIDs. 

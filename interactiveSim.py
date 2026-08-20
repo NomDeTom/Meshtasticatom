@@ -42,10 +42,8 @@ if sim.script:  # Use '-s' as argument if you want to specify what you want to s
         # sim.sendPing(fromNode, toNode)
 
         """ Admin Message (setOwner) from node 0 to node 1.
-            First you need to add a shared admin channel. """
-        # for n in sim.nodes:
-        #     n.addAdminChannel()  # or sim.getNodeById(n.nodeid).setURL(<'YOUR_URL'>)
-        # sim.sendFromTo(fromNode, toNode).setOwner(long_name="Test")  # can be any function in Node class
+            Needs a shared admin channel first - see INTERACTIVE_SIM.md. """
+        # sim.sendFromTo(fromNode, toNode).setOwner(long_name="Test")
 
         """ Trace route from node 0 to node 1.
             Result will be in the log of node 0. """
