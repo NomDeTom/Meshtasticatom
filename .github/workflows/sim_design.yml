@@ -40,13 +40,13 @@ on:
     # digest - and a mesh with one cell missing outranks a merely older one, since the missing cell is
     # the gap worth closing. See sfpp/nextup.py. Dispatch with `mesh` to override.
     #
-    # An hour later than it reads in the history, and the hour is the point: this and
-    # sim_sweep_matrix both used to fire at 03:40 on Sunday. Each file's comment reasoned only about
-    # the *nightly* block sweep and concluded 03:40 was clear of it; neither mentioned the other
-    # Sunday workflow at the same minute. Between them they can ask for 18 concurrent runners, and
-    # both are `cancel-in-progress: false`, so the loser does not get dropped - it queues, and burns
-    # part of its own `timeout-minutes` before its first line of work.
-    - cron: 40 4 * * 0
+    # 04:40, an hour after the matrix rotation and clear of the nightly block sweep at 02:10 and the
+    # explorer at 06:20. The hour between matters: this and sim_sweep_matrix both used to fire at
+    # 03:40 on Sunday, each file's comment reasoning only about the *nightly* sweep and neither
+    # mentioning the other. Between them they can ask for 18 concurrent runners, and both are
+    # `cancel-in-progress: false`, so the loser queues and burns part of its own timeout before its
+    # first line of work.
+    - cron: 40 4 * * *
   workflow_dispatch:
     inputs:
       mesh:
