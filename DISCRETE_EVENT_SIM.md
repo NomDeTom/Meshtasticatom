@@ -19,6 +19,16 @@ firmware, and a result is only about the version the part that produced it was w
 The two simulators therefore answer different questions: the discrete-event model is 2.8 radio
 behaviour, and an interactive run is a real 2.7.26 daemon.
 
+## Where the details are
+
+| document | covers |
+| --- | --- |
+| [docs/radio_model.md](docs/radio_model.md) | airtime and its reference vectors, slot time, the contention window, the collision models, path loss, regions and frequency slots |
+| [docs/configuration.md](docs/configuration.md) | the optional models - dynamic coding rate, dynamic TX power, terrain, clutter, empirical payload loss, link calibration |
+| [docs/metrics.md](docs/metrics.md) | the six populations a run counts, and what reach and usefulness mean |
+| [docs/radio_physics_quickstart.md](docs/radio_physics_quickstart.md) | the operator's view of the physics |
+| [docs/batumi_radio_calibration.md](docs/batumi_radio_calibration.md) | the packaged real-mesh calibration |
+
 ## Usage
 Please `git clone` or download this repository, navigate to the Meshtasticator folder (optionally create a virtual environment) and install the necessary requirements using:
 ```pip install -r requirements.txt```.
