@@ -205,3 +205,158 @@ small enough to thrash on a busy mesh, which is why its size is modelled rather 
 `sense_until` is the end of the last stretch this radio sensed the channel occupied, separate from
 `busy_until`, which is only our own transmission. It is what the energy detector saw, ours and
 everyone else's, and it exists so overlapping signals are charged once (TRAPS 5).
+
+## Identity on the wire
+
+`NodeDB::getLastByteOfNodeNum` puts all of a node number that fits in `relay_node`. A low byte of
+zero is sent as 0xFF, because 0 is the `NO_RELAY_NODE` sentinel - so one node number in 256 is not
+identified by its own last byte, and 0xFF answers for twice as many nodes as any other value.
+
+## The three tiers
+
+**Hot.** `NodeDB::updateFrom` notes that a peer was heard and how far away it is. `hops_away` stays
+`None` until a packet arrives with a usable hop count, matching `has_hops_away`: "never established"
+is a different answer from "zero hops", and next-hop resolution turns on the difference.
+
+`demoteOldestHotNodesToWarm` demotes the stalest unprotected record on overflow - protection
+outranks recency, and within a class the most-recently-heard survives. This is how a learned route
+dies without any expiry being involved.
+
+**Warm.** `WarmNodeStore::absorb` keeps an evicted node's identity, key and role in 40 bytes. The
+key is what the tier exists for - expensive to re-learn where the rest rebuilds from traffic in
+seconds - so a keyless candidate never displaces a keyed entry, and eviction takes the oldest
+keyless entry first. Routing does not survive demotion: `next_hop` and `hops_away` are hot-store
+fields, so a re-admitted node is flooded to until its route is learned again. A node lives in hot or
+warm, never both.
+
+**Cold.** A cache for the inbound-decrypt path, never authoritative. It can answer "do we hold a
+key for this node" and cannot be used to claim a node's identity.
+
+`copyPublicKey` reads hot then warm, both authoritative. A node's own record is in the hot store
+with its own key, so it can always verify a signature of its own - which is what it hears when its
+relay comes back.
+
+`NodeDB::getNumOnlineMeshNodes` is bounded by the store *and* by a two-hour window. The transport
+does not read it; the congestion coefficient does, which is what makes that coefficient bounded by
+the store rather than by mesh size.
+
+## Position
+
+`position3` is absolute altitude, not height above ground. Without terrain the ground is zero, so
+it is the flat position plus an antenna height, and 1.5 m over a kilometre is nothing a path-loss
+model can see. With terrain it is the number that matters: two nodes 3 km apart with 400 m of ridge
+between them are further apart than the map says.
+
+`direct_neighbours` stands in for `HopScalingModule::getLastPerHopCounts().perHop[0]` - the exact
+figure that sampled, capped estimator is trying to approximate.
+
+## Channel busy time
+
+A receiver has one energy detector and one channel. Two overlapping signals are one busy stretch to
+it, not two: it cannot count transmitters, and when a packet fails it learns only that an Rx
+failed - not why, and not how many were talking. Charging each overlapping transmission its full
+airtime attributes knowledge no radio has and lets the figure exceed 100% of wall-clock, which a
+channel cannot do (TRAPS 5).
+
+So only the part of a stretch not already covered is charged, and the ring accumulates the union.
+Callers charge at a transmission's *end*, which is the order deliveries fire in, so a running
+high-water mark is exactly the union rather than an approximation.
+
+`AirTime`'s second ring is our own transmissions only, per minute over the last hour - a different
+structure over a different window from channel utilisation, and the one the duty cycle is enforced
+against.
+
+## Placement
+
+`place_nodes` is Poisson-disc-ish: uniform, rejecting anything too close to an existing node, so
+stacked nodes cannot make the mesh look better connected than a real deployment.
+
+- **clustered** - towns with a thin scatter between them, which is what most regional meshes look
+  like: dense pockets joined by a handful of long links. Nine in ten nodes belong to a town; the
+  rest hold the mesh together.
+- **hub** - a dense core with radial arms. The core hears everything and the spoke ends hear almost
+  nothing, so archives placed among the well-connected nodes are maximally redundant with each
+  other.
+- **chain** - towns strung out in a line: a valley, a rail line, a coast road. The point is a mesh
+  that is *long and connected*. Stretching a uniform field far enough to exceed seven hops
+  eventually fragments it - at 20 km with 60 nodes a fifth are isolated, and the measured diameter
+  becomes a surviving fragment's - where a chain stretches without breaking, because consecutive
+  towns sit inside each other's range.
+- **mixed** draws the generator from the same seed, so a sweep samples across mesh shapes rather
+  than across draws of one shape, and a placement rule that only holds on uniform points shows up
+  as an artefact of the generator.
+
+`stretch_points` scales every distance about the mesh's centroid. A stretch is not a bigger area:
+`--area` redraws the placement, so an 8 km and a 16 km mesh at one seed are two different meshes.
+Scaling points already drawn keeps node *k* the same node with the same neighbours in the same
+arrangement and changes only how far apart they are. About the centroid rather than the origin so
+the mesh grows in place, and it consumes no randomness, so a stretch sweep is paired.
+
+## Noise
+
+`NoiseField` is hashed, not drawn, for two reasons learned from `--amplify-worst`: it consumes no
+randomness, so switching a profile on does not shift the stream the traffic generator shares; and
+it is order-independent, where a stateful AR(1) would hand out a different field depending on what
+the traffic happened to do, and a run would not reproduce.
+
+**Temporal** is a smooth field with a coherence time, sampled across the packet's own airtime and
+judged on the **worst** excursion it spans - a frame is decoded as one unit, so a single deep fade
+anywhere inside it corrupts enough coded symbols to fail it. A 14.3 s LONG_SLOW packet at τ=500 ms
+spans twenty-eight independent excursions and is judged on the deepest; a 100 ms SHORT_TURBO packet
+spans less than one. The length penalty that falls out is superlinear, which the vendored curve's
+flat 0.8 dB per 100 bytes is not.
+
+**Transient** is episodic and spatial: a window of raised floor over part of the map, standing in
+for an interferer switching on, a neighbour's non-LoRa gear, weather. Nothing extra is needed to
+make it bite the stretched links first - a fixed dB excursion removes the least margin first, so the
+marginal population is exactly who pays. Transient excursions are one-directional: the floor rises,
+and a quieter-than-nominal band is left to the temporal field, which can fall below zero on its own.
+
+**Periodic** is not a probability or an SNR penalty but a hard loss: a switching supply, a radar
+sweep, a pager transmitter. It does not degrade a link, it removes whatever was in the air. The
+length effect falls out of the geometry with no coefficient - the chance of being caught is
+`(airtime + pulse) / interval`, so at a 10 s interval a 175 ms SHORT_TURBO frame is hit under 4% of
+the time and an 11.7 s LONG_MODERATE frame cannot avoid it at all. That is a far harder length
+penalty than the PER curve's, and the one that decides whether a preset is usable near an
+interferer. It is mesh-wide, which is the simplification: one emitter every receiver hears, where a
+real one has a location and a radius - which the transient profile already models, and the two
+compose. Perfectly regular, with no jitter, because that is the adversarial case: a mesh cannot
+average it away, and a packet length that resonates with the interval fails every time.
+
+## Ducting
+
+Tropospheric ducting is kept apart from `NoiseField` because it is the propagation path improving,
+not the floor moving. Over water, under an inversion, on a still evening, signal that normally
+disappears into the ground arrives 10 to 30 dB stronger than the path loss says, and operators watch
+their node lists fill with names from a hundred kilometres away.
+
+**It is not a gift.** A duct hands the mesh far more audible neighbours, so more transmissions
+collide and contend; links that appear, get learned, get written into a NodeDB and a `next_hop`, and
+then vanish when the duct closes, leaving routes pointing at nodes that cannot be heard; and an
+apparent densification the congestion machinery reacts to, scaling intervals for a node count that
+is not really there. So the interesting result from a ducting run is rarely the extra reach - it is
+what the mesh does afterwards.
+
+The lift is one figure for the whole mesh: a duct is a property of the atmosphere over the region,
+not of a pair of nodes. A real duct has a geometry and favours paths along it, often over water;
+the uniform lift is the conservative direction here, because it densifies everywhere at once.
+
+## Siting and amplifiers
+
+**Not from the firmware, and not measured.** The firmware has no concept of siting - it knows
+`tx_power` and a GPS position, and `antenna_gain` appears nowhere in `src/` or the protobufs. Even
+the vendored simulator's antenna gain is a single global `Config.GL`, not per node.
+
+`SITINGS` is a gain offset in dB on every link a node takes part in, for the deployments people
+describe having: a roof node clears local clutter and gets height, a desk node is indoors with a
+window, a pocket node pays body loss and gets no height, a basement node is below grade. The spread
+is larger than most parameters this simulator sweeps - roof to basement is 26 dB, more than the
+whole span from SHORT_FAST to VERY_LONG_SLOW sensitivity - so these round numbers want replacing
+with measurements rather than defending.
+
+`AMPLIFIERS` is a (transmit, receive) pair on top of siting, shaped like the modules people fit: a
+PA gives 8 to 15 dB out, and the receive path is at best unchanged and often slightly worse, since
+the amplifier's insertion loss sits ahead of the LNA and few boards switch cleanly. The asymmetry is
+the whole point: a node heard far further than it hears relays into places whose replies cannot
+reach it, and its rebroadcast cancels copies queued by nodes that could have carried the packet
+further. `cancelled_by_weaker_relay` is the counter that shows it.

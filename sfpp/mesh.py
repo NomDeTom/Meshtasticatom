@@ -1306,9 +1306,7 @@ class Node:
     def relay_byte(self):
         """NodeDB::getLastByteOfNodeNum - all of our number that fits in `relay_node`.
 
-        A low byte of zero is sent as 0xFF, because 0 is the NO_RELAY_NODE sentinel. So one node
-        number in 256 is not identified by its own last byte, and 0xFF answers for twice as many
-        nodes as any other value.
+        A zero low byte goes out as 0xFF, so that value answers for twice as many nodes.
         """
         return (self.node_num & 0xFF) or 0xFF
 
@@ -1318,10 +1316,7 @@ class Node:
     def position3(self):
         """Where the antenna is, in three dimensions. Absolute altitude, not height above ground.
 
-        Ground is zero without terrain, so this is the flat position plus an antenna height on a
-        mesh with no elevation - and the extra 1.5 m over a kilometre of separation is nothing any
-        path-loss model can see. On a mesh with terrain it is the number that matters: two nodes
-        3 km apart with 400 m of ridge between them are further apart than the map says.
+        Inert on flat ground and load-bearing over terrain - TRANSPORT.md.
         """
         return (self.x, self.y, self.altitude)
 
@@ -1338,9 +1333,7 @@ class Node:
     def direct_neighbours(self):
         """Peers in the hot store recorded at zero hops away.
 
-        Stands in for HopScalingModule::getLastPerHopCounts().perHop[0], which is a sampled and
-        capped estimate of the same quantity - so this is the exact figure the estimator is trying
-        to approximate rather than the estimate itself.
+        The exact figure HopScalingModule's perHop[0] is a sampled estimate of.
         """
         return sum(1 for record in self.nodedb.values() if record.hops_away == 0)
 
@@ -1349,13 +1342,7 @@ class Node:
     def update_from(self, peer, now, hops_away=None):
         """NodeDB::updateFrom - note that we heard a peer, and how far away it is.
 
-        `hops_away` stays None until a packet arrives with a usable hop count, matching
-        `has_hops_away`: "we have never established this" is a different answer from "zero hops",
-        and next-hop resolution turns on the difference.
-
-        Admitting a node the warm tier holds empties that slot and restores what it kept - the key
-        and the XEdDSA-signed bit. `next_hop` and `hops_away` were never in the warm record, so a
-        re-admitted node is routed to by flooding until its route is learned again.
+        "Never established" is not "zero hops", and re-admission does not restore routing.
         """
         record = self.nodedb.get(peer)
         if record is None:
@@ -1375,14 +1362,9 @@ class Node:
         return record
 
     def trim_nodedb(self):
-        """Demote the stalest unprotected record when the store overflows.
+        """Demote the stalest unprotected record when the store overflows, per record dropped.
 
-        `demoteOldestHotNodesToWarm`: protection outranks recency, and within a class the
-        most-recently-heard survives. The evicted record is offered to the warm tier, which keeps
-        the identity and the key but not the routing - so this is still how a learned route dies
-        without any expiry being involved. See the four lifetimes in Mesh.get_next_hop.
-
-        Returns (record, warm outcome) for each record dropped from the hot store.
+        How a learned route dies with no expiry involved - TRANSPORT.md.
         """
         dropped = []
         while len(self.nodedb) > self.max_num_nodes:
@@ -1400,15 +1382,9 @@ class Node:
     # ---- warm tier (WarmNodeStore) ----------------------------------------------------
 
     def warm_absorb(self, peer, record):
-        """WarmNodeStore::absorb - keep an evicted node's identity, key and role.
+        """WarmNodeStore::absorb - keep an evicted node's identity, key and role, not its routing.
 
-        40 bytes: node number, last_heard, and a Curve25519 public key. The key is what the tier
-        exists for - expensive to re-learn, where the rest rebuilds from traffic in seconds - so a
-        keyless candidate never displaces a keyed entry, and eviction takes the oldest keyless
-        entry before it takes any keyed one.
-
-        What is not carried over is the routing: `next_hop` and `hops_away` are hot-store fields
-        and do not survive demotion.
+        The key is what the tier exists for, so keyless entries are evicted first. TRANSPORT.md.
         """
         if not self.warm_num_nodes:
             return "no_tier"
@@ -1439,17 +1415,14 @@ class Node:
     def warm_take(self, peer):
         """WarmNodeStore::take - re-admission to the hot store empties the warm slot.
 
-        A node lives in hot or warm, never both. What comes back is last_heard, the key, the role
-        and the XEdDSA-signed bit; `next_hop` and `hops_away` were never stored and start again at
-        nothing, so a re-admitted node is routed to by flooding until it is relearned.
+        A node lives in hot or warm, never both, and routing does not come back with it.
         """
         return self.warm.pop(peer, None)
 
     def warm_key(self, peer):
         """`copyPublicKey`: hot first, then warm. Both are authoritative.
 
-        Our own record is in the hot store with our own key, so a node can always verify a
-        signature of its own - which is what it hears when its relay comes back.
+        A node always holds its own key, so it can verify its own relay coming back.
         """
         if peer == self.index:
             return True
@@ -1464,8 +1437,7 @@ class Node:
     def knows_key(self, peer):
         """`copyPublicKeyForDecrypt`: the authoritative tiers, or a key-proven cold-cache entry.
 
-        The cold tier is a cache for the inbound-decrypt path and is never authoritative, so it can
-        answer this question and cannot be used to claim a node's identity.
+        The cold tier may answer this and may not claim an identity - TRANSPORT.md.
         """
         return self.warm_key(peer) or peer in self.cold_keys
 
@@ -1476,8 +1448,7 @@ class Node:
     def num_online(self, now):
         """NodeDB::getNumOnlineMeshNodes - bounded by the store *and* by a two-hour window.
 
-        Not read by the transport, but it is the input to the congestion coefficient, which is
-        therefore bounded by the store rather than by mesh size.
+        The congestion coefficient's input, and so what bounds it to the store, not the mesh.
         """
         cutoff = now - NUM_ONLINE_SECS * 1000.0
         return sum(1 for r in self.nodedb.values() if r.last_heard >= cutoff)
@@ -1512,15 +1483,7 @@ class Node:
     def sense_busy(self, start, end):
         """Charge the channel-busy time this radio could actually observe over [start, end].
 
-        A receiver has one energy detector and one channel. Two signals overlapping in time are one
-        busy stretch to it, not two: it cannot count transmitters, and when the packet fails it
-        learns only that an Rx failed - not why, and not how many were talking. Charging each
-        overlapping transmission its full airtime attributes knowledge no radio has, and lets the
-        figure exceed 100% of wall-clock, which is not a thing a channel can do.
-
-        Only the part not already covered is charged, so the ring accumulates the union of the busy
-        stretches. Callers charge at the transmission's END, which is the order deliveries fire in,
-        so a running high-water mark is exactly the union rather than an approximation of it.
+        The union of busy stretches, not their sum: one detector cannot count transmitters. TRAPS 5.
         """
         charged = max(0.0, end - max(start, self.sense_until))
         if end > self.sense_until:
@@ -1536,9 +1499,7 @@ class Node:
     def log_tx_airtime(self, now, ms):
         """AirTime's second ring: our own transmissions only, per minute over the last hour.
 
-        A separate structure from channel utilisation, and over a different window - sixty minutes
-        against sixty seconds - so the two answer different questions. This one is what the duty
-        cycle is enforced against.
+        A different window from channel utilisation, and the one the duty cycle binds against.
         """
         elapsed = int((now - self.tx_epoch) // 60000.0)
         if elapsed > 0:
@@ -1740,34 +1701,13 @@ def _lattice_gauss(*key):
 class NoiseField:
     """A noise floor that moves, reported as an offset in dB. Positive is a worse band.
 
-    Hashed, not drawn. Two reasons, both learned the hard way from `--amplify-worst`:
-
-      * it consumes no randomness, so switching a profile on does not shift the stream the traffic
-        generator shares - every arm of a noise sweep carries the identical schedule, and the only
-        difference between them is the thing being swept;
-      * it is order-independent. The discrete-event loop does not deliver receptions in any fixed
-        order, so a stateful AR(1) would hand out a different field depending on what the traffic
-        happened to do, and a run would not reproduce.
-
-    TEMPORAL is a smooth field with a coherence time, sampled across the packet's own airtime and
-    judged on the WORST excursion it spans. That is the whole point of it: a frame is decoded as one
-    unit, so a single deep fade anywhere inside it corrupts enough coded symbols to fail the frame.
-    A 14.3 s LONG_SLOW packet at tau=500 ms spans twenty-eight independent excursions and is judged
-    on the deepest of twenty-eight draws; a 100 ms SHORT_TURBO packet spans less than one. The length penalty that
-    falls out is superlinear, which is what the vendored curve's flat 0.8 dB per 100 bytes is not.
-
-    TRANSIENT is episodic and spatial: a window of raised floor over part of the map, standing in for
-    an interferer switching on, a neighbour's non-LoRa gear, weather. Nothing extra is needed to make
-    it bite the stretched links first - a fixed dB excursion removes the least margin first, so the
-    marginal population is exactly who pays.
-
-    Transient excursions are one-directional: the floor rises. A band that is quieter than nominal
-    is left to the temporal field, whose excursion can fall below zero on its own. Reach that
+    Hashed rather than drawn, so it costs no randomness and does not depend on delivery order; the
+    three profiles and what each is for are in TRANSPORT.md. Reach that
     extends under a lift belongs to `Ducting`, which moves the link graph instead of the floor -
     the thing a floor-only model cannot do, because `neighbours` is thresholded on static RSSI.
     """
 
-    MAX_SAMPLES = 64  # a 36 s VERY_LONG_SLOW frame at tau=500 ms would otherwise cost 72 hashes
+    MAX_SAMPLES = 64  # a 28.6 s VERY_LONG_SLOW frame at tau=500 ms would otherwise cost 57 hashes
 
     def __init__(
         self,
@@ -1847,21 +1787,7 @@ class NoiseField:
     def wiped(self, start_ms, end_ms):
         """Was this packet in flight when a periodic emitter fired? Then it is simply gone.
 
-        Not a probability and not an SNR penalty - a hard loss. This is the shape real periodic
-        interference takes: a switching supply, a radar sweep, a pager transmitter, something on the
-        band with a duty cycle of its own. It does not degrade a link, it removes whatever was in the
-        air at the time.
-
-        The length effect falls out of the geometry and needs no coefficient: the chance of being
-        caught is (airtime + pulse) / interval, so at a 10 s interval a 175 ms SHORT_TURBO frame is
-        hit under 4% of the time and an 11.7 s LONG_MODERATE frame cannot avoid it at all. This is a
-        far harder length penalty than the PER curve's, and it is the one that actually decides
-        whether a preset is usable near an interferer.
-
-        Mesh-wide, which is the SIMPLIFICATION: one emitter every receiver can hear. A real one has a
-        location and a radius, which is what the transient profile already models; the two compose.
-        Perfectly regular, with no jitter, because that is the adversarial case - a mesh cannot
-        average it away, and a packet length that resonates with the interval fails every time.
+        A hard loss, mesh-wide and unjittered, whose length penalty is pure geometry - TRANSPORT.md.
         """
         if not self.periodic or self.pulse_ms <= 0:
             return False
@@ -1890,22 +1816,7 @@ class NoiseField:
 class Ducting:
     """Tropospheric ducting: episodes when links far beyond normal range come alive.
 
-    Not noise, and kept separate from NoiseField for that reason - this is the propagation path
-    improving, not the floor moving. Over water, under a temperature inversion, on a still evening, a
-    duct forms and signal that normally disappears into the ground arrives 10 to 30 dB stronger than
-    the path loss says it should. Operators see their node lists fill with names from a hundred
-    kilometres away.
-
-    IT IS NOT A GIFT, and modelling it as one would miss the point. A duct hands the mesh:
-
-      * far more audible neighbours, so more transmissions collide and more contend for the channel;
-      * links that appear, get learned, get written into a NodeDB and a next_hop - and then vanish
-        when the duct closes, leaving routes pointing at nodes that cannot be heard;
-      * an apparent densification the congestion machinery reacts to, scaling intervals for a node
-        count that is not really there.
-
-    So the interesting result from a ducting run is rarely the extra reach. It is what the mesh does
-    afterwards, and whether the design copes with a neighbour count that moved under it.
+    Not a gift - the interesting result is what the mesh does afterwards. TRANSPORT.md.
 
     Hashed on a window lattice like NoiseField, for the same two reasons: it draws no randomness, and
     it does not depend on the order the event loop happens to run in.
@@ -1947,17 +1858,7 @@ class Ducting:
 def stretch_points(points, factor):
     """Scale every distance in the mesh by `factor`, about the mesh's own centroid.
 
-    A stretch is not a bigger area. `--area` redraws the placement, so an 8 km mesh and a 16 km mesh
-    at one seed are two different meshes and the difference between them is a different draw as much
-    as a longer link. Scaling the points that were already drawn keeps node k the same node with the
-    same neighbours in the same arrangement, and changes only how far apart they are - which is the
-    one thing a stretch is supposed to vary.
-
-    Scaled about the centroid rather than the origin so the mesh grows in place instead of also
-    translating away from it; nothing here depends on absolute position, but a shifted mesh makes the
-    diagrams harder to compare for no gain.
-
-    Consumes no randomness, so a stretch sweep is paired: every arm carries the same schedule.
+    Not the same as a bigger `--area`, which redraws the mesh entirely - TRANSPORT.md.
     """
     if factor == 1.0:
         return points
@@ -1968,20 +1869,8 @@ def stretch_points(points, factor):
     return [(cx + (x - cx) * factor, cy + (y - cy) * factor) for x, y in points]
 
 
-# Where a node actually is, as a gain offset in dB on every link it takes part in. These are the
-# deployments people describe having, and the spread between them is larger than most parameters this
-# simulator sweeps: a roof node and a basement node differ by 26 dB, which is more than the whole span
-# from SHORT_FAST to VERY_LONG_SLOW sensitivity.
-#
-# Values are deliberately round rather than measured - they are a stated assumption, not data. A roof
-# node clears local clutter and gets height; a desk node is indoors with a window; a pocket node pays
-# body loss and no height; a basement node is below grade, which is the worst case people actually run.
-#
-# NOT FROM THE FIRMWARE, AND NOT MEASURED. The firmware has no concept of siting - it knows tx_power
-# and a GPS position, and grep for antenna_gain across src/ and the protobufs returns nothing. Even the
-# simulator's own antenna gain is a single global Config.GL, not per node. These four numbers are a
-# modelling assumption of mine, and the 26 dB between roof and basement is wide enough to move results,
-# so they want replacing with measurements rather than defending.
+# Where a node is, as a gain offset in dB on every link it takes part in. NOT FROM THE FIRMWARE
+# AND NOT MEASURED: a stated assumption, and a 26 dB span wide enough to move results. TRANSPORT.md.
 SITINGS = {
     "roof": 6.0,
     "desk": 0.0,
@@ -2002,15 +1891,8 @@ SITING_MIXES = {
     "worst-case": {"pocket": 0.2, "basement": 0.8},
 }
 
-# (transmit dB, receive dB) on top of siting. NOT FROM THE FIRMWARE and not measured - the firmware
-# knows tx_power and nothing about what is bolted to the antenna port. These are the shapes of the
-# amplified modules people actually fit: a PA gives 8 to 15 dB out, and the receive path is at best
-# unchanged and often slightly worse, because the amplifier's insertion loss sits ahead of the LNA
-# and few of these boards switch cleanly.
-#
-# The asymmetry is the whole point. A node heard far further than it hears relays into places whose
-# replies cannot reach it, and its rebroadcast cancels copies queued by nodes that could have taken
-# the packet further. `cancelled_by_weaker_relay` is the counter that shows it.
+# (transmit dB, receive dB) on top of siting. NOT FROM THE FIRMWARE and not measured. The
+# asymmetry is the point: watch cancelled_by_weaker_relay, not reach. TRANSPORT.md.
 AMPLIFIERS = {
     "none": (0.0, 0.0),
     "modest": (8.0, 0.0),
