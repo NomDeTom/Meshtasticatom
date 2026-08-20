@@ -27,11 +27,8 @@ ensure_on_path()
 BROADCAST = 0xFFFFFFFF
 NO_NEXT_HOP_PREFERENCE = 0
 
-# Roles, with the firmware's rebroadcast semantics. ROUTER rebroadcasts early - it draws from the
-# bottom of the contention window while everyone else waits behind a fixed router offset. ROUTER_LATE
-# is the mirror image: it relays like a router but is pushed to the back of the window the moment it
-# hears someone else do the job. CLIENT_BASE behaves as a router for traffic to or from its
-# favourites and as a client for everything else. CLIENT_MUTE never rebroadcasts at all.
+# Roles, with the firmware's rebroadcast semantics: who relays early, who relays late, who relays
+# only for a favourite, and who never relays at all. TRANSPORT.md.
 CLIENT = "CLIENT"
 ROUTER = "ROUTER"
 ROUTER_LATE = "ROUTER_LATE"
@@ -55,21 +52,17 @@ REBROADCAST_CORE_PORTNUMS_ONLY = "CORE_PORTNUMS_ONLY"
 # under this mode no node relays an advert or a replay.
 CORE_PORTNUMS = frozenset({1, 3, 4, 5, 67, 70})
 
-# From RadioInterface.h: the contention window is sized from SNR so that distant nodes - the ones
-# whose rebroadcast actually extends coverage - transmit first. These are this tree's values; see
-# CW_BOUNDS and SNR_BOUNDS for the earlier series.
+# RadioInterface.h: the window is sized from SNR so the distant nodes go first. This tree's
+# values; CW_BOUNDS and SNR_BOUNDS carry the earlier series.
 CW_MIN, CW_MAX = 3, 8
 SNR_MIN_DB, SNR_MAX_DB = -20.0, 10.0
 
-# The release series a Profile can be named for, oldest first. A series profile carries the rules of
-# that series' *final* release - 2.4 = v2.4.3, 2.5 = v2.5.23, 2.6 = v2.6.13, 2.7 = v2.7.21, 2.8 =
-# this tree - so a mechanism that arrived mid-series is present in that series' profile. FEATURE_TAG
-# records the release each one actually shipped in.
+# The release series a Profile can be named for, each carrying the rules of that series' final
+# release. FEATURE_TAG records the release each mechanism shipped in. TRANSPORT.md.
 VERSIONS = ("2.4", "2.5", "2.6", "2.7", "2.8")
 
-# RadioInterface.h CWmin/CWmax per series, and the SNR range getCWsize maps onto them. Both moved:
-# 2.5 lowered CWmax to 7, 2.6 raised CWmin to 3 and put it back, and 2.6 also narrowed the top of
-# the SNR range from 15 dB to 10, which shifts every rebroadcast delay on a strong link.
+# RadioInterface.h CWmin/CWmax per series and the SNR range getCWsize maps onto them. Both moved
+# across 2.5 and 2.6, which shifts every rebroadcast delay on a strong link. TRANSPORT.md.
 CW_BOUNDS = {"2.4": (2, 8), "2.5": (2, 7), "2.6": (3, 8), "2.7": (3, 8), "2.8": (3, 8)}
 SNR_BOUNDS = {
     "2.4": (-20.0, 15.0),
@@ -132,12 +125,8 @@ def warm_quantise(last_heard_ms):
     return (last_heard_ms // WARM_TIME_QUANTUM_MS) * WARM_TIME_QUANTUM_MS
 
 
-# WARM_NODE_COUNT, which keys on memory class rather than on flash. The platform names here are
-# flash-derived, so the two do not line up exactly: STM32WL is MEM_CLASS_TINY and has no warm tier
-# at all, nRF52840 is a named case at 100, and a non-PSRAM ESP32-S3 takes the 150 of MEM_CLASS_
-# MEDIUM. The 16 MB tier is taken as the PSRAM-equipped S3 that MEM_CLASS_LARGE describes, which is
-# an assumption about the boards in that tier rather than something the flash size determines -
-# `warm_num_nodes` overrides it outright when a sweep wants to price it the other way.
+# WARM_NODE_COUNT, which keys on memory class where these platform names are flash-derived, so
+# the two do not line up exactly. TRANSPORT.md; warm_num_nodes overrides it outright.
 PLATFORM_WARM_STORE = {
     "stm32wl": 0,
     "esp32s3_4mb": 150,
@@ -146,9 +135,8 @@ PLATFORM_WARM_STORE = {
     "esp32s3_16mb": 2000,
 }
 
-# TRAFFIC_MANAGEMENT_CACHE_SIZE, the cold tier. A key seen on the wire is cached here and can answer
-# the inbound-decrypt path, but it is never authoritative: nothing routes, resolves or attributes
-# identity from it. Keyed on memory class in the same way the warm tier is.
+# TRAFFIC_MANAGEMENT_CACHE_SIZE, the cold tier: it can answer the inbound-decrypt path but is
+# never authoritative. Keyed on memory class like the warm tier.
 PLATFORM_COLD_CACHE = {
     "stm32wl": 0,
     "esp32s3_4mb": 500,
@@ -157,9 +145,8 @@ PLATFORM_COLD_CACHE = {
     "esp32s3_16mb": 2048,
 }
 
-# CryptoEngine.h and RadioInterface.h. An XEdDSA signature is 64 bytes, and the protobuf field that
-# carries it costs two more. A frame is 255 bytes with a 16-byte header, so a Data payload signs only
-# while it stays under 173 bytes - the gate signedDataFits() applies with the real encoder.
+# CryptoEngine.h and RadioInterface.h: 64 bytes plus two for the protobuf field, so a Data
+# payload signs only under 173 bytes - the gate signedDataFits() applies. TRANSPORT.md.
 XEDDSA_SIGNATURE_SIZE = 64
 XEDDSA_SIGNATURE_FIELD_BYTES = XEDDSA_SIGNATURE_SIZE + 2
 MAX_LORA_PAYLOAD_LEN = 255
@@ -179,9 +166,8 @@ def signed_data_fits(length):
     )
 
 
-# RepeatScalingModule (branch `extra-repeats`). Cancelling a queued rebroadcast on the first heard
-# copy costs delivery on the one class with no ACK behind it, so text tolerates a second copy first.
-# The suppression thresholds are the module's own, and none of the three is validated.
+# RepeatScalingModule, branch `extra-repeats`: text tolerates a second copy because it is the one
+# class with no ACK behind it. The module's own thresholds, none of them validated.
 REPEAT_TRACKER_SIZE = 8
 REPEAT_THRESHOLD_TEXT = 2
 REPEAT_THRESHOLD_DEFAULT = 1
@@ -231,9 +217,8 @@ PLATFORM_HOT_STORE = {
 }
 MAX_NUM_NODES = PLATFORM_HOT_STORE["nrf52840"]
 
-# The same table for the earlier series, keyed by Profile.hot_store_model. Up to 2.5 the cap was a
-# flat 100 for every board; 2.6 introduced the platform split with nRF52 at 80 and the ESP32-S3 flash
-# tiers; this tree raised the compile-time default to 120 and dropped the separate nRF52 branch.
+# The same table for the earlier series, keyed by Profile.hot_store_model: a flat 100 up to 2.5,
+# the platform split in 2.6, and 120 with no nRF52 branch here. TRANSPORT.md.
 #
 # The `nrf52840` key stands for "nRF52840 and generic ESP32", which 2.6 and 2.7 do not treat alike:
 # ARCH_NRF52 takes 80 there and a generic ESP32 falls through to 100. The nRF52 value is used.
@@ -250,10 +235,8 @@ PLATFORM_HOT_STORE_BY_VERSION = {
 }
 PLATFORM_HOT_STORE_BY_VERSION["2.7"] = PLATFORM_HOT_STORE_BY_VERSION["2.6"]
 
-# Which board every declared hardware model is, as a hot-store size. Derived from this tree's own
-# variants: each platformio.ini declares custom_meshtastic_hw_model_slug,
-# custom_meshtastic_architecture and custom_meshtastic_partition_scheme, and mesh-pb-constants.h
-# turns those into MAX_NUM_NODES. Regenerate after a firmware bump.
+# Which board every declared hardware model is, as a hot-store size, derived from this tree's own
+# variants. Regenerate after a firmware bump - TRANSPORT.md.
 #
 # Note HELTEC_V3 is an 8 MB ESP32-S3 and so gets 200 slots, not the 120 of the compile-time default.
 HARDWARE_STORE = {
@@ -355,20 +338,14 @@ HARDWARE_STORE = {
     "WISMESH_TAP_V2": 250,
 }
 
-# No declared hardware model maps to the 10-slot STM32WL tier: the stm32 variants in this tree
-# (wio-e5, rak3172, nucleo_wl55jc and friends) do not declare a hw_model_slug, so they cannot be
-# named in a census by slug. The `constrained` mix below reaches that tier directly, and is a
-# stress test rather than a deployment.
+# Nothing declared maps to the 10-slot STM32WL tier, since those variants declare no slug. The
+# `constrained` mix reaches it directly, as a stress test rather than a deployment.
 
 
 def census_to_mix(census):
-    """Turn a real hardware census into a platform mix the sim can draw from.
+    """Turn a real hardware census, keyed by the slugs the firmware puts on the wire, into a mix.
 
-    `census` maps hardware model slugs - the names the firmware puts on the wire - to counts or
-    shares. An unknown slug raises rather than falling into a default bucket, so an unrecognised
-    share cannot silently become a census of the default.
-
-    Returns weights over the platform names in PLATFORM_HOT_STORE, normalised to sum to one.
+    An unknown slug raises rather than becoming a share of the default. Weights sum to one.
     """
     by_store = {}
     total = 0.0
@@ -410,9 +387,8 @@ PLATFORM_MIXES = {
     "constrained": {"stm32wl": 1.0},
 }
 
-# Role shares from the same census (1769 nodes). TRACKER, CLIENT_HIDDEN, TAK and SENSOR together are
-# ~1% and fold into CLIENT: none of them changes a rebroadcast decision, which is all a role is read
-# for here.
+# Role shares from the same 1769-node census. The ~1% tail folds into CLIENT: none of those roles
+# changes a rebroadcast decision, which is all a role is read for here.
 ROLE_MIXES = {
     "baymesh-2026-08": {
         CLIENT: 0.60,
@@ -423,9 +399,8 @@ ROLE_MIXES = {
     },
     # The pre-census default, kept so earlier runs can be reproduced and compared against.
     "legacy-default": {CLIENT: 0.90, ROUTER: 0.10},
-    # Adversarial, and deliberately not a census of anything. CLIENT_MUTE is what keeps a real mesh
-    # quiet - a fifth of Baymesh does not rebroadcast at all - so removing it entirely is the single
-    # cruellest realistic change to a role mix. Everything left relays.
+    # Adversarial, not a census: CLIENT_MUTE is what keeps a real mesh quiet, so removing it is
+    # the cruellest realistic change to a role mix. Everything left relays.
     "no-mute": {CLIENT: 0.81, CLIENT_BASE: 0.16, ROUTER: 0.02, ROUTER_LATE: 0.01},
     # The same, with the router share inflated: every router rebroadcasts early and without the
     # contention-window offset a client pays, so a mesh of routers is a mesh with no backoff.
@@ -450,20 +425,15 @@ CAPTURE_DB = 6.0
 # Fallback lookback for the overlap scan, used only before a Mesh has computed its own. Every live
 # scan uses `mesh.max_airtime_ms`, derived from the preset actually in use - see _set_airtime_window.
 #
-# It used to be this constant alone, justified by a comment claiming "LONG_SLOW at a full payload is
-# about 6 s". A full LONG_SLOW payload is 21.0 s; 6 s is what a 45 B payload costs, and a 0 B frame
-# already costs 2.50 s. So 20 s was not a wide margin - it sat under LONG_SLOW's longest frame and far
-# under VERY_LONG_SLOW's 35.7 s, and a transmission still in flight past the window was dropped from
-# the interferer scan. Measured over 8 h at 30 nodes, VERY_LONG_SLOW put 130 of 5669 transmissions
-# past it, the longest ones and so the likeliest to overlap something.
+# A flat 20 s sat under VERY_LONG_SLOW's 28.6 s full payload, and anything still in flight past
+# the window left the interferer scan: 130 of 5669 transmissions, the longest. TRANSPORT.md.
 MAX_AIRTIME_MS = 40000.0
 
 # The longest payload a Meshtastic frame carries, which sizes the overlap window above.
 MAX_PAYLOAD_BYTES = 237
 
-# The firmware's TX queue is finite, and overflow is its only drop: setTransmitDelay reschedules a
-# blocked packet indefinitely, so congestion shows up as a full queue and as latency rather than as a
-# packet that evaporates. On overflow it picks which packet to lose - see replaceLowerPriorityPacket.
+# Overflow is the queue's only drop: setTransmitDelay reschedules indefinitely, so congestion is
+# a full queue and latency rather than an evaporated packet. TRANSPORT.md.
 QUEUE_DEPTH = 16
 
 # meshtastic_MeshPacket_Priority, only the values the queue order actually distinguishes.
@@ -474,20 +444,9 @@ PRIORITY_ACK = 120
 
 
 class Profile:
-    """Which firmware's rules to obey.
+    """Which firmware's rules to obey, named for a release series and carrying its final release.
 
-    Named for a release series - `2.4` through `2.8` - and carrying that series' rules as of its
-    final release. `2.8` is this tree. Nodes may each run a different profile, which is how a mixed
-    mesh is modelled.
-
-    `legacy` is not a firmware version: it is the rule set this transport carried before the 2.8
-    fold-in, kept so runs measured under it still reproduce. Four of its deviations were never any
-    firmware's behaviour - no router offset, a continuous slot draw, a clamped contention window and
-    a 400-backoff discard - so it must not be read as "2.7 and earlier". It reproduces distributions
-    rather than streams: the TX queue replaced a recursive retry closure, so a seed does not
-    reproduce a pre-fold-in run packet for packet.
-
-    Individual flags stay overridable, for sweeps that turn one rule at a time.
+    `legacy` is **not a firmware version** - see TRANSPORT.md. Individual flags stay overridable.
     """
 
     __slots__ = (
@@ -565,10 +524,8 @@ class Profile:
         self.cw_min, self.cw_max = CW_BOUNDS[version]
         self.snr_min, self.snr_max = SNR_BOUNDS[version]
 
-        # RadioInterface::shouldRebroadcastEarlyLikeRouter, and the inline role test that preceded
-        # it. Who skips the router offset and draws from the bottom of the window: ROUTER and
-        # REPEATER up to 2.6, plus CLIENT_BASE on favourite traffic in 2.7, and ROUTER alone in 2.8
-        # once REPEATER and CLIENT_BASE were taken back out.
+        # RadioInterface::shouldRebroadcastEarlyLikeRouter, and the role test that preceded it:
+        # who skips the router offset, which moved every series. TRANSPORT.md.
         if version == "2.7":
             self.early_rebroadcast = "router_repeater_favourite_base"
         elif version == "2.8":
@@ -585,9 +542,8 @@ class Profile:
         self.clamp_cw = False
         self.util_backoff = True
 
-        # MeshPacketQueue::CompareMeshPacketFunc. 2.4 orders a max-heap by priority alone, ties to
-        # the lower id. 2.5 replaced it with a sorted insert that puts the late-transmit group last
-        # and, at equal priority, prefers a packet already on the mesh over one of ours.
+        # MeshPacketQueue::CompareMeshPacketFunc: a priority max-heap in 2.4, a sorted insert
+        # from 2.5 that puts late-transmit last and prefers a relayed packet. TRANSPORT.md.
         self.queue_late_first = self.at_least("2.5")
         self.queue_prefers_relayed = self.at_least("2.5")
 
@@ -601,20 +557,16 @@ class Profile:
         self.next_hop_routing = self.at_least("2.6")
         self.next_hop_learning = self.at_least("2.7")
 
-        # TraceRouteModule::updateNextHops, v2.7.13: a traceroute reply teaches a next hop for
-        # every node beyond the learner in the route, not just the neighbour. The corroboration
-        # guard that refuses to learn unless the byte the route names is the one that actually
-        # relayed the reply is only in this tree - 2.7 learns from the unauthenticated payload
-        # unconditionally, so it learns more, and some of what it learns is wrong.
+        # TraceRouteModule::updateNextHops, v2.7.13: a reply teaches a next hop for every node
+        # beyond the learner. The corroboration guard is only in this tree. TRANSPORT.md.
         self.traceroute_learning = self.at_least("2.7")
         self.traceroute_corroboration = self.at_least("2.8")
         # The TrafficManagement overflow cache, which can hold a route for a node the hot store has
         # evicted or never held.
         self.route_cache = self.at_least("2.8")
 
-        # NodeDB::resolveUniqueLastByte. Before this tree a last-byte lookup took the first node it
-        # matched; nothing asked whether a second node shared the byte. So hop preservation and
-        # next-hop emission were ambiguity-blind, and got it wrong silently on a dense mesh.
+        # NodeDB::resolveUniqueLastByte: before this tree a last-byte lookup took the first
+        # match, so hop preservation and next-hop emission were ambiguity-blind. TRANSPORT.md.
         self.resolve_ambiguity = self.at_least("2.8")
         self.route_health = self.at_least("2.8")
 
@@ -629,9 +581,8 @@ class Profile:
         self.hot_store_model = "flat100" if not self.at_least("2.6") else version
         self.warm_store = self.at_least("2.8")
 
-        # Default.h congestionScalingCoefficient. A flat 0.075 per node over 40 in 2.4; a
-        # per-preset table in 2.5 and 2.6, which switches the throttle off entirely on the two
-        # shortest presets; 2^SF / (BW_kHz * divisor) from 2.7.
+        # Default.h congestionScalingCoefficient: flat in 2.4, a per-preset table in 2.5 and 2.6,
+        # an SF/BW curve from 2.7. MODEL.md carries all three.
         if not self.at_least("2.5"):
             self.congestion_model = "flat"
         elif not self.at_least("2.7"):
@@ -642,9 +593,8 @@ class Profile:
 
         self.signing = self.at_least("2.8")
         self.hop_scaling = self.at_least("2.8")
-        # The module's whole purpose: a node lowers its own hop limit on routine broadcasts to what
-        # it estimates the mesh needs. Unconditional in the firmware wherever the module exists, so
-        # it follows hop_scaling - separable only so a sweep can hold the loop open.
+        # The module's whole purpose, and unconditional in the firmware wherever it exists.
+        # Separable here only so a sweep can hold the feedback loop open. TRANSPORT.md.
         self.adopt_hop_recommendation = self.at_least("2.8")
         # Portduino's nohop_ports: named portnums relayed at hop_limit 0. Operator configuration
         # rather than a release feature, so no version turns it on.
@@ -713,15 +663,9 @@ class Profile:
 
 
 def arduino_map(value, in_min, in_max, out_min, out_max):
-    """Arduino's map(): long arithmetic, and no clamping.
+    """Arduino's map(): long arithmetic, truncation toward zero, and no clamping.
 
-    Two details decide the answer and neither is Python's default. The parameters are `long`, so a
-    float SNR or utilisation truncates toward zero on the way in - -5.7 dB enters as -5. C integer
-    division also truncates toward zero where Python's `//` floors, and the two disagree for every
-    negative numerator: getCWsize(-25) is 0 in the firmware and -1 under `//`.
-
-    getCWsize() takes the result as a uint8_t without constraining it, so an SNR outside
-    [SNR_MIN, SNR_MAX] extrapolates off the end of the window rather than saturating at it.
+    Neither detail is Python's default, and both change the answer - TRANSPORT.md.
     """
     value = int(
         value
@@ -761,15 +705,11 @@ class Packet:
         "pki_encrypted",
         "coding_rate",
         "route",
-        # NOT ON THE WIRE. relay_node is one ambiguous byte; this is the sending node's index, kept
-        # for instrumentation only so a cancellation can be attributed to the node that caused it.
-        # Nothing in the transport reads it, and no decision may - resolving a relay to a node is
-        # exactly the ambiguity resolve_unique_last_byte exists to model.
+        # NOT ON THE WIRE: instrumentation only, so a cancellation can be attributed. No decision
+        # may read it - that is the ambiguity resolve_unique_last_byte exists to model.
         "relay_index",
-        # RouteDiscovery carries two arrays, not one: `route` accumulates on the way out and
-        # `route_back` on the way home (mesh.proto tags 1 and 3, TraceRouteModule.cpp:377). Keeping
-        # a single list conflated the legs, and on an asymmetric mesh - which this transport models
-        # - a reply need not retrace the request, so return-leg relays were learned as forward hops.
+        # Two arrays, not one: mesh.proto tags 1 and 3. Conflating them taught return-leg relays
+        # as forward hops on an asymmetric mesh. TRANSPORT.md.
         "route_back",
         "request_id",
         "reply_id",
@@ -870,9 +810,7 @@ class Packet:
 class SeenRecord:
     """PacketHistory's record of one packet: what we relayed, who else did, and how far it can go.
 
-    `highest_hop_limit` is the field the upgrade path turns on. Hearing the same packet again with
-    more hops left than the copy we queued means an earlier relay took a shorter route, and 2.8
-    throws away the queued copy in favour of the better one.
+    `highest_hop_limit` is what the upgrade path turns on - TRANSPORT.md.
     """
 
     __slots__ = (
@@ -904,8 +842,7 @@ class SeenRecord:
 class NodeRecord:
     """One `NodeInfoLite` in the hot store: what this node knows about a peer, and when it heard it.
 
-    Everything routing can do is bounded by this record existing. A peer evicted from the hot store
-    cannot be resolved from a relay byte, cannot hold a next hop, and does not count as online.
+    Everything routing can do is bounded by this record existing - TRANSPORT.md.
     """
 
     __slots__ = (
@@ -953,19 +890,7 @@ class NodeRecord:
 class HopScaling:
     """HopScalingModule: a sampled, capped, hash-collided estimate of how far the mesh is.
 
-    Not a histogram so much as an estimator that emits a hop-limit recommendation. Every property
-    below costs it accuracy against the exhaustive count, and each is here because the difference is
-    the point of modelling it at all:
-
-    - identity is a 16-bit hash, so two nodes can share an entry
-    - 128 entries, 4 bytes each, and it fills
-    - only one node in `sampling_denominator` is ever admitted, chosen by hash
-    - the buckets are scaled by `filtering_denominator` before the recommendation walk
-    - recency is a 13-bit hourly bitmap, not a count
-    - on overflow it raises the denominator and drops nodes, warning that the answer may be skewed
-
-    So the module's per-hop counts are an estimate of the mesh, and the transport can compute the
-    truth. Reporting both is what says how far apart they are.
+    Its counts are an estimate where the transport can compute the truth - TRANSPORT.md.
     """
 
     CAPACITY = 128
@@ -1007,11 +932,8 @@ class HopScaling:
 
     def __init__(self, hash_seed=0, target_nodes=None, max_target_nodes=None):
         self.hash_seed = hash_seed & 0xFFFF
-        # The coverage the recommendation aims at, and the ceiling the one-hop extension may not
-        # push it past. Both are literals in HopScalingModule; they are instance attributes here so
-        # a run can ask what the mesh would do if the firmware aimed at more or fewer nodes, which
-        # is a deployment question rather than a description of one. The ceiling follows the target
-        # unless it is set outright, keeping the firmware's 40:80 ratio.
+        # Literals in HopScalingModule, attributes here so a run can ask what a different target
+        # would do. The ceiling follows the target, keeping the firmware's 40:80 ratio.
         self.target_affected_nodes = (
             self.TARGET_AFFECTED_NODES if target_nodes is None else int(target_nodes)
         )
@@ -1154,10 +1076,7 @@ class HopScaling:
     def _walk(self, per_hop, total):
         """The recommendation: the first hop that reaches enough nodes, plus one if it is cheap.
 
-        `enough` is `target_affected_nodes` after scaling by the filtering denominator - 40 in the
-        firmware. The extension to the next hop is allowed when the nodes it would add still leave
-        the total inside a budget running from that target to `max_target_nodes`, scaled by how
-        politely the mesh is behaving.
+        "Enough" and "cheap" are both scaled - TRANSPORT.md.
         """
         if total <= 0:
             return self.MAX_HOP
@@ -1182,10 +1101,7 @@ class HopScaling:
 class WarmEntry:
     """One 40-byte `WarmNodeEntry`: node number, last_heard, and a Curve25519 public key.
 
-    The role, a protected category and an XEdDSA-signed flag are packed into the low seven bits of
-    `last_heard`, which is why warm recency is quantised to 128 seconds. That coarseness is
-    load-bearing rather than cosmetic: the tier is LRU-ordered by this field, so two nodes heard
-    within the same 128-second window are indistinguishable to eviction.
+    Flags packed into last_heard quantise warm recency to 128 s, which eviction sorts on.
     """
 
     __slots__ = ("last_heard", "has_key", "role", "xeddsa_signed", "is_protected")
@@ -1203,8 +1119,7 @@ class WarmEntry:
 class RouteHealth:
     """How fresh a learned next hop is, and how many directed deliveries to it have failed.
 
-    RAM-only in the firmware too: the route itself lives in NodeDB, this is just the metadata that
-    lets getNextHop() decay a dead hop back to flooding instead of spending a DM discovering it.
+    RAM-only in the firmware too; it lets getNextHop() decay a dead hop back to flooding.
     """
 
     __slots__ = ("learned_at", "consecutive_failures", "last_next_hop")
@@ -1218,8 +1133,7 @@ class RouteHealth:
 class QueueEntry:
     """A packet waiting for the channel.
 
-    `tx_after` is an absolute deadline, not a delay: MeshPacketQueue sorts every deferred packet
-    behind every ready one, and the late-rebroadcast window is nothing more than setting it.
+    `tx_after` is an absolute deadline; the late-rebroadcast window is nothing more than setting it.
     """
 
     __slots__ = ("packet", "tx_after", "sent", "backoffs")
@@ -1237,9 +1151,8 @@ class Node:
         "index",
         "x",
         "y",
-        # Metres above sea level under the node, and metres of antenna above that. Zero and the
-        # model's default height on a mesh with no terrain, which is every mesh this simulator ran
-        # before the ground existed - so a flat run computes exactly what it always did.
+        # Metres above sea level under the node, and antenna above that. Zero and the default
+        # height with no terrain, so a flat run computes exactly what it always did.
         "ground_m",
         "antenna_height_m",
         "role",
@@ -1319,9 +1232,8 @@ class Node:
         # everything and is still a valid destination, but never starts a conversation.
         self.originates_dm = True
         self.busy_until = 0.0  # a radio transmits one packet at a time
-        # The end of the last stretch this radio sensed the channel occupied. Separate from
-        # `busy_until`, which is only our own transmission: this one is what the energy detector
-        # saw, ours and everyone else's, and it exists so overlapping signals are charged once.
+        # What the energy detector saw, ours and everyone else's, where busy_until is only our
+        # own transmission. It exists so overlapping signals are charged once - TRAPS 5.
         self.sense_until = 0.0
         self.queue_depth = 0
 
@@ -1375,14 +1287,12 @@ class Node:
         self.tx_ring = [0.0] * 60
         self.tx_index = 0
         self.tx_epoch = 0.0
-        # RepeatScalingModule's ring of (sender, id) -> heard duplicates, eight entries deep and
-        # replaced round-robin. Small enough to thrash on a busy mesh, which is the point of
-        # modelling its size rather than a dict.
+        # RepeatScalingModule's ring of (sender, id) duplicate counts, replaced round-robin and
+        # small enough to thrash on a busy mesh - which is why its size is modelled.
         self.repeat_counts = [None] * REPEAT_TRACKER_SIZE
         self.repeat_slot = 0
-        # TrafficManagementModule's overflow cache of next-hop hints: node index -> relay byte. It
-        # is much larger than the hot store and is not bounded by it, so it can hold a route for a
-        # node the NodeDB has evicted or never admitted.
+        # TrafficManagementModule's overflow cache of next-hop hints, unbounded by the hot store,
+        # so it can hold a route for a node the NodeDB evicted or never admitted.
         self.route_cache = {}
         # The firmware's estimator, when this node's release has it, and the exhaustive count the
         # transport can take for free. Reporting both is what says how far apart they are.
