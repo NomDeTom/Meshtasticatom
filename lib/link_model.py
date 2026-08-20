@@ -48,11 +48,9 @@ def _antenna_height(node):
 
 
 def _link_calibration_features(conf, tx_point, rx_point, raw_snr, terrain_loss, clutter_loss):
-    """Build the reusable feature vector consumed by fitted calibration.
+    """Build the reusable feature vector a fitted calibration consumes.
 
-    These are path-shape features, not node-pair identities. Coefficients fitted
-    from one real mesh can therefore be applied to newly generated node pairs or
-    to nearby meshes that have terrain/clutter inputs but no observed links.
+    Path-shape features, not pair identities, so a fit carries to meshes with no observed links.
     """
     horizontal_distance_m = max(1.0, math.hypot(rx_point.x - tx_point.x, rx_point.y - tx_point.y))
     log_distance_km = math.log10(horizontal_distance_m / 1000.0)
@@ -96,10 +94,8 @@ def calculate_link_budget(conf, tx_node, rx_node, offset_db=0.0, tx_power_dbm=No
 
     raw_path_loss = base_loss + terrain_loss + clutter_loss + offset_db
 
-    # Keep packet delivery and link-summary statistics on the same budget. The
-    # TX endpoint contributes radiated antenna gain, while the RX endpoint
-    # contributes receive antenna gain; terrain/clutter/calibration are path
-    # properties layered around those endpoint gains.
+    # Delivery and the link summary share one budget: an antenna gain at each end, with
+    # terrain, clutter and calibration layered on the path between them.
     tx_power = conf.PTX if tx_power_dbm is None else tx_power_dbm
     raw_rssi = tx_power + _antenna_gain(tx_node) + _antenna_gain(rx_node) - raw_path_loss
     raw_snr = raw_rssi - conf.NOISE_LEVEL

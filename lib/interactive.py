@@ -41,8 +41,7 @@ MESHTASTICD_PATH_DOCKER = "/usr/bin/meshtasticd"
 def node_start_command(node, remove_config=False, log_path=None):
     """The meshtasticd invocation that boots one simulated node inside the container.
 
-    Every node needs its own `-d` directory: two processes sharing one would read and write each
-    other's identity and configuration state.
+    Every node needs its own `-d`: two processes sharing one overwrite each other's identity.
     """
     command = (
         f"{MESHTASTICD_PATH_DOCKER} {'-e ' if remove_config else ''}"
@@ -90,9 +89,8 @@ class InteractiveNode:
         self.iface = iface
 
     def set_config(self):
-        # TODO: check for methods of meshtastic.node.Node that we can
-        # use to set various node settings rather than directly using
-        # the implied-private _sendAdmin method
+        # TODO: meshtastic.node.Node may expose setters for these, which would be better
+        # than reaching for the implied-private _sendAdmin.
 
         # Set a long and short name
         # TODO: use setOwner of the meshtastic.node.Node class instead?

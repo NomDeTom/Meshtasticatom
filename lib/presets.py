@@ -18,9 +18,8 @@ PRESET_ROOT = Path(__file__).resolve().parents[1] / "presets"
 
 PRESETS = {
     "batumi": {
-        # Real Batumi/Georgia-area node geometry plus a matching coarse terrain
-        # grid. loraMesh.py enables this terrain grid automatically for the
-        # preset so path-loss experiments include the local ridge/sea shape.
+        # Real Batumi node geometry with matching terrain, which loraMesh.py enables
+        # automatically so path-loss experiments carry the local ridge and sea shape.
         "nodes": PRESET_ROOT / "batumi.yaml",
         "terrain": PRESET_ROOT / "batumi_terrain.csv",
         "clutter": PRESET_ROOT / "batumi_clutter.csv",
@@ -85,13 +84,9 @@ def restore_radio_calibration(conf, snapshot):
 
 
 def apply_preset_radio_calibration(conf, name):
-    """Apply optional aggregate radio calibration stored with a packaged preset.
+    """Apply the aggregate radio calibration packaged with a preset.
 
-    This intentionally lives with presets, not the generic PHY code: field
-    captures can correct a packaged scenario's noise floor, reported-SNR range,
-    and reusable link-calibration coefficients without silently changing
-    random/default simulations. Observed links stored in a preset are evaluation
-    records only; runtime calibration is never keyed by a specific node pair.
+    It lives with presets so it cannot change a generic run. See docs/batumi_radio_calibration.md.
     """
     calibration = preset_radio_calibration(name)
 

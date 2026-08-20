@@ -24,8 +24,7 @@ BROADCAST_DEST_ID = 0xFFFFFFFF
 def count_populations(conf, packets):
     """Separate the things a mesh run counts, which are not interchangeable.
 
-    A physical transmission is not a message, a rebroadcast is not a new message, and an ACK
-    addresses one node where a broadcast addresses every other one. See docs/metrics.md.
+    A transmission is not a message and an ACK is not a broadcast - see docs/metrics.md.
     """
     app_seqs, ack_seqs, originated = set(), set(), set()
     rebroadcasts = retransmissions = 0
@@ -61,41 +60,22 @@ def count_populations(conf, packets):
 
 
 class SimulationResults:
-    """Class to hold simulation result data. Any interesting or relevant
-    statistic/data from a simulation should wind up in here. Reporting
-    functions can take this object and present a report to the user however
-    makes sense.
+    """Everything a run measured, for a reporter to present however it likes.
 
     Mostly a dictionary with extra features.
     """
     def __init__(self, results: dict):
-        """Constructor. Start off results with first-order results.
-
-        Arguments:
-        results -- dictionary of first-order results from simulation. MANY keys are assumed to exist!
-        """
+        """Seed with the run's first-order results. Many keys are assumed to exist."""
         self.results = results.copy() # only a shallow copy
 
     def __getitem__(self, subscript: str):
-        """Implement subscript access to support `results_object['datapoint']`.
-        Very thin wrapper to index into interior dictionary, allowing Exceptions
-        to bubble up to the caller.
-        """
+        """Subscript access, letting KeyError bubble up to the caller."""
         return self.results[subscript]
 
     def finalize(self, conf: Config):
-        """Once simulation is finished, calculate any second-order
-        data that is generally useful, such as averages. This requires some extra
-        state-related info.
+        """Derive the second-order results - averages, rates, populations - once a run ends.
 
-        All calculated rates are left as the 'raw' ratio. As in, 50% is 0.5,
-        100% is 1, etc. If you want percentages you should scale & round the
-        rate however you prefer.
-
-        Arguments:
-        conf -- Config object. Simulation config.
-        nodes -- list of nodes from simulation.
-        packets -- list of packets sent during simulation.
+        Rates stay raw ratios: 0.5 is 50%. See docs/metrics.md for what each population counts.
         """
         # replicate result enrichment/calculation from loraMesh.py and batchSim.py
         nodes = self.results["nodes"]
@@ -209,12 +189,9 @@ class DiscreteEventSim:
     """
 
     def __init__(self, conf: Config, node_configs: [NodeConfig], graph: "Graph | None" = None):
-        """Constructor.
+        """Build a run from parse_params' node configurations.
 
-        Arguments:
-        conf -- Config object defining global constants for simulation.
-        node_configs -- Output of parse_params. List of node configurations. Default [].
-        graph -- Optional Graph object for GUI. If provided GUI will be used. Default None, for no GUI.
+        Passing `graph` turns the GUI on; without it the run is headless.
         """
 
         # set constant state/initial state from parameters
@@ -235,11 +212,8 @@ class DiscreteEventSim:
         # note: we allow user to specify if graphing will happen or not
         self.graph = graph
 
-        # use node configs to populate the connectivity matrix and compute
-        # initial condition links/no links.  Because we always expect link/no
-        # link counts, and thus do an O(n^2) precomputation anyways, just
-        # always do this and reserve checking/not checking the map later based
-        # on config settings.
+        # Always precomputed: the link/no-link counts are reported either way, and they
+        # cost the same O(n^2) pass, so only the later map lookups are configurable.
         setup_asymmetric_links(self.conf, self.node_configs)
         self.initialize_connectivity_map()
 
@@ -259,10 +233,8 @@ class DiscreteEventSim:
         logger.debug(f"connectivity map: {self.mutated_state.connectivity_map}")
 
         if self.graph is not None and self.conf.MOVEMENT_ENABLED:
-            # NOTE: this does not run under test, since we skip creating a GUI
-            # TODO: revisit this design decision sometime. Do we want graphing/GUI to be handled in this object,
-            # or by some external object the user wires in, like how batchSim.py adds in the simulation_progress process?
-            # TODO: batchSim does this, but without the 4th parameter
+            # Not covered by tests, which never build a GUI. TODO: this could be wired in
+            # externally instead, the way batchSim adds its progress process.
             from lib.gui import run_graph_updates
 
             self.env.process(run_graph_updates(self.env, self.graph, self.mutated_state.nodes, self.conf.ONE_MIN_INTERVAL))
@@ -272,11 +244,7 @@ class DiscreteEventSim:
         self.env.run(until=self.conf.SIMTIME)
 
     def get_env(self) -> SimpyEnvironment:
-        """get a reference to the Sim's SimPy Environment.
-        Useful for adding your own processes to the environment.
-        Originally a hack to support batchSim.py, which has a progress
-        tracking process
-        """
+        """The run's SimPy Environment, for adding processes of your own to it."""
         return self.env
 
     def get_results(self) -> SimulationResults:

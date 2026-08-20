@@ -65,20 +65,9 @@ class NodeConfig:
     """Specific configuration for a node
     """
     def __init__(self, node_id: int, position: Point, period: int, tx_power: int = 30, freq: float = 902e6, role: MESHTASTIC_ROLE = MESHTASTIC_ROLE.CLIENT, antenna_gain: float = 0, hop_limit: int = 3, neighbor_info: bool = False, antenna_height=None, absolute_altitude=None):
-        """Initial configuration of a node
+        """Initial configuration of a node.
 
-        Arguments:
-        node_id -- unique integer id of node (used as list index)
-        position -- beginning Point(x, y, z) location of node
-        period -- how often to generate messages. Average of an exponential distribution.
-        tx_power -- transmit power in dB
-        freq -- frequency in Hz
-        role -- Meshtastic firmware role. Default: CLIENT
-        antenna_gain -- antenna gain in dBi. Default 0
-        hop_limit -- hop limit. Default 3
-        neighbor_info -- if neighbor info is enabled. Default False
-        antenna_height -- antenna height above local ground. Default: position.z
-        absolute_altitude -- optional map-reported absolute altitude in meters
+        `period` is the mean message interval; `antenna_height` is above local ground.
         """
         self.node_id = node_id
         self.position = position.copy() # make sure we keep our own point
@@ -94,15 +83,9 @@ class NodeConfig:
 
     @classmethod
     def from_gen_scenario_output(cls, node_id: int, node_dict: {}, period: int, tx_power: int, freq: float):
-        """create NodeConfig from a node dict as returned from gen_scenario.
-        You probably want to iterate over the keys that function gives you
-        and pass individual values indexed by them to this method.
+        """Build a NodeConfig from one entry of gen_scenario's output.
 
-        Arguments:
-        node_dict -- dictionary defining a single node. From gen_scenario.
-        period -- how often to generate messages. Average of an exponential distribution.
-        tx_power -- transmit power in dB
-        freq -- frequency in Hz
+        Iterate that function's keys and pass the values indexed by each one.
         """
         nd = node_dict
         position = Point(nd['x'], nd['y'], nd['z'])
@@ -132,15 +115,9 @@ class NodeConfig:
         return NodeConfig(node_id, position, period, tx_power, freq, role, nd['antennaGain'], nd['hopLimit'], nd['neighborInfo'], antenna_height, absolute_altitude)
 
     def compute_rssi_and_pathloss_to(self, rx_nodeconf, conf: Config) -> (float, float):
-        """Compute RSSI and pathloss from this node config as the transmitting node
-        to a receiving node, using a given config for various physical parameters.
+        """RSSI at `rx_nodeconf` and the path loss along the way, with this node transmitting.
 
-        Arguments:
-        rx_nodeconf -- NodeConfig of node we are transmitting to
-        conf -- Config object specifying various physical parameters
-
-        Returns:
-        (rssi, pathloss) -- rssi at rx_nodeconf, and pathloss along the path
+        Returns them as a pair.
         """
         if self.node_id == rx_nodeconf.node_id:
             raise ValueError(f"Calculating rssi/pathloss between identical nodes is invalid. Node ID {self.node_id}")
@@ -153,10 +130,7 @@ class NodeConfig:
 def node_configs_from_yaml(raw_config, period: int, tx_power: int = 30, freq: float = 902e6) -> list[NodeConfig]:
     """Convert saved node YAML into NodeConfig objects.
 
-    The GUI writes a plain `{node_id: node_fields}` map. Real-mesh scenario
-    files may wrap the same map under `nodes` so they can also store geographic
-    origin metadata. Accept both shapes here so saved scenarios can be fed back
-    into the normal simulator CLI.
+    Both shapes: the GUI's plain map, and a scenario file wrapping it under `nodes`.
     """
     if isinstance(raw_config, dict) and "nodes" in raw_config:
         node_map = raw_config["nodes"]
@@ -197,11 +171,7 @@ def origin_from_yaml(raw_config):
 def packet_is_rx_candidate(packet, rx_node_id: int, capture_model_enabled: bool) -> bool:
     """Return whether a packet should enter the receiver-side RF timeline.
 
-    Legacy collision accounting only tracked packets above the demodulation
-    sensitivity threshold (`sensedByN`). The capture-aware model needs one more
-    band: CAD-detectable but undecodable packets still occupy the channel and
-    can corrupt another packet's preamble/header. They are interference energy,
-    while the receive path still ignores them because `sensedByN` remains false.
+    Capture mode admits one more band - detectable but undecodable - as interference energy.
     """
     if capture_model_enabled:
         return packet.detectedByN[rx_node_id]
@@ -213,20 +183,14 @@ class MeshNode:
     external resources like the simpy env, and process functions for simulation
     """
     def __init__(self, conf, sim_state: SimulationState, data_tracking: SimulationDataTracking, nodeConfig: NodeConfig):
-        """Create a MeshNode. Houses all node-specific state, sim processes, and
-        connections to broader sim environment and data collection.
+        """Create a MeshNode: node-specific state, its sim processes, and its links to the run.
 
-        Arguments:
-        conf -- Config object of various sim parameters
-        sim_state -- object holding all mutating state of the simulation
-        data_tracking -- object holding data collected from sim, doesn't influence state.
-        nodeConfig -- initial configuration of node
+        `sim_state` is the run's mutable state; `data_tracking` only observes it.
         """
         self.conf = conf
 
-        # initially to move repeated rssi/pathloss computation into NodeConfig class.
-        # maybe move other state/config (role, period, etc.) into here explicitly
-        # rather than binding to a member variable
+        # Holds the repeated rssi/pathloss computation. Role, period and the rest could
+        # move in here too rather than being bound as member variables.
         self.node_conf = nodeConfig
 
         self.nodeid = self.node_conf.node_id
@@ -380,10 +344,8 @@ class MeshNode:
             ):
                 apply_terrain_altitude(self.conf.TERRAIN_GRID, self)
 
-            # update connectivity map:
-            # - update for this node: we may have gained and lost reachable nodes
-            # - new reachable nodes: add ourselves to their connectivity map entry
-            # - lost reachable nodes: remove ourselves from their connectivity map entry
+            # Moving changes who this node reaches, so its own entry is rebuilt and it is
+            # added to or removed from the entries of the nodes it gained or lost.
             if self.conf.ENABLE_CONNECTIVITY_MAP:
                 # may need to deepcopy if we put more complex things in here
                 old_reachable_set = self.connectivity_map[self.nodeid].copy()
@@ -751,10 +713,7 @@ class MeshNode:
         return self.my_stats
 
 def default_generate_node_list(conf: Config) -> [NodeConfig]:
-    """Default function for randomly choosing node configurations for a simulation
-    run, based on the provided config and desired number of nodes specified in
-    the config.
-    """
+    """Randomly choose node configurations for a run, from the config's node count."""
     # need to identically match RNG usage right now to pass the discrete sim
     # test. If we want to change the reference test, do that in a smaller change.
 

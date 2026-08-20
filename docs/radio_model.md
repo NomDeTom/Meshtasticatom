@@ -147,3 +147,39 @@ on NARROW_SLOW.
 `shouldRebroadcastEarlyLikeRouter`. At v2.7.15 a CLIENT_BASE node also took it, for traffic to or
 from a favourited node; that was removed in 2.8. The code was already 2.8's behaviour while the
 file's comment named the older tag - one reason the pin moved rather than the code.
+
+## The collision model
+
+Two models, selected by `CAPTURE_COLLISION_MODEL_ENABLED`. The legacy one is the default and is
+preserved unchanged: any timing overlap on the same SF and frequency destroys the weaker packet
+unless the two are more than 6 dB apart.
+
+The capture-aware model encodes the two effects the binary one misses, and are what matter on a
+crowded mesh:
+
+- **Capture.** A packet at least `COLLISION_CAPTURE_THRESHOLD_DB` stronger than the interferer at
+  that receiver survives, because the demodulator stays locked to it.
+- **The lock window.** Overlap during the preamble and header destroys the packet regardless of
+  margin - that is where acquisition happens. Overlap confined to a short tail of the payload,
+  under `COLLISION_PAYLOAD_OVERLAP_LOSS_FRACTION`, is tolerated.
+
+It is a compact model, not a chip-level demodulator.
+
+A packet below the receiver's demodulation threshold still counts as interference energy - it can
+jam a stronger packet - but is not counted as a *collision*, because it was never going to be
+decoded. Counting it would inflate the collision rate with packets that failed for a different
+reason.
+
+Frequency separation is compared in kHz. Packet frequencies are stored in Hz here; the comparison
+normalizes both Hz- and MHz-scale inputs so that the predicate does not depend on caller units.
+
+## Path loss
+
+Seven models, chosen by `MODEL`: log-distance (0), Okumura-Hata for four environment classes (1-4),
+and 3GPP suburban and urban macro (5-6). All take distance in metres and frequency in MHz and
+return loss in dB.
+
+Distance is floored at `PATH_LOSS_DISTANCE_FLOOR_M` before the logarithm. Randomized movement can
+put two nodes on the same point, and a preset can raise the floor further as a near-field
+calibration: the Hata and 3GPP formulas are not meaningful at apartment scale, and map positions are
+coarse enough that two pins being close does not mean two antennas have 20 m of clear air.

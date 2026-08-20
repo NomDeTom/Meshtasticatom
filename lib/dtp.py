@@ -23,11 +23,7 @@ def _configured_step(conf) -> int:
 
 
 def _quantize_drop(conf, drop_db: int) -> int:
-    """Round drops down to the configured radio step.
-
-    Rounding down keeps the experiment conservative: a requested 4 dB drop on a
-    3 dB-step policy becomes 3 dB rather than unexpectedly cutting 6 dB.
-    """
+    """Round drops down to the configured radio step, so 4 dB on a 3 dB step becomes 3."""
     drop_db = max(0, min(int(drop_db), int(getattr(conf, "DTP_MAX_POWER_DROP_DB", 12))))
     step = _configured_step(conf)
     return (drop_db // step) * step
@@ -40,9 +36,7 @@ def _apply_drop(conf, base_power_dbm: int, drop_db: int) -> int:
     if min_power is not None:
         selected = max(int(min_power), selected)
 
-    # The minimum-power clamp must never turn DTP into a power boost if the user
-    # sets it above PTX/baseTxPower. DTP is a shrink-the-interference-radius
-    # experiment only; configured PTX remains the upper bound.
+    # A minimum above PTX must not turn a reduction policy into a boost: PTX is the ceiling.
     return min(base_power_dbm, selected)
 
 
@@ -51,11 +45,9 @@ def _retry_attempt(node, packet) -> int:
 
 
 def _prior_hop_margin_db(conf, packet) -> float | None:
-    """Return prior-hop decode margin above this modem preset's sensitivity.
+    """Return the prior hop's decode margin above this preset's sensitivity.
 
-    Absolute LoRa SNR is often negative even for clean packets, so DTP should
-    not use `snr >= 5 dB` style thresholds. The useful question is how far the
-    received prior hop sat above the selected preset's demodulation edge.
+    Absolute LoRa SNR is negative even on clean packets, so a fixed dB threshold would not do.
     """
     prior_rssi = getattr(packet, "priorHopRssi", None)
     if prior_rssi is not None:
@@ -82,15 +74,7 @@ def _very_strong_prior_hop(conf, packet) -> bool:
 def choose_dynamic_tx_power(node, packet) -> DtpDecision:
     """Choose a temporary per-packet TX power for DTP experiments.
 
-    The policy is intentionally asymmetric:
-
-    * origin packets stay at configured power because they create the first copy
-      of a flood, and the simulator does not know which far receiver might need
-      that copy;
-    * relay packets may shrink power when channel pressure is high, because
-      duplicate rebroadcasts are where harmful overlap accumulates;
-    * final retries and rescue-CR packets stay at full power, because cutting
-      power there fights the reliability lever that DCR just selected.
+    Deliberately asymmetric by packet role - see docs/configuration.md.
     """
     base_power = int(getattr(packet, "baseTxPower", node.conf.PTX))
     if not node.conf.DTP_ENABLED:
@@ -111,9 +95,8 @@ def choose_dynamic_tx_power(node, packet) -> DtpDecision:
     drop_db = 0
 
     if final_retry or packet.cr >= CR_RESCUE:
-        # DTP should shrink interference, not sabotage the rescue case. CR can
-        # help payload reliability, but it cannot recover packets pushed below
-        # preamble/header sensitivity by excessive power reduction.
+        # A rescue attempt keeps full power: coding rate helps a payload decode, but
+        # nothing recovers a preamble pushed under sensitivity.
         reasons.append("max_power_retry_rescue")
     elif packet.isAck:
         if very_strong:
@@ -148,9 +131,8 @@ def choose_dynamic_tx_power(node, packet) -> DtpDecision:
             drop_db = min(drop_db or 3, 3)
             reasons.append("last_hop_cap")
     else:
-        # Origin packets seed the flood. Without neighbor/topology certainty,
-        # cutting their power is more likely to create holes than to reduce
-        # duplicate relay overlap.
+        # An origin packet seeds the flood, and cutting it without topology certainty
+        # makes holes rather than removing duplicate overlap.
         reasons.append("max_power_origin")
 
     selected_power = _apply_drop(node.conf, base_power, drop_db)

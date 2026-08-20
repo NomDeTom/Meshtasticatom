@@ -118,11 +118,9 @@ def tiles_for_bbox(bbox):
 
 
 class SrtmTile:
-    """A single SRTM HGT tile loaded into memory.
+    """A single SRTM HGT tile: a square grid of signed big-endian 16-bit elevations.
 
-    HGT files are square grids of signed big-endian 16-bit elevations. Real
-    SRTM tiles are usually 1201x1201 or 3601x3601, but tests use tiny square
-    files and the reader deliberately accepts those too.
+    Real tiles are 1201 or 3601 square; the reader accepts any square, so tests can use tiny ones.
     """
 
     def __init__(self, tile_name, side, elevations):

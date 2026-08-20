@@ -83,19 +83,14 @@ class Config:
         #################################################
         ####### DYNAMIC CODING RATE #####################
         #################################################
-        # Disabled by default so historical simulations keep the preset CR.
-        # When enabled, the node chooses CR 4/5..4/8 per packet immediately
-        # before TX, after queueing and listen-before-talk have settled.
+        # Off by default; no released firmware has this. See docs/configuration.md.
         self.DCR_ENABLED = False
         self.DCR_MIN_CR = 5
         self.DCR_MAX_CR = 8
         self.DCR_USER_MIN_CR = 5
-        # Limit non-urgent CR8 airtime as a share of this node's own TX airtime.
-        # This is a mesh-behavior safety rail, separate from region duty cycle.
+        # A mesh-behaviour rail on non-urgent CR8 traffic, not a regulatory one.
         self.DCR_CR8_AIRTIME_LIMIT_PERCENT = 10.0
-        # Local utilization thresholds are deliberately not regulatory limits.
-        # `_selected_region_duty_limit()` in lib.dcr compares against region
-        # duty cycle only when the selected region actually has one.
+        # Local channel-pressure thresholds, deliberately not regulatory limits.
         self.DCR_IDLE_UTIL_PERCENT = 2.0
         self.DCR_BUSY_UTIL_PERCENT = 7.0
         self.DCR_CONGESTED_UTIL_PERCENT = 17.5
@@ -105,10 +100,8 @@ class Config:
         #################################################
         ####### DYNAMIC TX POWER ########################
         #################################################
-        # Disabled by default. DTP is deliberately a power-reduction policy,
-        # not an alternate way to exceed region limits. PTX remains the maximum;
-        # DTP only lowers individual relay/control packets to shrink their
-        # interference radius in dense capture-collision experiments.
+        # Off by default, and only ever lowers power: PTX stays the ceiling.
+        # No released firmware has this either. See docs/configuration.md.
         self.DTP_ENABLED = False
         self.DTP_MAX_POWER_DROP_DB = 12
         self.DTP_POWER_STEP_DB = 3
@@ -553,11 +546,8 @@ class Config:
         ### PHY parameters (normally no change needed) ###
         self.PTX = self.REGION["power_limit"]
 
-        # Modem presets from firmware modemPresetToParams() in src/mesh/MeshRadio.h, at this file's pin
-        # minimum sensitivity from https://www.rfwireless-world.com/calculators/LoRa-Sensitivity-Calculator.html, using a Noise Figure (NF) of 6dB
-        # minimum received power for CAD: 3dB less than sensitivity
-        # TODO: the 'bw' parameter is changed based on the region's 'wide_lora' setting. Implement this.
-        # Note: we store bandwidth here in Hz, but the firmware uses KHz.
+        # From firmware modemPresetToParams() in src/mesh/MeshRadio.h, at this file's pin. Sensitivity
+        # is kTB + 6 dB NF at the SF's demod limit, CAD 3 dB below; bandwidth in Hz, not kHz.
         self.MODEM_PRESETS = {
             "SHORT_TURBO": {
                 "bw": 500e3,
@@ -691,9 +681,8 @@ class Config:
         self.GAMMA = 2.08  # PHY parameter
         self.D0 = 40.0  # PHY parameter
         self.LPLD0 = 127.41  # PHY parameter
-        # Optional scenario-level calibration knobs. Defaults preserve the old
-        # simulator behavior; field presets can tighten these to match
-        # aggregate receive observations without changing generic simulations.
+        # Optional calibration knobs; the defaults are plain simulator behaviour.
+        # A packaged preset can tighten them - see docs/configuration.md.
         self.PATH_LOSS_DISTANCE_FLOOR_M = 0.001
         self.REPORTED_SNR_MIN_DB = None
         self.REPORTED_SNR_MAX_DB = None
@@ -707,21 +696,16 @@ class Config:
         #################################################
         ####### TERRAIN OBSTRUCTION MODEL ###############
         #################################################
-        # Disabled by default. When enabled, TERRAIN_GRID holds an in-memory
-        # grid sampled from SRTM HGT tiles.
+        # Off by default; TERRAIN_GRID holds a grid sampled from SRTM HGT tiles.
         self.TERRAIN_ENABLED = False
         self.TERRAIN_GRID = None
-        # "ground": Point.z is antenna height above local ground.
-        # "sea_level": Point.z is absolute antenna altitude after adding
-        # terrain ground elevation.
+        # What Point.z means: height above local ground, or absolute altitude.
         self.NODE_Z_REFERENCE = "ground"
         self.GEO_ORIGIN_LAT = None
         self.GEO_ORIGIN_LON = None
         self.TERRAIN_PROFILE_SAMPLES = 24
         self.TERRAIN_FRESNEL_CLEARANCE = 0.6
-        # Match the common radio-planning 4/3 Earth-radius approximation. The
-        # terrain model uses it as an earth-bulge term so long coastal and ridge
-        # links do not look unrealistically flat.
+        # The radio-planning 4/3 earth-radius approximation, as an earth-bulge term.
         self.TERRAIN_EFFECTIVE_EARTH_RADIUS_MULTIPLIER = 4.0 / 3.0
         self.TERRAIN_MIN_ANTENNA_HEIGHT_M = 1.5
         self.TERRAIN_MAX_LOSS_DB = 35.0
@@ -729,9 +713,8 @@ class Config:
         #################################################
         ####### LAND-COVER CLUTTER MODEL ################
         #################################################
-        # Optional excess loss from buildings/land use. This is intentionally
-        # separate from terrain: hills can be visible while low urban fabric
-        # still blocks balcony-to-balcony links.
+        # Excess loss from buildings and land use, separate from terrain: a hill can be
+        # visible while low urban fabric still blocks the link. docs/configuration.md.
         self.CLUTTER_ENABLED = False
         self.CLUTTER_GRID_FILE = None
         self.CLUTTER_PROFILE_SAMPLES = 16
@@ -750,9 +733,8 @@ class Config:
         #################################################
         ####### EMPIRICAL PAYLOAD LOSS MODEL ############
         #################################################
-        # Disabled by default. When enabled, RSSI/sensitivity still decides
-        # whether a packet can be heard; this model only adds a smooth
-        # CR-dependent payload-success probability after that gate.
+        # Off by default. Sensitivity still gates whether a packet is heard at all;
+        # this only adds a CR-dependent success probability after it.
         self.PHY_LOSS_MODEL_ENABLED = False
         self.PHY_LOSS_MODEL_NAME = "snr_payload_v1"
         self.PHY_LOSS_SNR_P50_BY_CR = {
@@ -778,15 +760,13 @@ class Config:
         ############################
         ####### ROUTER TYPE ########
         ############################
-        # This can also be overwritten by scenarios defined in batchSim.py
-        # or by passing this as the second command line param to loraMesh.py
+        # Overridable by a batchSim scenario or loraMesh's second positional argument.
         self.SELECTED_ROUTER_TYPE = self.ROUTER_TYPE.MANAGED_FLOOD
 
         #####################################################
         ####### ASYMMETRIC LINK SIMULATION VARIABLES ########
         #####################################################
-        # Set this to True to enable the asymmetric link model
-        # Adds a random offset to the link quality of each link
+        # A random offset per direction, so A hearing B does not imply B hearing A.
         self.MODEL_ASYMMETRIC_LINKS = True
         self.MODEL_ASYMMETRIC_LINKS_MEAN = 0
         self.MODEL_ASYMMETRIC_LINKS_STDDEV = 2
@@ -839,8 +819,7 @@ class Config:
     def default_channel_num(self, preset=None):
         """The 0-based slot a device picks when the operator has not chosen one.
 
-        Region overrides win; otherwise it is the hash of the primary channel's name, which for a
-        preset-configured device is the preset's display name.
+        A region override wins; otherwise it is the hash of the preset's display name.
         """
         preset = preset or self.MODEM_PRESET
         slots = self.num_freq_slots(preset)
@@ -893,9 +872,8 @@ class Config:
 
     # Function that needs to be run to ensure the router dependent variables change appropriately
     def update_router_dependencies(self):
-        # Example: Overwrite hop limit in the case of X new awesome routing algorithm
-        # if self.SELECTED_ROUTER_TYPE == self.ROUTER_TYPE.AWESOME_ROUTER:
-        #     Change config values if necessary for your router here
+        # A new router type overrides its dependent values here - hop limit, say - by
+        # testing self.SELECTED_ROUTER_TYPE and assigning them.
         return
 
 # single module-level config for all users to reference unambiguously

@@ -11,10 +11,7 @@ class InterfaceCloseTimeout(TimeoutError):
 def close_interface(iface, timeout=IFACE_CLOSE_TIMEOUT_SECONDS):
     """Close a Meshtastic interface without letting its reader thread hang forever.
 
-    Native meshtasticd setups can block inside `TCPInterface.close()` while the
-    Python Meshtastic client waits for its RX thread to exit. Closing in a daemon
-    helper thread keeps simulator startup/shutdown responsive and lets reconnect
-    continue with a fresh interface.
+    A native setup can block in TCPInterface.close(), so this closes in a daemon thread.
     """
     if iface is None:
         return

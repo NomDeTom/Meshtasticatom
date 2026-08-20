@@ -42,11 +42,9 @@ def _score_to_cr(score: int) -> int:
 
 
 def _selected_region_duty_limit(conf) -> float | None:
-    """Return a legal duty-cycle limit only when the region actually has one.
+    """Return a legal duty-cycle limit only where the region has one.
 
-    Regions with 100% duty cycle are effectively unrestricted for this policy.
-    Avoid inventing a local fallback threshold there; channel congestion and
-    regulatory duty-cycle pressure are separate signals.
+    Congestion and regulatory pressure are separate signals; do not invent the second.
     """
     duty_cycle = conf.REGION.get("duty_cycle", 100)
     if 0 < duty_cycle < 100:
@@ -72,11 +70,7 @@ def _current_channel_utilization_percent(node) -> float:
 
 
 def classify_channel_pressure(node) -> tuple[str, float, int]:
-    """Classify mesh pressure from existing simulator signals.
-
-    The thresholds describe local simulated congestion, not legal limits.
-    Regulatory pressure is handled separately by `_selected_region_duty_limit`.
-    """
+    """Classify local channel pressure. The thresholds are congestion, not legal limits."""
     util = _current_channel_utilization_percent(node)
     queue_depth = _node_queue_depth(node)
 
@@ -93,18 +87,14 @@ def classify_channel_pressure(node) -> tuple[str, float, int]:
 
 
 def _base_packet_score(packet) -> tuple[int, list[str]]:
-    """Approximate packet classes with fields Meshtasticator currently has.
+    """Approximate packet classes from the fields this simulator has.
 
-    Generated traffic does not carry Meshtastic portnums, app priority, or
-    telemetry/user-message classes. ACKs are the only control class visible
-    without adding synthetic app metadata.
+    No portnums or app priority here, so ACKs are the only visible control class.
     """
     if packet.isAck:
         return 1, ["control_ack"]
 
-    # Keep first attempts compact and let retry/link/context signals justify
-    # spending extra FEC. This avoids making idle background floods fatter by
-    # default in dense public-mesh style runs.
+    # First attempts stay compact; retry and context signals are what justify the FEC.
     return 0, ["user"]
 
 
@@ -120,9 +110,8 @@ def _retry_score(node, packet, pressure: str, util: float) -> tuple[int, list[st
     if duty_limit is not None and util >= duty_limit:
         return 0, [f"retry_{attempt}_no_fec_bump_duty_limit"]
 
-    # Later attempts after quiet loss are the intentional robustness spend:
-    # a normal retry moves generic user traffic to CR6, while a final quiet
-    # retry can still reach CR8 when the budget allows it.
+    # Retries after quiet loss are the deliberate spend: CR6 normally, CR8 on a final
+    # quiet retry when the airtime budget allows it.
     final_retry = packet.retransmissions <= 1
     return (3 if final_retry else 1), [f"retry_{attempt}_quiet_loss"]
 
@@ -166,9 +155,7 @@ def choose_dynamic_coding_rate(node, packet) -> DcrDecision:
     pressure, util, queue_depth = classify_channel_pressure(node)
 
     if pressure == "idle":
-        # Idle air is reserve, not automatic permission to fatten every first
-        # attempt. Retry/control scoring below is where quiet-air robustness is
-        # intentionally spent.
+        # Idle air is reserve, not permission to fatten every first attempt.
         reasons.append("idle_no_first_attempt_bump")
     elif pressure == "busy":
         score -= 1
@@ -191,9 +178,8 @@ def choose_dynamic_coding_rate(node, packet) -> DcrDecision:
         and packet.txNodeId != packet.origTxNodeId
         and pressure not in ("busy", "congested")
     ):
-        # Direct destination plus a relay hop is real header-level context. It
-        # is valuable enough to avoid the thinnest CR when local air is not
-        # busy, while origin-hop and busy direct floods can remain compact.
+        # Addressed directly and already relayed once is real header-level context,
+        # worth more than the thinnest CR while local air is quiet.
         min_cr = max(min_cr, CR_NORMAL)
         reasons.append("direct_relay_min_cr")
 

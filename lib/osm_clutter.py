@@ -200,9 +200,8 @@ def classify_cell(x, y, polygons, step_m):
         if x < min_x - half or x > max_x + half or y < min_y - half or y > max_y + half:
             continue
 
-        # Land-use polygons often contain the cell center. Building footprints
-        # are much smaller than the exported raster cell, so also count nearby
-        # building centroids/bounds as urban evidence.
+        # A land-use polygon usually contains the cell centre, but a building footprint is
+        # far smaller than a cell, so nearby centroids count as urban evidence too.
         if point_in_polygon(x, y, polygon):
             hits[clutter_class] = hits.get(clutter_class, 0) + 2
         elif clutter_class == "urban" and min_x - half <= x <= max_x + half and min_y - half <= y <= max_y + half:
