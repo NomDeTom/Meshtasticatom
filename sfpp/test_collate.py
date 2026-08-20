@@ -21,6 +21,7 @@ import unittest
 
 from . import collate as C
 from . import explorer as E
+from . import version as V
 
 
 def report(block="B-arm", arm="arm", value=1, seed=7, held=0.8, text=0.7, **overrides):
@@ -32,6 +33,7 @@ def report(block="B-arm", arm="arm", value=1, seed=7, held=0.8, text=0.7, **over
         "seed": seed,
         "grid": [],
         "transport": "abc1234",
+        "sim_version": V.SIM_VERSION,
         "wall_seconds": 68.6,
         "opts": {"nodes": 60, "scenario": None, "signed": bool(value)},
         "mesh": {"nodes": 60, "mean_degree": 9.5, "connected": True},
@@ -1184,3 +1186,96 @@ class AgainstControl(unittest.TestCase):
         arm = next(c for c in cells if c["value"] == "archive")
         self.assertNotIn("dm", arm["vs_control"])
         self.assertIn("text", arm["vs_control"])
+
+
+class SupersededRuns(unittest.TestCase):
+    """A version bump means earlier runs answered a different question - see sfpp/version.py."""
+
+    @staticmethod
+    def _run(version, run_id="2026-08-01"):
+        return {"run_id": run_id, "sim_version": version, "_name": run_id, "blocks": []}
+
+    def test_a_patch_bump_stays_comparable(self):
+        # PATCH cannot move a number, so 1.2.0 and 1.2.7 measured the same thing.
+        current, stale = E.comparable_runs(
+            [self._run("1.2.0"), self._run("1.2.7")], version="1.2.0"
+        )
+        self.assertEqual(len(current), 2)
+        self.assertEqual(stale, [])
+
+    def test_a_minor_bump_supersedes(self):
+        current, stale = E.comparable_runs(
+            [self._run("1.1.0", "old"), self._run("1.2.0", "new")], version="1.2.0"
+        )
+        self.assertEqual([r["run_id"] for r in current], ["new"])
+        self.assertEqual([r["run_id"] for r in stale], ["old"])
+
+    def test_a_run_from_before_versioning_is_not_comparable(self):
+        # No version is not "the current one": it is a digest that cannot claim to be comparable.
+        current, stale = E.comparable_runs([self._run(None)], version="1.2.0")
+        self.assertEqual(current, [])
+        self.assertEqual(len(stale), 1)
+
+    def test_a_run_straddling_a_bump_is_not_comparable(self):
+        # collate writes a list when one round's blocks disagree, which is exactly not one version.
+        current, stale = E.comparable_runs(
+            [self._run(["1.1.0", "1.2.0"])], version="1.2.0"
+        )
+        self.assertEqual(current, [])
+        self.assertEqual(len(stale), 1)
+
+    def test_superseded_runs_reach_neither_the_leaderboard_nor_the_trend(self):
+        old = write_run(
+            os.path.join(self.tmp.name, "runs", "2026-08-01"),
+            {"B-arm": [report(value=1, held=0.1), report(value=2, held=0.9)]},
+        )
+        quietly(C.main, ["--runs", old, "--run-id", "2026-08-01"])
+        new = write_run(
+            os.path.join(self.tmp.name, "runs", "2026-08-20"),
+            {"B-arm": [report(value=1, held=0.5), report(value=2, held=0.5)]},
+        )
+        quietly(C.main, ["--runs", new, "--run-id", "2026-08-20"])
+        self._age_run("2026-08-01", "1.1.0")
+
+        archive = E.load_archive(os.path.join(self.tmp.name, "runs"))
+        self.assertEqual(len(archive), 2)
+        current, stale = E.comparable_runs(archive)
+        self.assertEqual([r["run_id"] for r in current], ["2026-08-20"])
+
+        # The old run's spread is 0.8 and the new one's is 0.0. Pooled they average to 0.4, which
+        # is a number describing neither run.
+        board = E.leaderboard(E.index_by_block(current))
+        self.assertEqual(len(board), 1)
+        self.assertAlmostEqual(board[0]["spread"], 0.0, places=6)
+        self.assertEqual(board[0]["runs"], 1)
+
+    def test_run_health_still_carries_the_superseded_runs(self):
+        # Seconds per simulated hour does not care what the airtime was, so the cost history stays.
+        self.test_superseded_runs_reach_neither_the_leaderboard_nor_the_trend()
+        archive = E.load_archive(os.path.join(self.tmp.name, "runs"))
+        current, stale = E.comparable_runs(archive)
+        health = E.run_health(list(current) + list(stale))
+        self.assertEqual(len(health), 2)
+
+    def test_the_page_says_what_it_excluded(self):
+        self.test_superseded_runs_reach_neither_the_leaderboard_nor_the_trend()
+        archive = E.load_archive(os.path.join(self.tmp.name, "runs"))
+        current, stale = E.comparable_runs(archive)
+        for r in archive:
+            r["_href"] = os.path.join("runs", r["_name"])
+        page = E.render_html(current, E.index_by_block(current), [], superseded=stale)
+        self.assertIn("1 earlier run(s) are excluded", page)
+        self.assertIn(V.SIM_VERSION, page)
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _age_run(self, run_id, version):
+        """Rewrite one digest as though an older sim had produced it."""
+        path = os.path.join(self.tmp.name, "runs", run_id, "summary.json")
+        with open(path) as f:
+            summary = json.load(f)
+        summary["sim_version"] = version
+        with open(path, "w") as f:
+            json.dump(summary, f)

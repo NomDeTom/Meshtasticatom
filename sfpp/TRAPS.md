@@ -1,7 +1,7 @@
-# Seventeen ways this simulator produced a confident wrong number
+# Eighteen ways this simulator produced a confident wrong number
 
 Companion to [README.md](README.md), which is the operating manual. This is the other half: not how
-to run the thing, but how it has lied. All seventeen are fixed. They are written down because the
+to run the thing, but how it has lied. All eighteen are fixed. They are written down because the
 **shapes** recur, and because someone extending this tree can assert against them rather than
 rediscover them one at a time.
 
@@ -308,6 +308,32 @@ untagged, so it tracked whatever `latest` resolved to on the day, driven by a 2.
 > pinned file and that the documented daemon image is the one that runs;
 > `tests/test_region_frequency.py` checks the region set against the pinned tree, which is
 > checkable because 2.8 removed `UA_868` and added the ITU ham regions.
+
+## 18. The explorer would have averaged across a version boundary
+
+Found 2026-08-20, by being asked whether it would - which is the only entry here caught before it
+produced a number rather than after.
+
+`sfpp/version.py` exists to say whether two runs are comparable, and `collate.py` warns when one
+round's blocks straddle a bump. Nothing checked the archive. `explorer.py` globbed every
+`*/summary.json` and pooled them: `leaderboard` averaged a block's spread over every run carrying
+it, and `series` laid every run on one trend line in date order.
+
+So the airtime correction that made `SIM_VERSION` 1.2.0 - which moves every metric in the archive -
+would have appeared as a step in the trend charts, and as a mean of two incomparable numbers on the
+leaderboard. Both well-formed, neither marked.
+
+The near-miss is the interesting part: the round-level check made it *look* handled. It fires on a
+condition that cannot arise here, because a round is internally consistent both before and after a
+bump, so it would have stayed silent while the page pooled across the boundary.
+
+> **Assert** that a comparability rule holds wherever results are combined, not only where they are
+> produced. A check at one layer says nothing about the layer above it.
+> **Enforced**: `explorer.comparable_runs` splits the archive on MAJOR.MINOR and the metric views
+> take only the current side, with `test_collate.SupersededRuns` covering a patch bump, a minor
+> bump, an unversioned digest and one straddling a bump. Run health keeps the whole archive, since
+> seconds per simulated hour does not care what the airtime was. The page names what it excluded:
+> a reader who remembers a number needs to know it was superseded rather than lost.
 
 ## What is still open
 
