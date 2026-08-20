@@ -38,10 +38,8 @@ def find_vendor_root():
 VENDOR_ROOT = find_vendor_root()
 PRESET_ROOT = VENDOR_ROOT / "presets"
 
-# Downloaded map payloads, SRTM tiles and rasterised clutter grids. Kept under the vendored tree so a
-# scenario fetched by `loraMesh.py` is reused here and vice versa. SFPP_SCENARIO_CACHE overrides it,
-# which is what a CI matrix needs: `--mirror` writes a mirrored clutter CSV into this directory, and
-# two jobs racing to write the same one is worth avoiding by giving each its own.
+# Map payloads, SRTM tiles and clutter grids, shared with loraMesh.py's own fetches.
+# SFPP_SCENARIO_CACHE overrides it, so two CI jobs cannot race to write one mirrored CSV.
 CACHE_ROOT = Path(os.environ.get("SFPP_SCENARIO_CACHE", VENDOR_ROOT / "cache"))
 
 

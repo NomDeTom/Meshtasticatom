@@ -246,10 +246,9 @@ class Sketch:
         return True
 
     def decode(self):
-        """Recovers the set, sorted ascending, or None when it is not decodable.
+        """Recover the set, sorted ascending, or None when it is not decodable.
 
-        Subject to the ~1/c! misdecode rate: an over-capacity difference lands on a wrong set that
-        reproduces the same syndromes at about that rate.
+        An over-capacity difference misdecodes to a wrong set at about 1/c!.
         """
         if not self.syndromes:
             return None

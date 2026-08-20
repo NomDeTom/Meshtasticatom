@@ -41,8 +41,7 @@ PAD_L, PAD_R, PAD_T, PAD_B = 62, 26, 46, 78
 def _nice_ceiling(value):
     """Round an axis top up to something a reader can divide by five in their head.
 
-    `max(series) * 1.15` is a sensible amount of headroom and an unreadable axis: it produces tops
-    like 1.15 and tick labels like 0.92.
+    A flat 1.15x headroom gives tops like 1.15 and tick labels like 0.92.
     """
     if value <= 0:
         return 1.0
@@ -245,9 +244,7 @@ class Panel:
 def _series_line(panel, points, colour, width=1.6, dashed=False):
     """A line through (x_index, value) pairs, skipping gaps rather than bridging them.
 
-    A gap is a bin with no denominator - nothing was sent, so there is no rate. Bridging it would draw
-    a straight line through an hour that has no measurement in it, which is the shape a reader would
-    take for a trend.
+    A gap is a bin with no denominator; a bridge would draw a trend through no measurement.
     """
     previous = None
     for index, value in points:
@@ -265,10 +262,9 @@ def _series_line(panel, points, colour, width=1.6, dashed=False):
 
 
 def _night_bands(panel, hours_of_day, count):
-    """Shade the small hours, so a diurnal trough is visible as night rather than as a dip.
+    """Shade the small hours, so a diurnal trough reads as night rather than as a dip.
 
-    Drawn first, under everything: this is the context a reader needs to tell "the mesh got quieter"
-    from "it was 4am", which is the whole question a time series over a 72-hour run is asked.
+    Drawn under everything: it separates "the mesh got quieter" from "it was 4am".
     """
     top, bottom = PAD_T, PANEL_H - PAD_B
     for index, hour in enumerate(hours_of_day):
@@ -283,11 +279,9 @@ def _night_bands(panel, hours_of_day, count):
 
 
 def render_series(report, out_dir, label="run"):
-    """Reception and load over simulated time. Returns None when the run carried no series.
+    """Reception and load over simulated time, or None when the run carried no series.
 
-    Two panels, because they answer different questions and share an x axis: what got through, and how
-    busy the channel was while it did. Reading them together is the point - a reception dip during a
-    utilisation peak is congestion, and the same dip in a quiet hour is not.
+    Two panels on one x axis: a reception dip under a utilisation peak is congestion, alone it is not.
     """
     series = report.get("series")
     if not series or not series.get("reception"):

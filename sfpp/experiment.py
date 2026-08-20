@@ -78,9 +78,7 @@ def truth_for(bucket, assigned):
 def reconcile(a, b, root_hash, bucket, capacity, counters, assigned):
     """One push exchange: A adverts, B resolves what it can and answers.
 
-    Push rather than request-by-id: the XOR of two sketches is the symmetric difference, and each
-    side splits it by local membership. That removes ITEM_REQUEST from the common path and resolves
-    B's shortfall in one round trip instead of two.
+    Push, not request-by-id, so a shortfall resolves in one round trip - sfpp/README.md 1.
     """
     sa = a.summary(root_hash, bucket, capacity)
     sb = b.summary(root_hash, bucket, capacity)

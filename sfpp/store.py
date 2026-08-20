@@ -95,10 +95,9 @@ class SfppStore:
     # --- ingest ---
 
     def insert(self, message, counter):
-        """Store one object at its chain counter. Returns False if it was already held.
+        """Store one object at its chain counter. False if it was already held.
 
-        The counter is assigned by whoever owns the chain, not by the receiver, because buckets are
-        counter-based: two nodes only summarise the same bucket if they agree on the numbering.
+        The chain's owner assigns the counter: buckets only line up if both agree on the numbering.
         """
         held = self.db.execute(
             "select 1 from channel_messages where message_hash=?;",
@@ -182,10 +181,9 @@ class SfppStore:
         )
 
     def hash_for_short_id(self, sid):
-        """Resolve a decoded sketch member back to the object. None if this node does not hold it.
+        """Resolve a decoded sketch member back to the object, or None if not held.
 
-        A short ID is truncated, so this can match more than one row; the caller is expected to
-        confirm against the checksum rather than trust the first hit.
+        A short ID is truncated and can match more than one row: confirm against the checksum.
         """
         rows = self.db.execute(
             "select message_hash from channel_messages where short_id=?;", (sid,)

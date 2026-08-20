@@ -64,9 +64,8 @@ def check_airtime_implementations():
 def check_airtime_against_known():
     print("airtime: against figures the firmware states independently")
 
-    # RadioInterface computes preambleTimeMsec = preambleLength * (2^sf / bw_kHz), which
-    # for LongFast is 16 * 2048/250 = 131 ms. The 165 in its member initialiser is
-    # commented "the default for LongFast" but is stale - the formula is the reference.
+    # preambleLength * (2^sf / bw_kHz), 131 ms at LongFast. RadioInterface's member
+    # initialiser says 165 and calls it the LongFast default; it is stale, the formula is not.
     sf, bw, _ = radio.PRESETS["LongFast"]
     preamble_ms = radio.PREAMBLE * (2**sf) / (bw / 1000)
     check(
@@ -75,9 +74,8 @@ def check_airtime_against_known():
         f"got {preamble_ms:.1f}",
     )
 
-    # A full frame at LongFast is a little over two seconds. Far from that means a preset
-    # or coding-rate mistake rather than a rounding one - which is how the 1-vs-5 coding
-    # rate bug in the first draft of this file was caught.
+    # A full LongFast frame is a little over two seconds; far from it means a preset or
+    # coding-rate mistake, which is how the 1-vs-5 bug in this file's first draft surfaced.
     full = radio.toa_radiolib(233, "LongFast")
     check(
         f"LongFast 233 B frame {full:.2f} s is in 2.0-2.4 s",
@@ -100,14 +98,7 @@ def check_airtime_against_known():
 def check_against_reference_calculator():
     """A third source: nomdetom.github.io/lora-airtime-calculator.html.
 
-    Its stated formula is
-        T_sym          = 2^SF / BW_kHz
-        payload_bits   = 8*PL - 4*SF + 8 + 16*CRC + 20*explicit_header
-        bits_per_sym   = SF - 2 when LDRO else SF
-        payload_symbols= ceil(payload_bits / 4 / bits_per_sym) * CR_denom + 8
-        airtime        = (preamble + 4.25) * T_sym + payload_symbols * T_sym
-
-    Implemented here from that description alone, independently of radio.py.
+    Implemented from its stated formula alone, independently of radio.py - see MODEL.md.
     """
     print("airtime: against the reference calculator's stated formula")
 
@@ -195,14 +186,7 @@ def check_wire_constants():
 def check_advertising_arithmetic():
     """The advert-versus-repetition budget, derived a second way.
 
-    advertising.py computes costs by summing terms; here the break-even is solved
-    algebraically. N nodes advertising f times an hour cost N*f*advert; sending each of
-    lambda messages k times costs lambda*k*object. Advertising is affordable while
-
-        f/lambda  <  (k - 1 - recovery_fraction) * object / (N * advert)
-
-    with (k-1) because one copy is the original transmission either way, and the recovery
-    fraction subtracted because reconciliation still has to push what someone missed.
+    advertising.py sums terms; this solves the break-even algebraically - MODEL.md carries it.
     """
     print("advertising: budget solved algebraically vs advertising.py")
     import advertising as adv
@@ -258,10 +242,8 @@ def check_advertising_arithmetic():
 
 def check_misdecode_rate():
     print("sketch: the over-capacity misdecode rate the C++ suite pins")
-    # test_pinsketch asserts c=2 misdecodes on more than a fifth of over-capacity trials,
-    # against a predicted 1/c!. The simulation uses the same 1/c! model, so the two
-    # agree by construction at c=2; what is worth checking is that it decays fast enough
-    # that the capacities actually used are safe.
+    # 1/c! agrees with test_pinsketch at c=2 by construction, both being the same model.
+    # What is worth checking is that it decays fast enough for the capacities in use.
     for c, limit in ((2, 0.5), (6, 0.002), (8, 1e-4), (32, 1e-30)):
         rate = 1.0 / math.factorial(c)
         check(f"c={c:<2} misdecode rate {rate:.2e} <= {limit:.0e}", rate <= limit)
