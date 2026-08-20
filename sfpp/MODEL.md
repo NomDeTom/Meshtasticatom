@@ -355,3 +355,154 @@ digests rather than raw block JSONs, because the archive prunes the raw data and
 re-reading its prose would break the first time one was reworded. A run with 400 `beyond-envelope`
 warnings from one mirrored cell and one `inert` is not the same run as the reverse, and a flat list
 of 401 sentences reads identically either way.
+
+## The campaign
+
+### The replay header
+
+One field outside the encryption wrapper: `heard_ago`, in 64-second ticks, two bytes. A node that
+merely overhears a replay can then file it where it belongs in its own history rather than showing
+it as having arrived now.
+
+No separate "replayed" flag is needed, because the field's *presence* is the flag: fresh traffic
+carries no `heard_ago` and a replay does. In protobuf terms that is an optional field, so absence
+costs nothing and cannot be confused with zero-seconds-ago.
+
+64-second ticks because fine resolution is worthless here - the measured spread between two
+archives' accounts of the same message is single-digit seconds - and a full 16 bits of ticks buys 48
+days, comfortably past any retention window.
+
+### Admin sessions
+
+`AdminModule.h:109`, `kOutstandingAdminRequestMs = 300 s`, "the same window as the session
+passkey". The whole round trip has to land inside it or the firmware stops accepting the response:
+the request's slot has expired and the reply is no longer vouched for by anything.
+
+The retry count is an assumption about the operator, not a firmware constant - the firmware has no
+retry loop here at all - so it is stated as one and adjustable with `--admin-attempts`. Three is what
+a person does when a change does not take: presses it again, twice, then stops.
+
+The key half of the model is not an assumption. Admin authorisation lives in
+`config.security.admin_key[3]`, separate from NodeDB and immune to its eviction, so a session's
+outcome is decided by timing rather than by key availability.
+
+### Short IDs
+
+PinSketch here is GF(2^32) because it is a transcription of the firmware's, so the arithmetic cannot
+be re-fielded without breaking the oracle. A narrower short ID is modelled by masking the ID to `b`
+bits before it enters the sketch, which reproduces exactly what `b` controls - the collision rate -
+while airtime is charged at the real `c × b/8`. Widths above 32 are charged their real airtime and
+modelled as collision-free, which they effectively are.
+
+### Where an archive goes
+
+`beside-router` is a plain client one hop from each router: it hears most of what the router hears
+without competing with it for the channel.
+
+`random-any` is the odd one out and deliberately so. Every other strategy answers "where should an
+operator put one" and every one is bounded by something - `routers` and `beside-router` cannot
+exceed the mesh's router count, four on Batumi, so asking either for six gets four and no complaint.
+`random-any` is bounded only by the node count, which makes it the strategy for asking how the
+archive *scales* rather than where it goes, and the honest control for any claim that a deliberate
+arrangement beat chance.
+
+### Buckets and windows
+
+Bucket membership is per server. The firmware assigns a chain counter as `chain_end.counter + 1`
+when it ingests a message that arrived without an official one
+(`StoreForwardPlusPlus.cpp:1366`), so two servers hearing the same broadcast off the air number it
+differently. `SketchIndex.h` describes a count boundary as one both sides derive from the data
+itself; it is derived from local arrival order instead, which is what the bucket-mode arm measures.
+
+A sliding window needs no agreement at all. Two servers' windows overlap because they heard mostly
+the same recent traffic, not because they negotiated a boundary - the XOR of two sketches is the
+symmetric difference of whatever sets they were built over.
+
+Membership is checked against the whole store rather than the window, which is load-bearing in
+window mode: a short ID in the decoded difference may be something the peer holds and has simply
+aged out, and checking the window would request it back.
+
+A server keeps two records for provenance: `(rx_time_ms, bucket)` for objects heard directly, so a
+replay carrying `heard_ago` can be binary-searched into the bucket it would have been in; and
+`message_hash -> (first_heard_ms, [claims])`, holding both the directly-heard copy and every
+replay's claim, which is what makes drift measurable and would catch a peer lying about `heard_ago`.
+
+### Mesh size against density
+
+150 nodes in the same 8 × 8 km as 60 is two and a half times the density, so a size sweep holding
+area fixed measures density and calls it size. Scaling the side by `sqrt(n/60)` keeps nodes per
+square kilometre constant and lets the two be separated.
+
+Every field that draws randomness is seeded off the run's seed through its own constant, so it is
+reproducible without being correlated with anything else the seed decides - and `NoiseField` draws
+no randomness at all, so switching a profile on leaves every other draw exactly where it was.
+
+### Setting a run up
+
+The ground is resolved before the mesh is built, because it decides the config the link budget is
+computed against and, for a real snapshot, the geometry and node count too. It is applied outside
+`build()` so an explicit `--noise-model` still beats the floor a calibrated scenario carries.
+
+A `--nodes` that disagrees with a fixed-geometry scenario is a mistake, not a preference, and
+`opts.nodes` is overwritten rather than ignored: every per-node structure is sized from it, and the
+report records `opts` as the description of the run, so leaving 60 there while 92 nodes transmit
+would be a lie in the one place a reader checks.
+
+Who has a user is assigned at random rather than by degree - whether a node has an owner typing on
+it is a fact about the owner, not about how well sited it is, and choosing the worst-connected nodes
+would make an unattended mesh look cheaper than it is.
+
+### The paired baseline
+
+`none` is a cell of the protocol arm rather than a separate run: same seed, same topology, same
+traffic schedule, no archive. That turns every other cell into a *difference* instead of a
+comparison.
+
+The same nodes are designated whatever the protocol, including under `none`, where they run no
+archive and behave as ordinary nodes. That separates two things this campaign had been conflating:
+what being a server *costs* a node in its own reception - a server transmits more, so contention and
+half duplex charge it - and what reconciliation then *adds* on top. Without it, "held 0.966" cannot
+be split into "heard anyway" and "recovered".
+
+Observers are intermediate nodes wired for telemetry only. They run no archive and change no
+behaviour; they record what an ordinary node in the middle of the mesh ends up with, split by how it
+got there. Without them the bystander benefit of a broadcast replay is invisible.
+
+Placement draws from `random.Random(seed ^ 0x504C4143)` rather than the run's stream. Taking those
+samples from the shared RNG shifted every later draw, so a randomised placement produced a different
+traffic schedule from a deliberate one - an 8% reach difference between the control and the one arm
+that exists to *be* the control (TRAPS 12).
+
+`--servers` below 1 is read as a share of the mesh rather than a count, so a scaling sweep can hold
+archive density fixed while the node count moves. Zero servers is legitimate and means `--baseline`.
+
+What was asked for and what the mesh could offer are both recorded: a role-bounded strategy
+returning a shorter list silently is how "6 servers" and "4 servers" become the same row (TRAPS 6).
+
+### Counting a reception
+
+A DM counts as received only at the node it was addressed to. Every other node that heard it relayed
+it, and counting the flood reaching a bystander as delivery is how an addressed protocol gets
+credited with a broadcast's reach.
+
+Every class is counted, not just the archived one: position, telemetry and nodeinfo are generated,
+flooded and charged airtime, so any airtime share quoted against them needs their receptions
+measured too.
+
+Time bins are keyed by *reception* time rather than origination. Over a bin far wider than the
+latency - an hour against seconds - the two agree except for packets straddling a boundary, and
+tracking an origin time per packet would mean a slot on `Packet` and a live dict of every id in the
+run. The first and last bins are the ones to distrust, which is why the denominator is recorded per
+bin rather than assumed flat. `--reception-bin-s 0` is off and leaves a run byte-identical to one
+made before the series existed.
+
+A 72-hour run reported as one mean is still a single number. The sweeps run three diurnal cycles
+because the cycle is visible, and it is only visible if something samples inside it.
+
+Hop histograms are summed rather than kept per sample - a per-bin array per node is O(nodes × bins)
+and only ever read as a mean, so O(nodes) does. `hops_away` is kept as a histogram rather than a
+mean because the interesting nodes are the ones whose traffic all arrives at 4+ hops, and it mirrors
+`NodeInfoLite.hops_away` rather than being an invented metric.
+
+A replayed object is useful to whoever hears it, not only to whoever asked: a server files it in its
+store and any other node records it for its own history, so both paths run.
