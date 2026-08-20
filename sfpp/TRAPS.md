@@ -1,12 +1,12 @@
-# Twelve ways this simulator produced a confident wrong number
+# Fourteen ways this simulator produced a confident wrong number
 
 Companion to [README.md](README.md), which is the operating manual. This is the other half: not how
-to run the thing, but how it has lied. All ten are fixed. They are written down because the
+to run the thing, but how it has lied. All fourteen are fixed. They are written down because the
 **shapes** recur, and because someone extending this tree can assert against them rather than
 rediscover them one at a time.
 
-Every entry ends with the check that would have caught it, and where that check lives now. Ten are
-enforced automatically on every scheduled run; two are not, and are marked.
+Every entry ends with the check that would have caught it, and where that check lives now. Most are
+enforced automatically on every scheduled run; the two that are not are marked.
 
 ## The defects
 
@@ -203,6 +203,57 @@ stream" was true of the physics and not of this. Second, the *reason it was foun
 warned against splitting the archive axis because "a cell's control comes from a different draw than the
 arms it is subtracted from", and testing that warning is what exposed it. The warning was right, about a
 defect that was already there without any splitting.
+
+## 13. Every frame was 37-60% too long
+
+Found 2026-08-20, in a review of the discrete-event simulator - the one defect here that was never
+found by this tree's own checks, because every check compares runs against each other and all of
+them were wrong the same way.
+
+`lib.phy.airtime` is the Semtech payload-symbol formula, which multiplies by the coding-rate
+**denominator** - 5 for 4/5, 8 for 4/8. The same formula is often written `(CR + 4)` with `CR` an
+index 1..4, reaching the same number from the other side. The code used the second form against a
+stored denominator, so it multiplied by 9 where the radio uses 5. LONG_FAST read 1042 ms at a
+40-byte payload against a true 682 ms; the smallest error in the table was 37%.
+
+Airtime is not one number among many. It sets how long a transmitter holds the channel, how much
+two frames overlap, when a retransmission is due, and what channel utilisation reads - so contention,
+collisions and every derived rate inherit the error. This transport calls the same function.
+
+A second defect sat two lines below it: low data rate optimization was gated on `bw == 125e3 and sf
+in (11, 12)` where the firmware gates it on symbol time, `(1 << sf) / bw >= 16`. VERY_LONG_SLOW -
+SF12 at 62.5 kHz, the longest symbol of any preset - was the one setting running without it.
+
+> **Assert** airtime against ground truth from outside this tree, not against itself.
+> **Enforced**: `tests/test_phy_airtime.py` pins three published LoRaWAN vectors (SF7/BW125/4/5 at
+> 13 B = 46.336 ms, SF12/BW125/4/5 at 13 B = 1155.072 ms and at 64 B = 2793.472 ms), locks all ten
+> presets, and checks the LDRO boundary from both sides.
+
+The shape is new to this list and worth naming: **a formula fed the wrong units of its own
+parameter**. It cannot be caught by comparing runs, by determinism, or by any invariant internal to
+the simulator - every number stays plausible, ordered correctly against every other number, and
+wrong. Only an external vector catches it. Anything in this tree implementing a published formula
+should be pinned to a published value.
+
+## 14. Interference could not be turned off
+
+Found 2026-08-20, in the same review.
+
+`is_channel_active` - the CAD check every transmitter runs before keying up - drew
+`random.randrange(10) <= INTERFERENCE_LEVEL * 10`. Both ends of that comparison are inclusive, so
+the level was quantized to tenths *and floored at one*: 0.00 drew 10%, 0.05 drew 10%, 0.10 drew 20%,
+0.50 drew 0.60. Measured over 200,000 samples, exactly those figures.
+
+The floor is what makes it a trap rather than an inaccuracy. Nothing gates that draw, so every run
+in this tree's history - including every run whose config set interference to zero to isolate
+Meshtastic's own contention - deferred about a tenth of its transmissions to a channel nothing was
+transmitting on.
+
+> **Assert** a probability parameter at its endpoints, not in the middle. 0.0 must never fire and
+> 1.0 must always fire; a bug that only shifts the middle is an inaccuracy, one that breaks an
+> endpoint is a control that does not work.
+> **Enforced**: `tests/test_interference.py` checks both endpoints and four intermediate levels, and
+> `Config.INTERFERENCE_LEVEL` now rejects anything outside [0, 1] when set.
 
 ## What is still open
 

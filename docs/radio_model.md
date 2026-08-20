@@ -73,3 +73,26 @@ to be deliberate. A full 237-byte payload is 14.3 s on LONG_SLOW and 28.6 s on V
 `get_current_slot_time()` is `RadioInterface::computeSlotTimeMsec`, unchanged between v2.7.15 and
 2.8: CAD duration plus 0.2 ms propagation, 0.4 ms turnaround and 7 ms MAC processing, with the
 2.4 GHz CAD term from AN1200.22 behind the region's `wide_lora` flag.
+
+## Interference
+
+`INTERFERENCE_LEVEL` is the probability that the channel is already carrying non-Meshtastic traffic
+at any instant. It is drawn continuously - `random.random() < level` - in two places: `is_channel_active`,
+which is the CAD check every transmitter runs before it keys up, and `check_collision`, which is
+gated behind `COLLISION_DUE_TO_INTERFERENCE` and off by default.
+
+Until 2026-08 both drew `random.randrange(10) <= level * 10`. Both ends of that comparison are
+inclusive, so the level was quantized to tenths and floored at one:
+
+| configured | drawn |
+| --: | --: |
+| 0.00 | 0.10 |
+| 0.05 | 0.10 |
+| 0.10 | 0.20 |
+| 0.50 | 0.60 |
+
+The floor is the part that mattered. `is_channel_active` is not gated by any flag, so every default
+run - including every run configured with interference explicitly disabled - deferred about a tenth
+of its transmissions to a channel that nothing was using. The level is now validated as a
+probability in [0, 1] when set, so a level outside that range fails at configuration rather than
+silently saturating.
