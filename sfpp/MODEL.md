@@ -638,3 +638,105 @@ which is why the version exists as well.
 
 `ground` is null on a flat run, which is the honest label for one: every figure rests on the
 geometry, so a report that does not say which geometry cannot be compared with one that does.
+
+### What the report measures
+
+**`node_channel_util_percent`** is `AirTime::channelUtilizationPercent` per node: six ten-second
+buckets charging every packet the node could hear above the CAD floor, decoded or not, plus its own
+transmissions. It is the number a real device reports, the one that sizes its contention window,
+and it cannot exceed 100.
+
+**`node_air_util_tx_percent`** is `AirTime::utilizationTXPercent`: sixty one-minute buckets holding
+only this node's own transmissions. Reported as the run's mean per node *and* as the worst node,
+because a duty limit binds per device and a mesh whose median is comfortable can still have a
+repeater over the line.
+
+**The stretch report** is the measurement a stretched mesh exists to make. Per node: `heard` - it
+received the message off the air; `unreachable` - no sender-to-node path within the *sender's* hop
+limit exists, so no amount of retry or luck would ever have delivered it; and `recoverable` -
+unreachable, but held by an archive that node can itself reach. `recoverable` is the addressable
+value of the design, and on a mesh narrower than the hop limit it is near zero by construction -
+which is why every earlier run understated the case for an archive.
+
+**The drift report** is what holding both copies buys. A server keeping its own receive time *and*
+every replay's claim can measure the spread between them: that spread is the drift between archives,
+and a claim far outside it is the signature of a peer lying about `heard_ago`.
+
+**The class report** gives distributions rather than means, because a mean receiver count hides the
+node that hears almost nothing - and that node is the one every archive argument is about. `text` is
+the archived class and the one to read first; the rest set the contention text competes with, and a
+per-class table is the only way to see whether SF++ displaces text or telemetry. One row runs across
+every class, because a per-class table answers "did text get through" but not "did this node hear
+the mesh at all".
+
+**The DM report** is produced whenever DMs were generated, archived or not: it is the measure an
+addressed protocol has to be judged on, and it is not the broadcast figure. A DM that fifty nodes
+relayed and the recipient never decoded is a failure, where `text_reception_mean` would score it a
+success fifty times over. `no_key` is separated from `lost` because such a DM never reached the air.
+
+**The ground report** is null without a scenario rather than a dict of zeros: a flat run and a run
+over ground whose terrain happened to cost nothing are different claims. The three loss terms are
+reported separately for the same reason they are computed separately, and on a real city clutter is
+usually the larger.
+
+`link_calibration_loaded` says **loaded, not applied**, and the distinction is the point of
+reporting it. A scenario can carry a fitted RSSI correction and this transport does not call it:
+`_build_links` layers its own per-node gains onto the raw budget, and the fit was trained against a
+budget without them. Saying "applied" because the coefficients parsed would be a lie in the one
+field a reader checks before trusting a link (TRAPS 3). `pairs_beyond_calibration` is the honest
+measure of how much of a run's geometry the fit covers - on a mirrored scenario, most of it is not.
+
+### Hops away: three histograms, two units
+
+`observed` is hops actually traversed by text this node received - what `NodeInfoLite.hops_away`
+records and a client would display. `topology` is shortest-path distance to every other node,
+whether or not anything arrived: the bound the observed histogram is drawn from. A node whose
+observed histogram is empty above 2 hops while its topological one runs to 6 is not well connected;
+it is deaf beyond 2 hops, and that is the node an archive is for.
+
+The printed nodes are chosen by *observed reach* at the tenth percentile, the median and the
+ninetieth, plus the outright worst and best - not the mean node - and each row says how many nodes
+sit in its neighbourhood, so a single node is never mistaken for a population.
+
+Two of the three per-node histograms are in **different units**, which is easy to miss and produces
+a confident wrong reading, so the keys carry the unit:
+
+| key | unit |
+| --- | --- |
+| `truth_peers_at_hop` | nodes at each hop distance, from the topology |
+| `estimated_peers_at_hop` | nodes the firmware module believes sit there, its own scaled histogram |
+| `observed_receptions_at_hop` | **receptions** that arrived having travelled that many hops |
+
+The first two are comparable - belief against truth, in nodes, which is the comparison the hop
+recommendation rests on. The third is a different quantity, since a busy neighbour contributes many
+receptions at one hop, and must not be read as a third column of the same table.
+
+A recommendation from a full table with a raised denominator is a different claim from the same
+number off a table with room in it, so the state it came from is reported beside it.
+
+### The series
+
+Every other delivery figure is a whole-run total, and a total cannot tell a mesh that delivered
+steadily from one that delivered well for a day and then stopped.
+
+**Read `rate` per bin against its own `originated`, never across bins alone.** Traffic is not flat -
+`--diurnal commuter` is 17:1 peak to trough - so a bin with few originations has a noisy rate, and
+the quiet bins are exactly where a handful of packets read as a collapse or a triumph. The
+denominator is in every row for that reason, and `rate` is the same definition as
+`by_class.reception_rate` partitioned by time rather than recomputed, so a row and the whole-run
+figure are the same quantity.
+
+`settled` is the share of nodes whose hop recommendation stopped changing over the second half of
+the run, and `reversals` counts how often it changed direction: a converged mesh and an oscillating
+one have the same mean and differ here.
+
+### The reach ceiling
+
+The best a node could do is the share of senders whose packets can physically reach it. A message
+originating five hops away under a hop limit of three was never going to arrive, and counting it as
+a loss would blame the radio for the routing.
+
+The bound is the *sender's* own hop limit, taken per sender: under `--hop-spread` every node has its
+own limit of 3 to 7, so a single global value would compute a ceiling below the reception actually
+measured. `reach_ceiling_mean`, `missed_beyond_hop_limit` and `missed_within_reach` all derive from
+it; measured reception does not.

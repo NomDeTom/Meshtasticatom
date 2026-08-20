@@ -1769,12 +1769,8 @@ class Campaign:
                 "channel_utilisation": round(
                     self.mesh.stats["airtime_ms"] / self.duration_ms, 3
                 ),
-                # AirTime::channelUtilizationPercent, per node, averaged over the run: six
-                # ten-second buckets charging every packet the node could hear above the CAD floor,
-                # decoded or not, plus its own transmissions. This is the number a real device
-                # reports and the one that sizes its contention window, and it cannot exceed 100.
-                # Sampled on a cadence rather than read at the end: the ring covers sixty seconds,
-                # so a single read after the last packet returns zero for every node.
+                # AirTime::channelUtilizationPercent per node: what a real device reports, and
+                # what sizes its contention window. Cannot exceed 100. MODEL.md.
                 "node_channel_util_percent": self._dist(
                     [
                         sum(samples) / len(samples)
@@ -1782,12 +1778,8 @@ class Campaign:
                         if samples
                     ]
                 ),
-                # AirTime::utilizationTXPercent, per node: sixty one-minute buckets holding only
-                # this node's own transmissions. A different question from the line above and over a
-                # different window - what it SENT in the last hour, not what it HEARD in the last
-                # minute - and the one a regional duty cycle is enforced against. Reported as the
-                # run's mean per node, and as the worst node, because a duty limit binds per device
-                # and a mesh whose median is comfortable can still have a repeater over the line.
+                # AirTime::utilizationTXPercent: what this node SENT in the last hour, and what a
+                # duty cycle binds against. Mean and worst, because it binds per device.
                 "node_air_util_tx_percent": self._dist(
                     [
                         sum(samples) / len(samples)
@@ -1945,17 +1937,7 @@ class Campaign:
     def _stretch_report(self, total):
         """On a mesh wider than any hop limit, what could only ever arrive via an archive?
 
-        This is the measurement a stretched mesh exists to make. For each node, three quantities:
-
-          heard          - it received the message off the air
-          unreachable    - no sender-to-node path within the *sender's* hop limit exists, so no amount
-                           of retry or luck would ever have delivered it
-          recoverable    - unreachable, but held by an archive that node can itself reach
-
-        `recoverable` is the addressable value of the design: text that is structurally impossible to
-        receive directly and is nonetheless sitting on a server within reach. On a mesh narrower than
-        the hop limit it is near zero by construction, which is why every earlier run understated the
-        case for an archive.
+        heard, unreachable and recoverable, the last being the design's value - MODEL.md.
         """
         if not total or not self.servers:
             return {}
@@ -1991,9 +1973,8 @@ class Campaign:
                 if h in in_reach:
                     rec += 1
                 if h in held_here:
-                    # Proof of archive-delivered coverage. No path within the sender's hop limit
-                    # reaches this node, so no retry, no luck and no rebroadcast would ever have
-                    # delivered it - and the node has it. It can only have arrived as a replay.
+                    # Proof of archive-delivered coverage: no path within the sender's hop limit
+                    # reaches this node, and it has the message, so it arrived as a replay.
                     got += 1
             unreachable.append(unreach / total)
             recoverable.append(rec / total)
@@ -2037,9 +2018,7 @@ class Campaign:
     def _drift_report(self):
         """What holding both copies buys: how far apart two accounts of the same message are.
 
-        A server that keeps its own receive time *and* every replay's claim can measure the spread
-        between them. That spread is the useful telemetry - it is the drift between archives, and a
-        claim far outside it is the signature of a peer lying about heard_ago.
+        The spread is the drift between archives; a claim outside it is a lie - MODEL.md.
         """
         spreads = []
         disagreements = 0
@@ -2066,11 +2045,7 @@ class Campaign:
     def _class_report(self):
         """Sent against heard, per class, with per-node distributions and airtime actually spent.
 
-        Distributions rather than means because a mean receiver-count hides the node that hears almost
-        nothing, and that node is the one every archive argument is about. `text` is the archived class
-        and is the one to read first; the rest are here because they set the contention text competes
-        with, and because a per-class table is the only way to see whether SF++ displaces text or
-        telemetry.
+        Distributions, because the mean hides the node the archive argument is about - MODEL.md.
         """
         out = {}
         for name, sent in self.generator.originated.items():
@@ -2102,10 +2077,8 @@ class Campaign:
                 "nodes_receiving_none": sum(1 for c in per_node if c == 0),
                 "archived": name == "text",
             }
-        # One more row across every class, because a per-class table answers "did text get through"
-        # but not "did this node hear the mesh at all". A node can sit at a healthy text share while
-        # missing most of the position and telemetry around it, and an arm that trades one for the
-        # other is invisible in any single class.
+        # One row across every class: a per-class table answers "did text get through" but not
+        # "did this node hear the mesh at all", and an arm that trades one for another hides there.
         total_sent = sum(self.generator.originated.values())
         if total_sent:
             per_node = [0] * self.opts.nodes
@@ -2139,15 +2112,7 @@ class Campaign:
     def _dm_report(self):
         """Did the DM reach the node it was addressed to?
 
-        Reported whenever DMs were generated, archived or not, because it is the measure an addressed
-        protocol has to be judged on and it is not the broadcast figure. A DM that fifty nodes
-        relayed and the recipient never decoded is a failure; `text_reception_mean` would score it as
-        a success fifty times over.
-
-        `no_key` is separated from `lost` on purpose. The firmware never composes a PKI packet for a
-        peer whose key it does not hold, so that DM never reached the air at all - a different
-        failure from one the mesh dropped, and the one an operator meets first when a peer has aged
-        out of the hot store.
+        The measure an addressed protocol is judged on, with `no_key` kept apart - MODEL.md.
         """
         sent = len(self.generator.dm_sent)
         no_key = self.generator.dm_no_key
@@ -2184,23 +2149,15 @@ class Campaign:
     def _ground_report(self):
         """What the run stood on, and what each loss term cost per pair.
 
-        Null without a scenario rather than a dict of zeros: a flat run and a run over ground whose
-        terrain happened to cost nothing are different claims, and a reader comparing two JSONs has
-        to be able to tell them apart. The three terms are reported separately for the same reason
-        they are computed separately - `terrain_db` is a public elevation model, `clutter_db` is a
-        land-cover raster, and on a real city the second is usually the larger of the two.
+        Null without a scenario rather than a dict of zeros - MODEL.md.
         """
         if self.scenario is None:
             return None
         out = dict(self.scenario.summary())
         out["terrain_applied"] = self.terrain is not None
         out["clutter_applied"] = bool(getattr(self.conf, "CLUTTER_ENABLED", False))
-        # Loaded, NOT applied, and the distinction is the whole point of reporting it. A scenario
-        # can carry a fitted RSSI correction - Batumi's is a ridge fit over 296 observed links -
-        # and this transport does not call it: _build_links layers its own per-node transmit and
-        # receive gains onto the raw budget, and the fit was trained against a budget without them.
-        # Saying "applied" here because the coefficients parsed would be a lie in the one field a
-        # reader would check before trusting a link.
+        # Loaded, NOT applied: this transport layers its own gains onto the raw budget, and the
+        # fit was trained without them. Claiming "applied" would be TRAPS 3.
         out["link_calibration_loaded"] = bool(
             getattr(self.conf, "LINK_CALIBRATION_MODEL_ENABLED", False)
         )
@@ -2213,9 +2170,8 @@ class Campaign:
                 "clutter": round(terms["clutter_db"] / pairs, 3),
                 "pairs": pairs,
             }
-            # Pairs further apart than anything the fit was trained on, which fell back to the raw
-            # budget. Reported because it is the honest measure of how much of a run's geometry the
-            # calibration covers - on a mirrored scenario it is most of it.
+            # Pairs beyond anything the fit was trained on, which fell back to the raw budget:
+            # the honest measure of how much of a run's geometry the calibration covers.
             out["pairs_beyond_calibration"] = terms.get("beyond_calibration", 0)
             out["calibration_envelope_m"] = getattr(
                 self.conf, "LINK_CALIBRATION_MAX_M", None
@@ -2225,15 +2181,7 @@ class Campaign:
     def _hops_away_report(self):
         """Per-node histogram of how far the text it received had travelled, plus the topology's own.
 
-        Two distinct things, and conflating them is easy:
-
-          observed  - hops actually traversed by text this node received. What NodeInfoLite.hops_away
-                      records, and what a client would display.
-          topology  - shortest-path distance to every other node, whether or not anything arrived.
-                      The bound the observed histogram is drawn from.
-
-        A node whose observed histogram is empty above 2 hops while its topological one runs to 6 is
-        not well connected - it is deaf beyond 2 hops, and that is the node an archive is for.
+        Observed against topology, and the gap between them is the archive's case - MODEL.md.
         """
         observed, topo = {}, {}
         for i in range(self.opts.nodes):
@@ -2277,27 +2225,7 @@ class Campaign:
     def _typical_nodes(self, observed, topo):
         """A few nodes worth actually printing, each labelled with what it stands for.
 
-        **Not the mean node.** §7.3's standing instruction is to prefer the worst node to the mean, and
-        the docstring on the report above says which node the archive argument is about: the one whose
-        observed histogram is empty above two hops while the topology says six were reachable. So the
-        selection is by *observed reach* - how many receptions a node actually saw - at the tenth
-        percentile, the median and the ninetieth, plus the outright worst and best. Each row says how
-        many nodes sit in its neighbourhood, so a single node is never mistaken for a population.
-
-        Three histograms per node, and **two of the three are in different units** - which is easy to
-        miss and produces a confident wrong reading, so the keys carry the unit:
-
-          truth_peers_at_hop        how many *nodes* sit at each hop distance, from the topology
-          estimated_peers_at_hop    how many *nodes* the firmware module believes sit at each hop -
-                                    its own scaled histogram, averaged over the run
-          observed_receptions_at_hop  how many *receptions* arrived having travelled that many hops
-
-        The first two are comparable: belief against truth, in nodes, which is the comparison the hop
-        recommendation rests on. The third is a different quantity - a busy neighbour contributes many
-        receptions at one hop - so it must not be read as a third column of the same table. It is here
-        because "what did this node actually get" is the other half of the question, and because a node
-        whose receptions stop above two hops while the topology offers six is the node an archive is
-        for.
+        Chosen by observed reach, and two of the three histograms are in different units - MODEL.md.
 
         One consequence worth stating: `truth` has no zero bucket, because a node is not its own peer,
         while `observed` does - a direct reception has travelled no hops. That is not a discrepancy.
@@ -2342,18 +2270,16 @@ class Campaign:
                     "receptions": sum(observed[index]["counts"].values()),
                     "hop_limit": self.mesh.hop_limit_for(node),
                     "degree": len(self.mesh.neighbours[node]),
-                    # Units in the names, deliberately. See the docstring: peers and receptions are
-                    # different quantities and a reader given `truth` beside `observed` will compare
-                    # them.
+                    # Units in the names, deliberately: peers and receptions are different
+                    # quantities, and a reader given both side by side will compare them.
                     "truth_peers_at_hop": topo.get(index),
                     "observed_receptions_at_hop": observed[index]["counts"],
                     "observed_mean_hops": observed[index]["mean_hops"],
                     # None unless the series was sampled - the average needs samples to average.
                     "estimated_peers_at_hop": estimated,
                     "estimate_samples": samples,
-                    # What the module would tell the node to do, and the state the answer came from.
-                    # A recommendation from a full table with a raised denominator is a different
-                    # claim from the same number off a table with room in it.
+                    # The recommendation and the state it came from: a full table with a raised
+                    # denominator is a different claim from a table with room in it.
                     "suggested_hop": (
                         scaling.last_suggested_hop if scaling is not None else None
                     ),
@@ -2376,15 +2302,7 @@ class Campaign:
     def _series_report(self):
         """Reception and load per bin of simulated time, or None if the run did not ask for it.
 
-        Why this exists: every other delivery figure in the report is a whole-run total, and a total
-        cannot tell a mesh that delivered steadily from one that delivered well for a day and then
-        stopped. The sweeps run 72 simulated hours specifically so three diurnal cycles are in the
-        data; a cycle is only readable if something samples inside it.
-
-        **Read `rate` per bin against its own `originated`, never across bins alone.** Traffic is not
-        flat - `--diurnal commuter` is 17:1 peak to trough - so a bin with few originations has a
-        noisy rate, and the quiet bins are exactly the ones where a handful of packets can read as a
-        collapse or a triumph. The denominator is in every row for that reason.
+        Read `rate` against its own `originated`, never across bins alone - MODEL.md.
         """
         if not self.bin_ms:
             return None
@@ -2401,9 +2319,8 @@ class Campaign:
                 classes[name] = {
                     "originated": sent,
                     "receptions": got,
-                    # The same definition as by_class.reception_rate, partitioned by time rather than
-                    # recomputed differently - so a series row and the whole-run figure are the same
-                    # quantity and can be read against each other.
+                    # by_class.reception_rate partitioned by time, not recomputed, so a row and
+                    # the whole-run figure are the same quantity.
                     "rate": round(got / (sent * peers), 4) if sent else None,
                 }
             rows.append(
@@ -2464,9 +2381,7 @@ class Campaign:
     def _adaptive_report(self):
         """What the adaptive quantities did over time, not just where they ended.
 
-        `settled` is the share of nodes whose hop recommendation stopped changing over the second
-        half of the run; `reversals` counts how often it changed direction. A converged mesh and an
-        oscillating one have the same mean, and differ here.
+        A converged mesh and an oscillating one have the same mean and differ here.
         """
         trace = self.mesh.adaptive_trace
         if not trace:
@@ -2502,10 +2417,7 @@ class Campaign:
     def _hop_scaling_report(self):
         """Truth, observation and estimate for the mesh, averaged over the nodes that have rolled.
 
-        The three differ by construction. `truth` is the topological distance nothing on a device
-        can see; `observed` is every hop count the node actually heard, exhaustive; `estimated` is
-        what HopScalingModule would report after sampling, capping at 128 entries, colliding hashes
-        and scaling the survivors back up. The gap between the last two is what the estimator costs.
+        The gap between the last two is what the estimator costs - TRANSPORT.md.
         """
         reports = [self.mesh.hop_report(i) for i in range(self.opts.nodes)]
         rolled = [r for r in reports if r.get("rolls")]
@@ -2542,13 +2454,7 @@ class Campaign:
     def _reach_ceiling(self):
         """The best a node could do: the share of senders whose packets can physically reach it.
 
-        A message that originated five hops away under a hop limit of three was never going to
-        arrive, and counting it as a loss would blame the radio for the routing.
-
-        The bound is the sender's own hop limit, taken per sender. Under `--hop-spread` every node
-        has its own limit of 3 to 7, so a single global value would compute a ceiling below the
-        reception actually measured. `reach_ceiling_mean`, `missed_beyond_hop_limit` and
-        `missed_within_reach` all derive from this; measured reception does not.
+        Bounded per sender by that sender's own hop limit - MODEL.md.
         """
         out = []
         n = self.opts.nodes
