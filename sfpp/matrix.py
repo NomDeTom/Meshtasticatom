@@ -35,23 +35,15 @@ import time
 from . import autochart as AC
 from .campaign import build_parser, run_once
 
-# The suggested first matrix, as the handover ranks it. Presets that differ in both sensitivity and
-# airtime; placements spanning deliberate, adjacent and random; archive counts spanning the router
-# cap so the capping itself is visible.
+# Presets differing in both sensitivity and airtime, placements spanning deliberate to random,
+# and counts that straddle the router cap so the capping is visible rather than hidden.
 PRESETS = ["SHORT_FAST", "LITE_FAST", "LONG_FAST"]
 MIRRORS = [1, 4]
 PLACES = ["random-any", "beside-router", "routers"]
 SERVERS = [2, 4, 8]
 
-# Everything held fixed across the matrix. Seventy-two hours, which is `campaign.py`'s own default.
-#
-# This was two, on the reasoning that two is "long enough for adverts to have spread and for a bucket
-# to have sealed, and short enough that the x4 cells stay inside a CI job". The first half was true of
-# the archive and false of everything around it: `--diurnal commuter` is a 17:1 peak-to-trough curve
-# and a 2 h run samples two hours of it, so every figure here was quietly a figure about one arbitrary
-# stretch of one evening. The second half was solved the right way instead - the cells are now sharded
-# one job per seed (see sim_sweep_matrix.yml), so a job holds ten runs rather than fifty and the x4
-# cells stay inside a CI job at 72 h too.
+# Everything held fixed across the matrix, at campaign.py's own 72-hour default: a 2 h run samples
+# two hours of a 17:1 diurnal curve, and sharding per seed is what keeps a job inside its ceiling.
 BASE = [
     "--hours",
     "72",
@@ -70,14 +62,8 @@ BASE = [
 ]
 
 
-# What each cell covers, in one sentence, for a reader of the results rather than a maintainer of the
-# grid. `sweep.DESCRIPTIONS` is the same idea for the block sweeps and `design.describes()` for the
-# cross; this module had neither, so `collate.describe()` returned None for every matrix cell and the
-# digest carried them nameless - "the honest answer rather than a guessed one", but an absence either
-# way. Composed from the preset and the scale rather than written out cell by cell, because the two
-# coordinates are the whole content of a cell name and hand-writing six of them would let them drift.
-#
-# Held to the grid by test_matrix: every cell has one, and every one names a cell.
+# One sentence per cell, composed from the preset and the scale rather than hand-written, since
+# those two coordinates are the whole content of a cell name. test_matrix holds every cell to one.
 PRESET_NOTES = {
     "SHORT_FAST": "SHORT_FAST, the fast end of what deployed meshes run: least airtime per packet "
     "and the least range per hop, so the mesh is quiet but sparser",
@@ -145,9 +131,7 @@ def arms():
 def shard_of(all_arms, index, total):
     """The `index`-th of `total` contiguous slices of the arm list.
 
-    Contiguous rather than strided so a half-finished round is a readable partial - the baseline lands
-    in the first shard, and reading shard 0 alone gives the control plus the first placements rather
-    than every third arm.
+    Contiguous, not strided, so a half-finished round reads as a partial with its control in it.
     """
     if total <= 1:
         return list(all_arms)
@@ -158,12 +142,7 @@ def shard_of(all_arms, index, total):
 def run_cell(name, preset, mirror, seeds, out_dir, tag=None, shard=None):
     """Every placement and count at one preset and one scale, plus the baseline control per seed.
 
-    `tag` distinguishes the file when a cell is sharded across jobs, exactly as `design.run_cell` uses
-    it: every shard keeps the same `block`, which is what the digest groups on, and only the filename
-    differs. It is not optional once the cells are sharded - the shards' artifacts are downloaded into
-    one directory with `merge-multiple: true`, so without a tag every seed of a cell writes
-    `{cell}.json` and each silently overwrites the last, leaving one seed's data wearing the whole
-    cell's name.
+    `tag` names a shard's file; without it merged artifacts overwrite and one seed wears the cell.
     """
     parser = build_parser()
     results = []

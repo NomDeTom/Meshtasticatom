@@ -32,9 +32,7 @@ import sys
 def coverage(archive_dir):
     """{block name: newest run_id that carried it}, from the digests in an archive.
 
-    Reads the digests rather than the raw block JSONs, for the reason `explorer.py` does: the archive
-    keeps the digests and prunes the raw data, so a digest is the only record still there months later.
-    A digest that will not parse is skipped rather than fatal - one bad night must not stop tonight.
+    Digests, not raw JSONs, which are pruned; an unparseable one is skipped rather than fatal.
     """
     seen = {}
     if not archive_dir or not os.path.isdir(archive_dir):
@@ -60,8 +58,7 @@ def coverage(archive_dir):
 def staleness(declared, archive_dir):
     """`declared`, ordered stalest first: never run, then longest since a digest.
 
-    Ties break on the name so the order is deterministic - two never-run cells must not swap places
-    between two plan steps, or a retry could pick a different part than the run it is retrying.
+    Ties break on name, so a retry picks the same part as the run it is retrying.
     """
     seen = {}
     for path in sorted(glob.glob(os.path.join(archive_dir or "", "*", "summary.json"))):
@@ -89,9 +86,7 @@ def matrix_parts(archive_dir, count):
 def design_parts(archive_dir, count=1):
     """The `count` stalest design meshes, judged by their own cells' coverage.
 
-    A mesh is picked, not a cell, because the mesh is the outer coordinate and one mesh is the unit a
-    round is cut into. Its staleness is that of its *stalest* cell, so a mesh with one cell missing
-    outranks a mesh that is merely older - the missing cell is the gap worth closing.
+    A mesh, not a cell, is the unit a round is cut into; its staleness is its stalest cell's.
     """
     from .design import MESHES, cells
 

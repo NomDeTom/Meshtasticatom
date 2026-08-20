@@ -79,10 +79,8 @@ def report_one(r, indent=""):
             else ""
         )
     )
-    # Two different measurements over two different windows, so they get a line each rather than
-    # being averaged into one "utilisation": chutil is what a node HEARD busy over sixty seconds,
-    # air-util-TX is what it SENT over sixty minutes. The spread is the point in both - a median
-    # says nothing about the repeater carrying the mesh, and a duty cycle binds per device.
+    # A line each, not one "utilisation": chutil is what a node heard busy over a minute, and
+    # air-util-TX what it sent over an hour. The spread is the point in both.
     for key, label, unit in (
         ("node_channel_util_percent", "node chutil  ", "%"),
         ("node_air_util_tx_percent", "node airutil ", "%"),
@@ -177,9 +175,8 @@ def report_one(r, indent=""):
             + ("  · archived" if dm["archived"] else "  · not archived (contention only)")
         )
 
-    # Can an operator configure a node this far out, and when not, what stopped it. Primary, beside
-    # DM success: a mesh whose text reach looks healthy can still be one where nothing past two hops
-    # can be administered, and the reason matters more than the rate.
+    # Whether an operator can configure a node this far out, and what stopped it. Healthy text
+    # reach does not imply anything past two hops can be administered.
     admin = r.get("admin")
     if admin:
         a("")
@@ -248,9 +245,8 @@ def report_block(path):
     for r in rs:
         arms.setdefault(r.get("value", "-"), []).append(r)
     for value, group in arms.items():
-        # group[0], not the loop variable left over from building `arms`: that one points at
-        # whichever report came last in the file, and is only right by coincidence when every
-        # report in the file shares an arm.
+        # group[0], not the leftover loop variable, which points at whichever report came last
+        # and is right only when every report in the file shares an arm.
         out.append(f"\n--- {group[0].get('arm','value')} = {value}   ({len(group)} seeds) ---")
         out.append(report_one(group[0], indent="  "))
         if len(group) > 1:

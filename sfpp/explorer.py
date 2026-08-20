@@ -23,9 +23,8 @@ import statistics
 
 from .collate import COST
 
-# What the page shows per cell. The digest carries more (see collate.METRICS); these are the ones a
-# person reads a trend through, and keeping the embedded payload to eight numbers a cell is what
-# lets thirty runs of 87 blocks stay a file a browser opens instantly.
+# What the page shows per cell; the digest carries more. Eight numbers a cell is what keeps
+# thirty runs of 87 blocks a file a browser opens instantly.
 SHOWN = [
     ("text", "text", 3),
     ("dm", "DM", 3),
@@ -95,11 +94,7 @@ def index_by_block(runs):
 def declared_surfaces():
     """{surface: {cell name: sentence}} for every sweep this tree declares, run or not.
 
-    The archive can only say what *has* run. The other half of "what is still to do" is what the
-    producers declare, which means importing them - so this is the one place the module reaches past
-    the digests. Each import is guarded the way `collate.describe()` guards its own: a digest archive
-    must stay readable on a machine that has the reports and not the sweep definitions, and there the
-    honest answer is a schedule with no declared side rather than a traceback.
+    The one place this module reaches past the digests; guarded, so an archive stays readable alone.
     """
     surfaces = {}
     try:
@@ -120,10 +115,7 @@ def declared_surfaces():
 def schedule(runs, surfaces=None):
     """Every declared cell against what the archive holds for it.
 
-    Two different readings of "still to do", and they diverge sharply here: a nightly block sweep runs
-    every block every night, while the weekly surfaces touch a cell once a week - so "not in the latest
-    run" means nothing for the second group and everything for the first. Both are recorded per row
-    (`runs` and `last_run`) and neither is called "done" on its own.
+    `runs` and `last_run` both recorded: nightly and weekly surfaces mean different things by "due".
     """
     surfaces = declared_surfaces() if surfaces is None else surfaces
     seen = {}
@@ -171,10 +163,7 @@ def schedule(runs, surfaces=None):
 def run_health(runs):
     """Per run: what it cost, what it flagged, and whether its runtime drifted.
 
-    Duration is reported both ways on purpose. `wall_seconds` is what the run actually spent, which is
-    the number that decides whether a job fits its ceiling; seconds-per-simulated-hour is the only form
-    comparable between two runs of different length, and the digest gates on that one. A run reported
-    only by its total looks like a regression every time --hours changes.
+    Duration both ways: the total decides whether a job fits, the rate is what compares.
     """
     out = []
     for run in runs:
@@ -234,12 +223,7 @@ def spread_of(run, key):
 def leaderboard(blocks):
     """Blocks by how far they move a delivery measure, averaged over the runs that carry them.
 
-    Averaged rather than pooled: a block present in thirty runs and one present in two would
-    otherwise be ranked by how long they have been in the archive.
-
-    The measure is whichever of the four the block moves most. They have different denominators and
-    are not comparable, so one ranking column has to name one - and naming `held` for every block
-    would rate an arm that halves DM success as having done nothing.
+    Averaged, not pooled, or age in the archive becomes the ranking. Measure named per block.
     """
     rows = []
     for name, entry in blocks.items():
@@ -691,9 +675,8 @@ def render_html(runs, blocks, board, for_pages=False):
         for f in r.get("gate", {}).get("failures", [])
     ]
 
-    # The three top actions, in the order the site requires them: back, theme, license. Only on the
-    # published copy - the copy that lives on the results branch has no index.html to go back to,
-    # and a link that 404s is worse than no link.
+    # Back, theme, license, in the order the site requires. Only on the published copy: the
+    # results-branch copy has no index.html, and a link that 404s is worse than none.
     actions = [
         '<div class="top-actions">',
         (
@@ -717,9 +700,8 @@ def render_html(runs, blocks, board, for_pages=False):
         "not comparable to each other. <code>demand</code> is aggregate airtime demand across the "
         "whole mesh, a multiple with no ceiling; <code>chutil</code> is what a device reports and "
         "cannot exceed 100%.</p>",
-        # The licence follows the code that produced the page rather than the site's usual one:
-        # Meshtasticator is CC BY 4.0 and parts of its radio model descend from LoRaSim, so the
-        # attribution chain has to reach back to both papers.
+        # The licence follows the code that produced the page, not the site's usual one: the
+        # attribution chain reaches back through Meshtasticator to LoRaSim.
         "<p><b>Licence.</b> This page is output of the simulator in "
         '<a href="https://github.com/NomDeTom/Meshtasticatom">NomDeTom/Meshtasticatom</a>, which is '
         'distributed under <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> because '
