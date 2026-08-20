@@ -2288,7 +2288,13 @@ def make_config(
         conf.PTX = tx_power
     # FREQ is derived from the preset's bandwidth at construction, so changing the preset afterwards
     # leaves it stale. phy.py binds a module-level config at import, which must be this same object.
-    conf.FREQ = conf.REGION["freq_start"] + conf.current_preset["bw"] * conf.CHANNEL_NUM
+    #
+    # A preset this transport adds on top of the vendored table has no region profile to be legal
+    # in, so fall back to the region's own default preset for slot selection when that happens.
+    try:
+        conf.FREQ = conf.frequency()
+    except ValueError:
+        conf.FREQ = conf.frequency(preset=conf.REGION["default_preset"])
     import lib.config
     import lib.phy as phy
 

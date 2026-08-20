@@ -6,7 +6,7 @@ from lib.radio_loss import estimate_snr
 
 logger = logging.getLogger(__name__)
 
-# checked as of tag v2.7.15.567b8ea in meshtastic-firmware repo
+# checked as of 2.8.0 (version.properties), commit 51eadb7, in the meshtastic-firmware repo
 # Firmware draws with Arduino random(0, n), which is half-open, so randrange is the match for it.
 CWmin = 3
 CWmax = 8
@@ -48,7 +48,7 @@ def get_tx_delay_msec_weighted(node, rssi):  # from RadioInterface::getTxDelayMs
 
 def get_tx_delay_msec(node):  # from RadioInterface::getTxDelayMsec
     # channelUtilizationPercent is actually computed based on the last CHANNEL_UTILIZATION_PERIODS, summing
-    # the utilization of those periods. In v2.7.15.567b8ea this macro is 6, with SECONDS_PER_PERIOD 3600
+    # the utilization of those periods. At this pin the macro is 6, with SECONDS_PER_PERIOD 3600
     channelUtil = node.airUtilization / node.env.now * 100
     CWsize = int(channelUtil * (CWmax - CWmin) / 100 + CWmin)
     CW = random.randrange(0, 2 ** CWsize)

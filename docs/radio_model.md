@@ -110,3 +110,40 @@ overlapping: the latest a router can transmit is strictly before the earliest a 
 
 `CWmin = 3`, `CWmax = 8`, and `getCWsize` maps a reported SNR of -20..10 dB onto that range. Both
 constants and the mapping are unchanged between v2.7.15 and 2.8.
+
+## Regions and frequency slots
+
+The region list, the region profiles and the modem preset table in `lib/config.py` are pinned to
+firmware 2.8.0 (`version.properties`), commit `51eadb7`. That pin is checkable rather than
+decorative: 2.8 removed `UA_868` and added `EU_866`, `EU_N_868` and seven ITU ham regions, so the
+set of region names dates the table on its own.
+
+A frequency comes out of four things, following `RadioInterface::applyModemConfig`:
+
+```
+slotWidth = spacing + 2·padding + bandwidth
+slots     = round((freqEnd − freqStart + spacing) / slotWidth)
+slot      = overrideSlot − 1, or hash(preset display name) mod slots
+freq      = freqStart + bandwidth/2 + padding + slot · slotWidth
+```
+
+`CHANNEL_NUM` is 1-based, as the firmware's `loraConfig.channel_num` is, and 0 means "not set" -
+which takes the region default rather than the bottom of the band. A slot past the end of the band
+is rejected instead of silently landing outside it.
+
+The half-bandwidth centre offset is what the previous calculation omitted. It put every region half
+a channel low: US LongFast came out at 908.75 MHz where a real device sits at **906.875 MHz**, and
+EU_868 at 876.15 MHz, which is outside its own 869.4-869.65 MHz band entirely.
+
+Presets are region-scoped. A region's profile carries the list its firmware will accept, so
+requesting SHORT_TURBO on EU_868 raises rather than simulating a configuration no device can hold.
+2.8 also added seven presets the table did not have - MEDIUM_TURBO, the LITE pair, the NARROW pair
+and the TINY pair - and two of those are region defaults: EU_866 comes up on LITE_FAST and EU_N_868
+on NARROW_SLOW.
+
+## Early rebroadcast
+
+`lib/mac.py` gives the early window to ROUTER alone, which is 2.8's
+`shouldRebroadcastEarlyLikeRouter`. At v2.7.15 a CLIENT_BASE node also took it, for traffic to or
+from a favourited node; that was removed in 2.8. The code was already 2.8's behaviour while the
+file's comment named the older tag - one reason the pin moved rather than the code.
