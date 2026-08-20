@@ -122,10 +122,7 @@ class TestDuration(unittest.TestCase):
     def test_the_matrix_runs_long_enough_for_a_diurnal_cycle(self):
         """Three passes of the 24-hour curve, not one.
 
-        This was two hours, which samples two hours of a 17:1 peak-to-trough curve - so a time-of-day
-        effect and an artefact of wherever --start-hour landed were the same reading. A regression here
-        would not fail anything; it would quietly make every figure in the matrix a figure about one
-        arbitrary evening again.
+        At two hours a time-of-day effect and where --start-hour landed are the same reading.
         """
         opts = build_parser().parse_args(M.cell_argv("LONG_FAST", 1, "random-any", 2))
         self.assertGreaterEqual(opts.hours, 72)

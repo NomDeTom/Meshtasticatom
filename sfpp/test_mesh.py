@@ -29,8 +29,7 @@ def small_mesh(profile="2.8", nodes=12, seed=11, area=None, **kwargs):
 def heard(mesh, rx, peer, hops_away=0, at=None):
     """Put `peer` in `rx`'s hot store, as receiving a packet from it would.
 
-    Routing can only see what the store holds, so a test that skips this is testing a node that has
-    never heard of anyone - which is a real state, but rarely the one under test.
+    Routing sees only what the store holds, so skipping this tests a node that knows nobody.
     """
     if at is None:
         return mesh.note_heard(rx, peer, hops_away=hops_away)
@@ -44,10 +43,7 @@ def heard(mesh, rx, peer, hops_away=0, at=None):
 def _manual():
     """The operating manual, wherever this tree is checked out.
 
-    It sits beside sfpp/ in the firmware repo and inside it in the Meshtasticator repo, where the
-    directory above is the vendored tree's own root and already has a README about a different
-    simulator. The tests below treat this file as a contract - every flag documented, every report
-    section named - so they have to find the right one rather than whichever README is nearest.
+    Treated as a contract below, so it has to be the right README and not the nearest one.
     """
     here = pathlib.Path(__file__).resolve().parent
     for candidate in (here / "README.md", here.parent / "README.md"):
@@ -243,8 +239,7 @@ class QueueOrder(unittest.TestCase):
     def test_a_ready_packet_displaces_a_deferred_one(self):
         """Branch 3: ready always beats deferred once the deferred packet is overdue.
 
-        This is the case ROUTER_LATE creates, and the reason the eviction rule matters to
-        R-routerlate: a mesh with late relays queued is a mesh with a mixed queue.
+        The case ROUTER_LATE creates: a mesh with late relays queued has a mixed queue.
         """
         mesh = small_mesh(nodes=6)
         radio = mesh.nodes[0]
@@ -278,11 +273,7 @@ class QueueOrder(unittest.TestCase):
 
     def test_the_backoff_cap_exists_only_under_legacy(self):
         """The firmware has no backoff cap - setTransmitDelay reschedules indefinitely - so no
-        release series carries one, and only `legacy` does.
-
-        The rate at which it fired is a separate question: see
-        test_the_cap_alone_does_not_reproduce_pre_fold_in_drops.
-        """
+        release series carries one, and only `legacy` does."""
         self.assertIsNone(M.Profile("2.8").max_backoffs)
         self.assertEqual(M.Profile("legacy").max_backoffs, 400)
 
@@ -305,9 +296,7 @@ class QueueOrder(unittest.TestCase):
     def test_overflow_is_the_only_drop(self):
         """RadioLibInterface::send drops on a full queue and nowhere else.
 
-        A blocked packet is rescheduled indefinitely by setTransmitDelay - there is no backoff cap
-        in the firmware, so congestion has to surface as a full queue and as latency rather than as
-        packets that quietly evaporate.
+        Congestion surfaces as a full queue and as latency, not as packets that evaporate.
         """
         mesh = small_mesh(nodes=6)
         mesh.nodes[0].busy_until = 1e9  # the radio never frees up
@@ -607,8 +596,7 @@ class LastByteResolution(unittest.TestCase):
     def test_a_collision_outside_the_store_is_not_a_collision(self):
         """The reason a small store makes resolution *better*, stated as a test.
 
-        Two nodes share a byte, but only one is in our store. A model that resolved against the
-        whole mesh would call this ambiguous and fall back to flooding; the firmware resolves it.
+        Two nodes share a byte and only one is in our store, so the firmware resolves it.
         """
         mesh = small_mesh()
         mesh.nodes[4].node_num = (mesh.nodes[4].node_num & ~0xFF) | mesh.nodes[
@@ -762,8 +750,7 @@ class HotStore(unittest.TestCase):
     def test_a_fresh_route_dies_when_its_neighbour_goes_quiet(self):
         """The fourth death, and the one with the longest clock: resolution freshness.
 
-        The route is inside its 30-minute TTL and has never failed, but the neighbour it points at
-        has not been heard for two hours, so the byte no longer resolves on the send path.
+        Inside its TTL and never failed, but the neighbour has not been heard for two hours.
         """
         mesh = small_mesh()
         peer = mesh.neighbours[0][0]
@@ -849,8 +836,7 @@ class Platforms(unittest.TestCase):
     def test_the_board_table_is_derived_from_this_tree(self):
         """Spot-checks against variants/*/platformio.ini, which is where these numbers come from.
 
-        Heltec V3 is the one worth pinning: it is an 8 MB ESP32-S3, so it gets 200 slots, not the
-        120 that an "nRF52840-ish default" assumption hands it.
+        Heltec V3 is the one worth pinning: an 8 MB ESP32-S3, so 200 slots and not 120.
         """
         self.assertEqual(M.HARDWARE_STORE["HELTEC_V3"], 200)
         self.assertEqual(M.HARDWARE_STORE["HELTEC_V4"], 250)
@@ -958,8 +944,7 @@ class Reliable(unittest.TestCase):
     def test_hearing_a_relay_is_an_implicit_ack_and_stops_the_retries(self):
         """ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard.
 
-        The point of this optimisation is airtime, so it is worth pinning: on a mesh with any
-        neighbour at all, the first relay we overhear ends the retransmission schedule outright.
+        The first relay overheard ends the retransmission schedule outright.
         """
         mesh = small_mesh()
         mesh.originate(0, 70, 40, want_ack=True)
@@ -1245,9 +1230,7 @@ class HopScalingEstimator(unittest.TestCase):
     def test_the_hash_is_the_identity_so_two_nodes_can_collide(self):
         """Identity is a 16-bit hash, so a big enough mesh puts two nodes in one entry.
 
-        Real node numbers are needed to see it: the hash is multiplicative, and sequential ids
-        1..5000 produce no collisions at all, so a model numbering its nodes by array index would
-        report this estimator as exact.
+        Real node numbers are needed to see it: sequential ids collide not at all.
         """
         module = self.module()
         rng = random.Random(1)
@@ -1321,9 +1304,7 @@ class HopScalingEstimator(unittest.TestCase):
     def test_the_walk_recommends_the_first_hop_reaching_the_target(self):
         """40 nodes is the threshold, and the walk extends one hop further when that is cheap.
 
-        5 + 15 + 25 clears 40 at three hops. The fourth hop reaches nobody at all here, so
-        extending to it costs nothing and the budget - 40 nodes, stretched toward 80 in proportion
-        to how politely the mesh is behaving - allows it: (45 + 0) * 4 <= 40 * 4 + 40 * 2.
+        5 + 15 + 25 clears 40 at three hops, and the fourth reaches nobody, so it is free.
         """
         module = self.module()
         per_hop = [0] * (M.HopScaling.MAX_HOP + 1)
@@ -1369,8 +1350,7 @@ class HopScalingEstimator(unittest.TestCase):
     def test_all_three_histograms_are_indexed_by_hops_away(self):
         """A direct neighbour is zero hops away, not one, in every one of the three.
 
-        getHopsAway is hop_start - hop_limit, so an unrelayed packet reads 0. Reporting truth as a
-        BFS distance would put the same neighbour in bucket 1 and make the comparison meaningless.
+        getHopsAway is hop_start - hop_limit, so an unrelayed packet reads 0.
         """
         mesh = small_mesh(nodes=10, seed=4)
         report = mesh.hop_report(0)
@@ -1825,8 +1805,7 @@ class ExtraRepeats(unittest.TestCase):
     def test_a_dense_neighbourhood_forces_it_too(self):
         """The count comes from HopScalingModule's zero-hop bucket, which only moves hourly.
 
-        So a mesh that has just become dense keeps tolerating repeats until the next roll: the
-        threshold is enforced against an estimate that lags the truth by up to an hour.
+        So the threshold is enforced against an estimate lagging the truth by up to an hour.
         """
         mesh = self.mesh(nodes=20)
         node = mesh.nodes[0]
@@ -1981,9 +1960,7 @@ class TracerouteLegs(unittest.TestCase):
     def test_a_reply_records_its_own_leg_not_the_outbound_one(self):
         """A reply need not retrace the request, so its relays must not land on the forward path.
 
-        With one shared list, a return-leg relay was appended to the route the request measured,
-        and _traceroute_learn then taught it as a forward next hop under cover of the corroboration
-        guard. TraceRouteModule.cpp:377 picks the array by direction; this mirrors that.
+        TraceRouteModule.cpp:377 picks the array by direction; this mirrors that.
         """
         mesh = small_mesh(nodes=6, seed=3)
         request = M.Packet(1, 0, M.TRACEROUTE_PORTNUM, 20, destination=5)
@@ -2017,9 +1994,7 @@ class TracerouteLegs(unittest.TestCase):
 class AsymmetricGain(unittest.TestCase):
     """Transmit and receive gain are separate numbers, so a link can run one way.
 
-    `neighbours[i]` is i's *audience* - the nodes that clear sensitivity on a transmission from i -
-    because _deliver walks it from the sending node. So transmit gain grows `neighbours[i]`, and
-    receive gain grows the set of j whose audience contains i.
+    `neighbours[i]` is i's audience, so transmit gain grows it and receive gain grows who has i.
     """
 
     @staticmethod
@@ -2256,8 +2231,7 @@ class FirmwarePresets(unittest.TestCase):
     def test_a_full_payload_is_not_six_seconds_on_long_slow(self):
         """MAX_AIRTIME_MS was justified against a 6 s figure. A full LONG_SLOW payload is 14.3 s.
 
-        The 21 s and 35 s this test once asserted came from lib.phy.airtime multiplying by cr + 4
-        against a coding-rate denominator, which inflated every preset by 37-60%.
+        The 21 s it once asserted came from the inflated airtime - TRAPS 13.
         """
         conf = M.make_config()
         for name, at_least in (("LONG_SLOW", 14000.0), ("VERY_LONG_SLOW", 28000.0)):
@@ -2273,9 +2247,7 @@ class ToolingContract(unittest.TestCase):
     def test_the_campaign_imports_without_matplotlib(self):
         """campaign imports autochart eagerly, so a chart library must not gate running at all.
 
-        matplotlib is not in requirements.txt, so a fresh checkout has none. autochart's own auto()
-        promises a chart never fails a run; an import at module scope broke that promise before the
-        promise could be kept.
+        matplotlib is not in requirements.txt, so a fresh checkout has none.
         """
         import importlib
 
@@ -2296,9 +2268,7 @@ class ToolingContract(unittest.TestCase):
     def test_no_module_fails_to_import_without_matplotlib(self):
         """A missing chart library must not stop a module loading, whatever the module is for.
 
-        The drawing tools cannot do their job without it, but they say so and return non-zero
-        rather than raising an import traceback at whoever ran them. Run in a subprocess: blocking
-        an import in this one would leave sys.modules in a state the other tests read.
+        In a subprocess: blocking an import here would leave sys.modules poisoned for other tests.
         """
         import subprocess
 
@@ -2372,8 +2342,7 @@ print(",".join(failed))
     def test_tuning_survives_a_block_whose_arm_is_not_a_number(self):
         """The tuning pass sorted arm values with float(), which no boolean survives.
 
-        It crashed after every block had run and been pushed, so the results were safe and the
-        summary was lost. Exercised against a boolean arm because that is what broke it.
+        It crashed after every block had run, so the results survived and the summary did not.
         """
         from .tuning import _arm, _sortable
 
@@ -2394,10 +2363,7 @@ print(",".join(failed))
     def test_the_runner_checks_for_a_block_by_exact_name(self):
         """Seven block names are a prefix of another, so a glob skips the shorter one.
 
-        R-signing was skipped without running because R-signing-cost.json satisfied
-        `ls R-signing*.json`. The names are kept - they read well and the notes refer to them - so
-        the presence check has to be exact. run-blocks.sh never passes --grid, so a block always
-        writes exactly <name>.json and there is no suffix a glob would be needed for.
+        R-signing was skipped because R-signing-cost.json satisfied `ls R-signing*.json`.
         """
         from .sweep import BLOCKS
 
@@ -2425,10 +2391,7 @@ print(",".join(failed))
     def test_every_block_cell_actually_differs_from_its_neighbours(self):
         """Two cells of one block must parse to different values for the arm they sweep.
 
-        The enabling-condition test below checks an arm has the partner flag it needs. This checks
-        something weaker and more general: that the block's own cells are distinguishable at all.
-        K-spread passed every other check and still produced two identical rows, because a false
-        arm omitted its flag and --hop-spread defaults to true, so both cells ran with it on.
+        Weaker and more general than the enabling-condition test below, and it caught K-spread.
         """
         from .campaign import build_parser
         from .sweep import BLOCKS, cell_argv
@@ -2457,10 +2420,7 @@ print(",".join(failed))
     def test_no_block_sweeps_an_arm_its_grid_leaves_inert(self):
         """An arm that needs a second flag produces identical rows without it, and reads as a result.
 
-        Each of these was found by running both sides of the arm and diffing the reports, not by
-        reading the code: `--hop-limit` is never consulted while `--hop-spread` assigns per-node
-        limits from centrality, and the retry-ladder arms have nothing to retransmit until SR
-        traffic is routed through the transport with routes to address it to.
+        Each was found by running both sides and diffing the reports, not by reading the code.
         """
         from .sweep import BLOCKS
 
@@ -2558,8 +2518,7 @@ print(",".join(failed))
     def test_every_command_line_flag_is_documented(self):
         """The README is the operating manual, so a flag it does not name cannot be found.
 
-        Eleven flags had accumulated undocumented, and two profiles the parser no longer accepts
-        were still described. Both directions are checked because both drifted.
+        Both directions are checked, because both had drifted.
         """
         import re
 
@@ -2573,9 +2532,8 @@ print(",".join(failed))
         undocumented = sorted(f for f in flags if f not in readme)
         self.assertEqual(undocumented, [], "flags the README does not mention")
 
-        # And the other way: a flag the README names in backticks must still exist. `--runs`,
-        # `--out` and `--history` belong to the analysis tools rather than to campaign, so they are
-        # exempt.
+        # And the other way: a flag the README names must still exist. The analysis tools' own
+        # flags are exempt, since they do not belong to campaign.
         named = set(re.findall(r"`(--[a-z0-9][a-z0-9-]+)", readme))
         ghosts = sorted(
             named
@@ -2600,8 +2558,7 @@ print(",".join(failed))
     def test_the_documented_defaults_are_the_parser_defaults(self):
         """§4 quotes a default for every flag, and a wrong one sends someone down the wrong arm.
 
-        Only §4's tables are read - §10.4's second column names an enabling flag rather than a
-        default. Words like `off` and `empty` stand in for False and "", so they are accepted.
+        Only §4's tables are read; words like `off` stand in for False and are accepted.
         """
         import re
 
@@ -2756,8 +2713,7 @@ class AdaptiveCongestion(unittest.TestCase):
     def test_the_input_choice_reaches_the_per_node_coefficient(self):
         """hotstore saturates, truesize is the ceiling, utilisation ignores node counts entirely.
 
-        The arm is worthless if the choice only reaches the static coefficient: adaptive is the
-        default, so an input that stops at the mesh-wide value would leave every cell identical.
+        Adaptive is the default, so an input stopping at the mesh-wide value leaves cells identical.
         """
         import random
 
@@ -2860,8 +2816,7 @@ class KeyEconomics(unittest.TestCase):
 class FirmwareVersions(unittest.TestCase):
     """Pins each release series' rules to the tags in this repository.
 
-    A series profile is that series' final release: 2.4 = v2.4.3, 2.5 = v2.5.23, 2.6 = v2.6.13,
-    2.7 = v2.7.21, 2.8 = this tree. Every expectation below was read off the named file at that tag.
+    Each profile is that series' final release, and every expectation was read off the tag.
     """
 
     def test_contention_window_constants_per_series(self):
@@ -2884,9 +2839,7 @@ class FirmwareVersions(unittest.TestCase):
     def test_cw_size_at_zero_snr_differs_by_series(self):
         """getCWsize(0) under each series' own map() arguments, worked through by hand.
 
-        2.4: (0+20)*(8-2)//(15+20) + 2 = 120//35 + 2 = 5.
-        2.5: (0+20)*(7-2)//(15+20) + 2 = 100//35 + 2 = 4.
-        2.6+: (0+20)*(8-3)//(10+20) + 3 = 100//30 + 3 = 6.
+        2.4 gives 5, 2.5 gives 4, and 2.6 onward gives 6 - TRANSPORT.md has the bounds.
         """
         for version, expected in (("2.4", 5), ("2.5", 4), ("2.6", 6), ("2.8", 6)):
             mesh = small_mesh(profile=version)
@@ -2895,8 +2848,7 @@ class FirmwareVersions(unittest.TestCase):
     def test_the_router_offset_is_in_every_series(self):
         """The 2 * CWmax * slot a non-early rebroadcaster waits is in 2.4 already.
 
-        It was attributed to 2.8 when the fold-in landed. getTxDelayMsecWeighted has carried it since
-        before 2.4, so only `legacy` - this transport's own earlier model - is missing it.
+        Only `legacy` - this transport's own earlier model - is missing it.
         """
         for version in M.VERSIONS:
             mesh = small_mesh(profile=version)
@@ -2982,9 +2934,7 @@ class FirmwareVersions(unittest.TestCase):
     def test_hop_preservation_starts_at_2_7_and_gains_ambiguity_checking_in_2_8(self):
         """Router::shouldDecrementHopLimit arrived in v2.7.11 and resolves uniquely only here.
 
-        2.7 walks its store for favourited router-like nodes and preserves the hop on the first
-        matching last byte. This tree resolves the byte first and charges the hop when a second node
-        answers to it.
+        2.7 preserves on the first byte match; this tree charges the hop when a second answers.
         """
         for version in ("2.4", "2.5", "2.6"):
             self.assertFalse(M.Profile(version).preserve_hops, version)
@@ -3056,10 +3006,8 @@ class EndToEnd(unittest.TestCase):
         stats = mesh.stats
         self.assertGreater(stats["receptions"], 0)
         self.assertGreater(stats["transmissions"], 5)
-        # Every relay that reached the air was queued first, and everything queued either flew, was
-        # cancelled, was swapped out by a hop-limit upgrade, or is still sitting there. The upgrade
-        # term is the one that is easy to miss: perhapsHandleUpgradedPacket pops a queued copy that
-        # neither flew nor was cancelled, then queues the better copy in its place.
+        # Everything queued either flew, was cancelled, was swapped out by a hop-limit upgrade,
+        # or is still there. The upgrade term is the one that is easy to miss.
         #
         # This accounting is only exact while nothing overflows, because a queue-full drop counts
         # the refused newcomer and the evicted incumbent under one counter.
@@ -3090,9 +3038,7 @@ if __name__ == "__main__":
 class BlockDescriptions(unittest.TestCase):
     """Every block explains what it changes, and no explanation outlives its block.
 
-    A trend table whose rows read `arm=topology` tells a reader which flag moved and not what that
-    means. These are held to the block list here because a block added without one would silently
-    publish an unexplained row, and a block renamed would leave its explanation pointing nowhere.
+    A row reading `arm=topology` says which flag moved and not what that means.
     """
 
     def test_every_block_is_explained(self):
@@ -3113,9 +3059,8 @@ class BlockDescriptions(unittest.TestCase):
             self.assertGreater(len(text), 30, f"{name}: too short to explain anything")
 
     def test_sibling_blocks_do_not_share_an_explanation(self):
-        # Several pairs differ only by a grid flag - G-place against N-place, K-size against
-        # K-density, R-repeats against R-repeats-busy. Identical text would leave a reader unable to
-        # tell why both exist.
+        # Several pairs differ only by a grid flag, so identical text would leave a reader
+        # unable to tell why both exist.
         from sfpp.sweep import DESCRIPTIONS
 
         seen = {}
