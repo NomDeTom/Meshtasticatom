@@ -36,9 +36,8 @@ import json
 import os
 import statistics
 
-# Everything the digest carries per cell, by path into a campaign report. A metric absent from a
-# report - an older transport, a section that only exists under some flags - becomes None rather
-# than raising, so a run assembled from mixed vintages still collates.
+# Everything the digest carries per cell, by path into a campaign report. An absent metric
+# becomes None rather than raising, so mixed vintages still collate.
 METRICS = {
     # --- the four successes. Different denominators; see the module docstring and README §7.2 ---
     "text": ("baseline", "text_reception_mean"),
@@ -89,57 +88,35 @@ METRICS = {
     "pairs_beyond_calibration": ("ground", "pairs_beyond_calibration"),
 }
 
-# The measures a block is ranked by. Whichever of them moves furthest across an arm decides where
-# the block sits in the trend table, and the table names which one it was - because ranking every
-# block by `held` alone would rate an arm that halves DM success as having done nothing.
+# The measures a block is ranked by: whichever moves furthest decides, and the table says which.
+# Ranking on `held` alone would rate an arm that halves DM success as inert. MODEL.md.
 SUCCESSES = ("text", "dm", "admin", "held")
 
 # What an arm costs, read beside whichever success it moved.
 COST = "text"
 
-# The arm a cell is a difference against, where a block declares one. `design.py` puts a control in
-# every cell - the archive `off` arm, the mesh as the firmware runs it - so each later arm is a
-# difference on the same mesh at the same seed; a block sweep has no such cell and its arms are read
-# against each other instead. First name present wins, so a block may declare either.
+# The arm a cell is a difference against, where a block declares one; first name present wins.
+# A block sweep has no control cell and its arms are read against each other. MODEL.md.
 CONTROL = ("control", "off")
 
-# The price side of an arm. Several blocks - reconciliation strategy, signing, advert transport -
-# deliberately hold delivery flat and differ only in what they spend, and ranking those on delivery
-# alone reports them as having done nothing. `D-resolve` is the case that made this obvious: enum
-# advertises with a fifth of sketch's advert bytes and then pays two thirds more in total traffic,
-# while held moves by 0.004. Cost is read as a ratio rather than a difference because these span
-# orders of magnitude and "5.7x" is the readable figure where "11877 bytes" is not.
+# The price side of an arm, for the blocks that hold delivery flat and differ only in spend.
+# Read as a ratio: these span orders of magnitude. MODEL.md.
 COSTS = ("advert_bytes", "sr_bytes", "sr_airtime", "bytes_on_air")
 
-# How many observations a success needs before an arm may be ranked on it. Broadcast reach is
-# measured over every node of every broadcast and always clears this; DM and admin have their own
-# small denominators, and one admin probe an hour over two hours is two sessions - where a single
-# failed session reads as a 50% swing and tops a leaderboard built from real effects. A measure
-# below the floor is still reported, it just cannot decide where the block ranks.
+# What a success needs before it may rank a block. Two admin sessions make one failure a 50%
+# swing; below the floor a measure is still reported, it just cannot rank. MODEL.md.
 MIN_OBSERVATIONS = {"dm": 20, "admin": 20}
 DENOMINATOR = {"dm": "dm_composed", "admin": "admin_sessions"}
 
-# Cells differing by less than this on every recorded number are treated as the same cell, which is
-# how an inert arm is detected. Relative, because the numbers compared span reception fractions and
-# byte counters in the millions; a flag that moves a counter by one part in a billion has not moved
-# it. The first version of this check compared only the metrics this module displays and called
-# `E-signed` inert - the arm moves `advert_bytes` by 43%, which was not among them. Hence: every
-# number in the report, not a chosen few.
+# Cells differing by less than this on every recorded number are the same cell. Relative, and
+# over every number rather than the displayed few - MODEL.md.
 INERT_EPSILON = 1e-9
 
 # A run discarding more than this share of its rebroadcast attempts is measuring its own backoff cap.
 QUEUE_DROP_WARN = 0.10
 
-# Not measurements: `opts` restates the arm's own setting, `seed` names the draw, and `wall_seconds`
-# is how long this machine took - it differs between two identical cells and would make every block
-# look live.
-#
-# `value` is here for the same reason as `opts`, and it was missing: it *is* the arm's setting, and on
-# an arm whose values are numbers it is also a number, so `_inert` counted it as a measurement that
-# distinguished the cells and could never report the block inert. That silently disabled the check for
-# **40 of the 87 blocks** - every arm swept over numbers, `E-capacity` and `G-servers` and `F-loss`
-# among them - while leaving it working for the string-valued ones, which is why it went unnoticed.
-# README §8 calls this check one of the two worth keeping permanently; it was half a check.
+# Not measurements: they restate the arm, name the draw, or time this machine. `value` was
+# missing, which disabled the inert check for 40 of the 87 blocks - TRAPS 11.
 NOT_A_MEASUREMENT = ("opts", "seed", "wall_seconds", "value")
 
 # How far a block's runtime may drift from its own history before the digest says so. TRAPS.md #7 is
@@ -189,8 +166,7 @@ def load_block(path):
 def admin_success_rate(admin):
     """One admin figure across every hop distance probed, weighted by sessions attempted.
 
-    `admin` is keyed by hop separation and each entry has its own denominator. Averaging the rates
-    would weight a distance with two sessions the same as one with fifty.
+    Averaging the rates would weight two sessions the same as fifty.
     """
     if not isinstance(admin, dict):
         return None
@@ -209,9 +185,7 @@ def admin_sessions(admin):
 def derived(report):
     """Compute the figures that are not read straight out of the report.
 
-    `nodes` is the one that has already caused a wrong conclusion: a fixed-geometry scenario decides
-    its own node count and overrides `--nodes`, so the requested figure describes a mesh that was
-    never built. Batumi is 92 whatever `--nodes` says.
+    `nodes` comes from the mesh that was built, not from --nodes - TRAPS 9.
     """
     ground = report.get("ground") or {}
     mesh = report.get("mesh") or {}
@@ -257,9 +231,7 @@ def group_by_value(reports):
 def cells_of(reports):
     """One entry per arm value, averaged over whatever seeds the run drew for it.
 
-    Grouped on the arm's value, not on `servers_placed` - but see `placement_capped` below: a
-    role-bounded placement caps at the mesh's router count, so two rows of a `--servers` sweep can be
-    the same run. The digest records both figures so a reader can group on the achieved one.
+    Grouped on the requested value; `placement_capped` records where the achieved one differs.
     """
     grouped = group_by_value(reports)
     cells = []
@@ -289,9 +261,7 @@ def _ratio(cells, key):
 def against_control(cells):
     """Each cell's difference from the block's control arm, where there is one.
 
-    A difference rather than a ratio because these are shares: "+0.041 reach" is the sentence a
-    reader wants, and a ratio of two reception fractions is not. The control keeps a row of its own
-    reading zero, so the table shows what it was and not only what was subtracted.
+    A difference, not a ratio: these are shares. The control keeps a row of its own reading zero.
     """
     control = next(
         (c for name in CONTROL for c in cells if c["value"] == name),
@@ -334,9 +304,7 @@ def numeric_leaves(obj, prefix=""):
 def _inert(grouped):
     """Report whether no number anywhere in the reports distinguishes any two arm values.
 
-    `grouped` is {arm value: [report per seed]}. Reports are compared through their means over
-    seeds, so a block run with several seeds is judged on the same footing as one run with a single
-    seed.
+    Compared through their means over seeds, so seed count does not change the verdict.
     """
     if len(grouped) < 2:
         return False
@@ -365,13 +333,7 @@ def _inert(grouped):
 def check_cell(report, where):
     """Apply the per-run gates, returning (fatal, warnings) as (kind, sentence) pairs.
 
-    The kind is carried from here rather than recovered later: the run-health page groups and counts
-    flags, and recognising them by re-reading their prose would break the first time one was reworded.
-    Every kind used here is in FLAG_KINDS, which test_collate enforces.
-
-    Every one of these corresponds to a defect that shipped in this simulator and produced a
-    confident wrong number rather than an error. They are cheap; the reason to run them on every
-    cell of every night is that each was found by accident the first time.
+    One per defect in TRAPS.md, each of which was found by accident the first time.
     """
     fatal, warn = [], []
     opts = report.get("opts") or {}
@@ -487,14 +449,7 @@ def _has_denominator(cells, key):
 def describe(block):
     """Return what this block changes, in one sentence, or None if no producer declares it.
 
-    Three producers, asked in turn: `sweep.BLOCKS` names its blocks outright, `design.cells()`
-    composes a cell's sentence from the mesh and the rival it crosses, and `matrix.describes()` from
-    the scale and the preset. Matrix used to be absent here and its cells came through nameless -
-    honest, but an absence, and one that would have become a page of blank rows the moment anything
-    rendered the grid.
-
-    Imported lazily, because a digest can be collated from run JSONs alone - the archive is
-    re-readable on a machine that has the reports and not the sweep definitions.
+    Three producers asked in turn, imported lazily so a digest collates from run JSONs alone.
     """
     try:
         from .sweep import DESCRIPTIONS
@@ -517,8 +472,7 @@ def describe(block):
 def _sim_hours(reports):
     """Total simulated hours across these cells, or None if any cell does not say.
 
-    Summed rather than assumed constant: a block sweeping `--hours` would otherwise be normalised by
-    one arm's duration and report every other arm as a regression.
+    Summed, not assumed constant: a block sweeping --hours would report every other arm as a regression.
     """
     total = 0.0
     for r in reports:
@@ -541,12 +495,7 @@ def _seconds_per_sim_hour(reports):
 def load_history(archive_dir, exclude_run_id=None):
     """{block name: [seconds_per_sim_hour, ...]} from every prior digest in the archive.
 
-    Reads the digests this module has already written, not the raw block JSONs: the archive keeps the
-    digests and prunes the raw data (see the retention note on each sweep's upload step), so the
-    digest is the only history that is still there months later.
-
-    A digest that will not parse is skipped rather than fatal, for the reason `explorer.py` does the
-    same - a corrupt or half-pushed file from one night must not stop tonight's run from collating.
+    Digests, not raw JSONs, which are pruned; an unparseable one is skipped rather than fatal.
     """
     history = {}
     if not archive_dir or not os.path.isdir(archive_dir):
@@ -570,10 +519,7 @@ def load_history(archive_dir, exclude_run_id=None):
 def check_timing(blocks, history):
     """Flag a block whose seconds-per-simulated-hour has drifted from its own past. Warn only.
 
-    Both directions are reported, because both have a real failure mode. Slower is TRAPS.md #7, the
-    optimisation that cost more than it saved. Faster is the subtler one: a mesh that fragmented, an
-    arm that stopped being read, or traffic that stopped being generated all make a run cheaper by
-    doing less work, and a run that got four times faster overnight has not been optimised.
+    Both directions: faster usually means less work was done, not that anything was optimised.
     """
     for block in blocks:
         rate = block.get("seconds_per_sim_hour")
@@ -619,9 +565,8 @@ def summarise_block(reports):
         "sim_version": first.get("sim_version"),
         "cells": cells,
         "wall_seconds": sum(r.get("wall_seconds") or 0 for r in reports),
-        # The comparable form of the above. `wall_seconds` is a sum over however many cells and seeds
-        # this block happened to run, at whatever `--hours` it was configured with, so two runs of the
-        # same block are only comparable once both are divided out. See TIMING_DRIFT_FACTOR.
+        # The comparable form of the above: wall_seconds sums over however many cells, seeds and
+        # hours this block ran, so both have to be divided out. See TIMING_DRIFT_FACTOR.
         "runs": len(reports),
         "sim_hours": _sim_hours(reports),
         "seconds_per_sim_hour": _seconds_per_sim_hour(reports),
@@ -649,16 +594,13 @@ def summarise_block(reports):
         dearest = max(priced, key=lambda kv: kv[1])
         block["cost"] = {"metric": dearest[0], "ratio": dearest[1]}
 
-    # Which success this arm actually moves. Ranking every block by `held` would rate an arm that
-    # halves DM success as inert - but a measure whose denominator is too small to mean anything
-    # must not win either, or the leaderboard fills with two-session admin noise.
+    # Which success this arm actually moves, excluding any whose denominator is too small to
+    # mean anything - or the leaderboard fills with two-session admin noise.
     block["thin"] = sorted(
         k for k in SUCCESSES if k in block["effect"] and not _has_denominator(cells, k)
     )
-    # A spread of zero is not a movement. Without this, a block whose cells are identical in every
-    # delivery measure still reported `moved: text, spread 0.000` - which reads as a finding about
-    # text and is the opposite of one. E-signed is that block: signing changes bytes and nothing
-    # else, and it belongs under "moved no delivery measure" with its price beside it.
+    # A spread of zero is not a movement: without this, identical cells reported
+    # `moved: text, spread 0.000`, which reads as a finding and is the opposite of one.
     moved = [
         (k, v["spread"])
         for k, v in block["effect"].items()
@@ -687,12 +629,7 @@ def summarise_block(reports):
 def add_flag(block, kind, text):
     """Record one flag on an already-summarised block, keeping `flags` and `flag_kinds` in step.
 
-    Exists because not every check can run inside `summarise_block`: the timing comparison needs the
-    whole run's blocks before it can be made, so it lands afterwards. Appending to `block["flags"]`
-    directly at that point left a (kind, text) tuple in a list that had already been flattened to
-    sentences - which JSON turned into a list, `explorer.py` then tried to put in a set, and the whole
-    page build died on `unhashable type: 'list'`. Worse, the kind never reached `flag_kinds`, so the
-    one gate added to catch a regression was itself uncounted.
+    Needed because the timing check runs after summarise_block, once every block is known.
     """
     block.setdefault("flags", []).append(text)
     kinds = block.setdefault("flag_kinds", {})
@@ -703,13 +640,7 @@ def add_flag(block, kind, text):
 def _settle_flags(block):
     """Turn the (kind, sentence) pairs collected above into what the digest publishes.
 
-    `flags` and `fatal` stay plain sentences, because that is what every reader of this digest already
-    expects - the trend report prints them and `explorer.py` puts them in a set, which a list from
-    round-tripped JSON could not go into. The kinds go beside them, counted, so the run-health page can
-    group by kind without recognising a sentence.
-
-    Tolerant of a bare string so a check that forgets its kind degrades to `unclassified` rather than
-    crashing a whole night's collate; test_collate asserts none currently does.
+    Sentences stay sentences and the kinds go beside them, counted - MODEL.md.
     """
     for field in ("flags", "fatal"):
         kinds, sentences = [], []
@@ -737,11 +668,8 @@ def collate(
     expected=None,
     history_dir=None,
 ):
-    # Grouped on the `block` field rather than one block per file, because a block does not have to
-    # arrive in one file. A heavy cell of the cross is sharded one job per seed - the mirrored mesh
-    # is four times the nodes and a whole cell in one job runs past the runner's ceiling - and each
-    # shard uploads its own file under its own name. Reading a block per file would then average
-    # nothing over seeds and enter the same block three times in the digest.
+    # On the `block` field, not one block per file: a sharded cell uploads a file per seed, and
+    # reading per file would average nothing and enter the block three times.
     by_block = {}
     for path in sorted(glob.glob(os.path.join(runs_dir, "*.json"))):
         # summary.json is this module's own output; a re-collate must not read it back in as a block.
@@ -790,9 +718,8 @@ def gate(blocks, missing):
     """Judge the run. Only the design-falsifying and physically impossible are fatal."""
     failures = [f"{b['block']}: {f}" for b in blocks for f in b["fatal"]]
     warnings = [f"{b['block']}: {f}" for b in blocks for f in b["flags"]]
-    # The same warnings counted by kind, and by how many blocks each kind touched. A run with 400
-    # `beyond-envelope` warnings from one mirrored cell and one `inert` is not the same run as the
-    # reverse, and a flat list of 401 sentences reads identically either way.
+    # Counted by kind and by how many blocks each touched: 400 envelope warnings and one inert
+    # is not the same run as the reverse, though both are 401 sentences.
     by_kind = {}
     for b in blocks:
         for kind, count in (b.get("flag_kinds") or {}).items():
@@ -895,9 +822,8 @@ def markdown(summary):
             "",
         ]
 
-    # Runtime against this block's own past, for the blocks that have one. Quoted as a rate rather
-    # than a total, because the total moves whenever the seed count or `--hours` does and would read
-    # as a regression every time either is retuned.
+    # Runtime against this block's own past, as a rate: a total moves whenever the seed count
+    # or --hours does, and would read as a regression every time either is retuned.
     drifted = sorted(
         (b for b in summary["blocks"] if b.get("timing")),
         key=lambda b: b["timing"]["ratio"],

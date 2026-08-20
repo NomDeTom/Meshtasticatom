@@ -295,3 +295,63 @@ that way on a 2-hour Batumi run - rather than about delivery.
 
 DM outcomes are resolved against whether the target ever saw the message, so success is measured at
 the intended recipient rather than inferred from the flood.
+
+## The digest
+
+`collate.py` turns a night's run JSONs into one report. What it counts and how it ranks is
+deliberate.
+
+**Missing metrics become `None`, not errors.** A run assembled from mixed vintages - an older
+transport, a section that only exists under some flags - still collates.
+
+**Ranking.** A block is ranked by whichever of `text`, `dm`, `admin` and `held` moves furthest, and
+the table names which one it was. Ranking everything on `held` would rate an arm that halves DM
+success as having done nothing. A measure needs `MIN_OBSERVATIONS` before it may decide the ranking:
+one admin probe an hour over two hours is two sessions, where a single failure reads as a 50% swing
+and tops a leaderboard built from real effects. Below the floor it is still reported, it just cannot
+rank.
+
+A spread of zero is not a movement. Without that guard a block whose cells are identical in every
+delivery measure still reported `moved: text, spread 0.000`, which reads as a finding and is the
+opposite of one.
+
+**Cost is a ratio, not a difference.** Several blocks - reconciliation strategy, signing, advert
+transport - deliberately hold delivery flat and differ only in what they spend. `D-resolve` is the
+clear case: enum advertises with a fifth of sketch's advert bytes then pays two thirds more in
+total traffic, while `held` moves by 0.004. These span orders of magnitude, so "5.7×" is the
+readable figure where "11877 bytes" is not.
+
+**Deltas are differences, not ratios.** Reach figures are shares: "+0.041 reach" is the sentence a
+reader wants, and a ratio of two reception fractions is not. The control keeps a row of its own
+reading zero, so the table shows what it was rather than only what was subtracted.
+
+**Controls.** `design.py` puts a control in every cell - the archive `off` arm, the mesh as the
+firmware runs it - so each later arm is a difference on the same mesh at the same seed. A block
+sweep has no such cell and its arms are read against each other.
+
+**Inert detection.** Cells differing by less than `INERT_EPSILON` on *every* recorded number are
+the same cell. Relative, because the numbers span reception fractions and byte counters in the
+millions. Two mistakes are recorded here: comparing only the displayed metrics called `E-signed`
+inert when it moves `advert_bytes` by 43% (hence: every number, not a chosen few), and leaving
+`value` out of `NOT_A_MEASUREMENT`, which disabled the check for 40 of the 87 blocks (TRAPS 11).
+
+**Weighted rates.** `admin_success_rate` weights by sessions attempted, because averaging the rates
+would weight a distance with two sessions the same as one with fifty.
+
+**Derived figures.** `nodes` comes from the built mesh, not from `--nodes`: a fixed-geometry
+scenario decides its own count, and Batumi is 92 whatever was requested (TRAPS 9).
+
+**Grouping.** Cells group on the arm's value; a block does not have to arrive in one file, since a
+heavy cross cell is sharded one job per seed and each shard uploads under its own name. Reading one
+block per file would average nothing over seeds and enter the same block three times.
+
+**Timing.** Runtime is compared as seconds per simulated hour against the block's own history, never
+as raw `wall_seconds` - the total moves whenever the seed count or `--hours` moves. Both directions
+warn: slower is TRAPS 7, and faster is the subtler one, since a fragmented mesh, an unread arm or
+traffic that stopped generating all make a run cheaper by doing less work. History comes from prior
+digests rather than raw block JSONs, because the archive prunes the raw data and keeps the digests.
+
+**Flags carry a kind.** The run-health page groups and counts them, and recognising a flag by
+re-reading its prose would break the first time one was reworded. A run with 400 `beyond-envelope`
+warnings from one mirrored cell and one `inert` is not the same run as the reverse, and a flat list
+of 401 sentences reads identically either way.
