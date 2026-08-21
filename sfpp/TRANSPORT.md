@@ -363,16 +363,59 @@ further. `cancelled_by_weaker_relay` is the counter that shows it.
 
 ## The noise floor
 
-The vendored `NOISE_LEVEL` is one constant for every preset, and the sensitivity table beside it is
-not: those figures are kTB + 6 dB NF, each landing exactly on its spreading factor's demodulator
-limit (SF7 −7.5 dB, SF11 −17.5, SF12 −20.0). A fixed floor therefore misstates SNR by
-10·log₁₀(bw/anchor) - about 5 dB optimistic at 250 kHz and 8 at 500 kHz.
+`NOISE_LEVEL` used to be one constant for every preset, and the sensitivity table beside it is not:
+those figures are kTB + 6 dB NF, each landing exactly on its spreading factor's demodulator limit
+(SF7 −7.5 dB, SF11 −17.5, SF12 −20.0). A fixed floor therefore misstates SNR by 10·log₁₀(bw/anchor)
+- about 5 dB optimistic at 250 kHz and 8 at 500 kHz.
 
 That matters more than a few dB sounds, because the PER curve's p50 sits at −17.0 dB (CR5) to
 −19.4 (CR8), right on those limits. Under the fixed floor a LONG_FAST link at sensitivity computes
 SNR −12.25 and decodes 96% of the time; under a thermal floor it computes −17.5 and decodes 39%.
 The fixed floor is why this model had no marginal link at all: it puts every link the graph will use
 5 dB into the flat top of the curve.
+
+`lib/config.py` now derives the floor from the preset's own bandwidth, and `--noise-model fixed`
+names the old constant explicitly as `mesh.VENDORED_FIXED_NOISE_DBM`. Without that, `fixed` would
+have quietly become a second copy of `thermal` - a comparison arm that runs but cannot differ,
+which is TRAPS #14 in a new place.
+
+### A threshold cannot outlive the floor it was measured against
+
+A sensitivity figure and a noise floor are not independent numbers: the first is the second plus
+what the demodulator needs. Reading a sensitivity out of a table while a scenario supplies its own
+measured floor therefore double-counts the band, and in the optimistic direction. `effective_sensitivity`
+takes `max(datasheet, floor + required_snr_db(sf))`, so whichever of the two is worse decides:
+
+| | LONG_FAST |
+| --- | --- |
+| datasheet sensitivity | −131.5 dBm |
+| kTB + 6 dB NF at 250 kHz, + SF11's −17.5 dB | −131.52 dBm |
+| Batumi's measured −110.5 dBm median, + SF11's −17.5 dB | **−128.0 dBm** |
+
+Under a thermal floor the two agree to 0.02 dB, which is why `--noise-model` barely moves the link
+graph. Under a measured floor the difference is 3.5 dB and the graph moves a long way: Batumi's
+directed link count went from 4813 to 3754 on this correction alone.
+
+### The floor moves, and so does everything derived from it
+
+`--noise-profile` (README §5.1f) gives the floor a spread. Every threshold derived from it is
+re-evaluated per frame against the receiver's own band:
+
+| what | function | what it decides |
+| --- | --- | --- |
+| decodability | `_sensitivity_at(rx, start, end)` | whether the reception is attempted at all |
+| energy detection | `_cad_floor_at(rx, start, end)` | whether the receiver hears the channel as busy, and whether an interferer counts against capture |
+| ducted audience | both | which sub-sensitivity pairs the lift actually reaches |
+
+An excursion used to arrive **only** as an RSSI penalty inside the PER curve, so it could fail a
+packet but never remove a link. Measured on a 25-node mesh at σ=6 dB, 19 directed links differ in
+existence between two instants, where none could before. The two losses are counted separately -
+`lost_to_noise_excursion` for a failed draw, `lost_to_noise_floor` for a threshold not cleared -
+because no coding rate rescues a packet the receiver never attempted.
+
+The direction is one-way: a moving floor never *adds* a pair, because `neighbours` is built at the
+median and nothing is appended to it. A quiet band makes an existing link likelier; only a duct
+creates one.
 
 `EXTRA_PRESETS` are not upstream and in no firmware build, and their sensitivity is **extrapolated**
 rather than derived: the vendored figures fall about 2.5 dB per spreading factor across the 500 kHz
@@ -424,8 +467,19 @@ and the 3-D distance is the 2-D one; with terrain, two nodes 3 km apart with 400
 them are further apart than the map says, and the obstruction terms price the ridge itself.
 
 `rssi[i][j]` is *i* transmitting and *j* receiving, so it takes i's transmit gain and j's receive
-gain - separate numbers per node, not one siting figure used both ways. The per-pair Gaussian skew
-sits on top, for the asymmetry that is a property of the pair rather than of either end.
+gain - separate numbers per node, not one siting figure used both ways. Two per-pair Gaussian terms
+sit on top, because link variation has two causes and they behave differently:
+
+| term | stddev | symmetry | what it is |
+| --- | --- | --- | --- |
+| `_shadow[i][j]` | `MODEL_SHADOWING_STDDEV`, 6 dB | **symmetric** - subtracted from both directions | shadowing: the buildings and trees on the path, which do not rearrange themselves depending on who is talking |
+| `_skew[i][j]` | `MODEL_RADIO_ASYMMETRY_STDDEV`, 2 dB | **antisymmetric** - added one way, subtracted the other | the radios: power amplifier, antenna match, front end |
+
+It used to be one antisymmetric draw and no shadowing at all, which made link existence a
+near-deterministic function of geometry - a pair either cleared the budget or did not, with only a
+few decibels of two-way disagreement about it - while simultaneously overstating asymmetry, because
+two independent per-direction draws give a difference with a ~8.5 dB standard deviation. Both are
+drawn once for the life of the mesh.
 
 **Calibration.** Where a scenario ships fitted coefficients it has measured what its links actually
 do, and that beats this budget: on Batumi the fit is trained on 296 observed links, and the raw
@@ -491,12 +545,23 @@ range, and it makes every existing link louder, which is what turns extra reach 
 contention rather than a free gain. Interferers are lifted too; leaving them unlifted would have
 ducting deliver distant packets into a channel that had gone magically quiet.
 
-A noise excursion arrives as a penalty on RSSI rather than as a change to the floor, because the
-PER curve reads only their difference - 4 dB more noise and 4 dB less signal are the same packet.
-That keeps the vendored `radio_loss` a clean copy, and it is why the excursion is applied per
-reception: the floor a packet met is a property of when and where it was heard, not of the
-configuration. Exactly one random number is drawn whatever the profile, so turning a profile on does
-not move the stream.
+A noise excursion reaches a reception twice, because it does two different things.
+
+**Into the PER curve, as a penalty on RSSI.** The curve reads only the difference between signal and
+noise - 4 dB more noise and 4 dB less signal are the same packet - so handing it `rssi - excursion`
+keeps the vendored `radio_loss` a clean copy of the firmware-side model. Exactly one random number is
+drawn whatever the profile, so turning a profile on does not move the stream, and the same draw judged
+against the calm-band probability says whether the band is what decided this packet
+(`lost_to_noise_excursion` and `saved_by_quiet_band`).
+
+**Into the thresholds, as a change to the floor.** `_sensitivity_at` and `_cad_floor_at` recompute
+decodability and energy detection against the band the receiver is in for this frame. That is not
+interchangeable with the penalty above: a threshold decides whether the packet is attempted, and the
+curve decides whether an attempt succeeds. Applying only the penalty - which is what this transport
+did until 2026-08-21 - lets a band fail packets without ever removing a link (TRAPS 19).
+
+Both are per reception, because the floor a packet met is a property of when and where it was heard
+rather than of the configuration.
 
 ## Failure
 

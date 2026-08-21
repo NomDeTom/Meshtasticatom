@@ -193,6 +193,22 @@ and unbounded - +4.24 dB per 100 m of the lower endpoint against a distance pena
 −4.68·log₁₀(km). Past the observed range two high nodes gain more from elevation than distance
 takes away and the model invents a link (TRAPS 4).
 
+Recording it is not enough on its own, so the envelope is now **enforced** rather than reported:
+past `LINK_CALIBRATION_MAX_M` the raw link budget answers instead of the fit, in the vendored
+`lib/link_model.py` as well as here, and `LinkBudget.calibration_applied` says which of the two did.
+The figure is derived from the observation list rather than declared, so it cannot disagree with the
+data beside it - on Batumi it is 23,225 m, the longest observed link.
+`ground.pairs_beyond_calibration` counts how much of a run's geometry fell outside; expect it to be
+most of a `--mirror` run.
+
+The fit is a **level-matching surface, not a propagation model**, and a run that leans on its
+geometry is leaning on the wrong thing. Every feature it uses correlates with the observed SNR at
+|r| ≤ 0.1, its distance slope is 0.94 dB per decade where a propagation model is 20 to 40, and it
+reproduces 95 of the 296 links it was fitted on while making 2095 unobserved pairs audible. What it
+*is* good for is levels on that geometry, and transmit power and antenna gain are applied outside it
+decibel for decibel, so a power sweep on Batumi is physical even though the surface is not. See
+`docs/batumi_radio_calibration.md` for the three candidate causes and what would settle them.
+
 ### Mirroring
 
 `mirror()` reflects a scenario into tiles rather than translating it, and the difference is the

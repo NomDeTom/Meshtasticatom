@@ -2003,6 +2003,12 @@ def _preset(bw_hz, cr, sf):
 # wideLora bandwidths are still absent: no region entry runs at 2.4 GHz.
 
 
+# The single noise floor `lib/config.py` carried for every preset until it was made to derive one
+# per bandwidth. Kept here as a named constant so `--noise-model fixed` still reproduces the runs
+# that were measured against it, rather than silently following the new default.
+VENDORED_FIXED_NOISE_DBM = -119.25
+
+
 def make_config(
     preset="LONG_FAST", model=5, phy_loss=True, tx_power=None, noise_model="thermal"
 ):
@@ -2014,11 +2020,18 @@ def make_config(
     conf.MODEM_PRESET = preset
     conf.MODEL = model
     conf.PHY_LOSS_MODEL_ENABLED = phy_loss
-    # A per-preset thermal floor. The vendored constant is one figure for every preset, which puts
-    # every usable link into the flat top of the PER curve - TRANSPORT.md.
+    # A per-preset thermal floor. The historical vendored constant was one figure for every preset,
+    # which puts every usable link into the flat top of the PER curve - TRANSPORT.md.
+    #
+    # Both arms are set explicitly. `Config.NOISE_LEVEL` now *derives* the thermal floor when the
+    # scenario has not pinned one, so leaving `fixed` to the default would have made it identical to
+    # `thermal` and quietly turned a comparison arm into a duplicate - the same shape of defect as
+    # TRAPS.md #14. `fixed` therefore names the constant it exists to reproduce.
     if noise_model == "thermal":
         conf.NOISE_LEVEL = thermal_noise_floor(conf.current_preset["bw"])
-    elif noise_model != "fixed":
+    elif noise_model == "fixed":
+        conf.NOISE_LEVEL = VENDORED_FIXED_NOISE_DBM
+    else:
         raise ValueError(f"unknown noise model {noise_model!r}")
     if tx_power is not None:
         # The region's power limit is the ceiling an operator may use, not one they must. Turning it
@@ -2141,6 +2154,11 @@ class Mesh:
             # delivered where it would have dropped. Neither costs an extra random number.
             "lost_to_noise_excursion": 0,
             "saved_by_quiet_band": 0,
+            # The other way a band takes a packet: not a failed draw but a threshold the link no
+            # longer clears. A static neighbour whose RSSI is under the floor it faces this frame is
+            # not offered the packet at all, and without this counter that loss is invisible - the
+            # reception simply never happens and nothing says why.
+            "lost_to_noise_floor": 0,
             # Periodic interference caught the frame in flight: a hard loss, not a probability.
             "wiped_by_periodic": 0,
             # Receptions that happened only because a duct was open - the pair is not a link at rest.
@@ -3072,6 +3090,10 @@ class Mesh:
             # excursion used to arrive only as an RSSI penalty inside the PER curve, so it could
             # fail a packet but never take a link down - the same asymmetry the vendored path had.
             if rssi < self._sensitivity_at(rx, tx.start, tx.end):
+                # A link at rest that this frame's band has taken away. Separated from a failed PER
+                # draw because it is a different mechanism with a different remedy: no coding rate
+                # rescues a packet the receiver never attempted.
+                self.stats["lost_to_noise_floor"] += 1
                 continue
             if not self.nodes[rx].online:
                 continue

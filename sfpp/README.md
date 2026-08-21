@@ -637,9 +637,14 @@ instead of past it, which is where links that work a third of the time come from
 | `EXTRA_LONG_TURBO` | 0.974 | **0.095** |
 | `VERY_LONG_SLOW` | 0.058 | 0.097 |
 
-The link *graph* is unchanged either way - `neighbours` is thresholded on RSSI against sensitivity
-and never consults the noise floor - so degree, diameter and the margin bands are identical. Only
-delivery changes.
+The link *graph* barely moves between the two, but not for the reason it used to. The threshold is
+now `effective_sensitivity` - `max(datasheet, floor + the SF's required SNR)` - so it *does* consult
+the floor. It happens to land within 0.02 dB either way at LONG_FAST, because the datasheet figure
+was itself kTB + 6 dB NF + the SF11 requirement, so the two agree by construction wherever the
+measured floor is quieter than a real one. Degree, diameter and the margin bands are therefore
+practically identical across `--noise-model`, and delivery is what changes. Where the floor is
+*louder* than thermal - a measured one, as Batumi's −110.5 dBm is - the graph does move: that
+correction alone took Batumi from 4813 directed links to 3754.
 
 **Everything measured before this defaulted to `fixed`**, including all of round five, and is
 optimistic about weak-link delivery by the margin above. The turbo presets are the worst affected.
@@ -729,6 +734,23 @@ field's business - its excursion can fall below zero on its own, and `saved_by_q
 the packets that arrived because of it. **For lift, use ducting** (§5.1g): a floor-only model can
 improve a link that already exists but can never create one, because `neighbours` is thresholded
 on static RSSI, and lift that does not extend the graph is not the interesting half.
+
+**A raised floor can now take a link down, which it could not before.** Every threshold derived from
+the floor is evaluated per frame against the receiver's own band: `_sensitivity_at` decides whether
+the reception is attempted at all, `_cad_floor_at` decides whether the receiver hears the channel as
+busy and whether an interferer counts against capture, and both are re-read for the ducted audience.
+An excursion used to arrive only as an RSSI penalty inside the PER curve, so it could fail a packet
+but never remove a link - the same asymmetry the vendored path had. Measured on a 25-node mesh at
+σ=6 dB, **19 directed links differ in existence between two instants**, where none could before.
+Two counters split the two mechanisms, and they are not interchangeable.
+`lost_to_noise_excursion` is a **failed PER draw** the band caused - the packet was attempted and
+did not decode, which a higher coding rate can sometimes rescue. `lost_to_noise_floor` is a
+**threshold not cleared** - a static neighbour whose RSSI is under the floor it faces this frame, so
+the packet is never attempted and no coding rate reaches it. Read both beside `lost_to_collision` on
+any run with a profile; a run where the second dominates is range-limited *at that moment* rather
+than contention-limited, and that is a different problem with a different fix. What is still true is the *direction*: the graph
+never grows from the floor moving, because `neighbours` is built at the median and nothing is added
+to it. A quiet band makes an existing link likelier; only a duct adds a pair.
 
 ### 5.1g Tropospheric ducting - `--duct-per-hour`
 
@@ -945,7 +967,8 @@ and `decode_failures`. A run with a good reception figure and a non-zero silent-
 good run.
 
 **Loss attribution counters are opportunities, not rates.** `lost_to_collision`,
-`lost_to_phy`, `lost_to_half_duplex`, `lost_to_noise_excursion`, `queue_drops`, `hops_exhausted`,
+`lost_to_phy`, `lost_to_half_duplex`, `lost_to_noise_excursion`, `lost_to_noise_floor`,
+`queue_drops`, `hops_exhausted`,
 `next_hop_unresolved`, `reliable_failures` all count **per reception opportunity**: one broadcast
 heard by fifty nodes can produce fifty collision losses. The example run shows 207,917 collision
 losses alongside a healthy 0.873 reach, and that is not a contradiction. What the counters are good
@@ -1217,7 +1240,7 @@ the mechanism is not modelled at all and any question about it has no answer her
 | ------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **Siting gain** (`--siting-mix`) | roof +6, desk 0, pocket −10, basement −20 dB   | **Not from the firmware and not measured.** The firmware has no concept of siting at all. 26 dB between roof and basement is wide enough to move any result. The default `uniform` is all-desk, i.e. 0 dB, so a run that does not set this flag is unaffected |
 | Link asymmetry                 | per-node transmit and receive gain, plus a per-pair Gaussian σ 2 dB | `rssi[i][j]` takes `tx_gain[i] + rx_gain[j]`, so an amplified node is heard where it cannot hear. Siting moves both directions together (a basement is bad to transmit from and to receive in); amplification does not. The amplifier figures are **assumed, not measured** - the firmware knows `tx_power` and nothing about what is bolted to the antenna port |
-| **Noise floor** (`--noise-model`) | `thermal`: kTB + 6 dB NF for the preset's bandwidth. `fixed`: the vendored single constant | The vendored `NOISE_LEVEL` is one number, −119.25 dBm, for every preset - but the sensitivity table beside it is not. Those figures are kTB + 6 dB NF, and each lands **exactly** on its spreading factor's demodulator limit (SF7 −7.5 dB, SF11 −17.5, SF12 −20.0). A fixed floor therefore misstates SNR by 10·log₁₀(bw/anchor): roughly **5 dB optimistic at 250 kHz and 8 dB at 500 kHz.** `thermal` is the default; `fixed` reproduces runs made before this existed |
+| **Noise floor** (`--noise-model`) | `thermal`: kTB + 6 dB NF for the preset's bandwidth. `fixed`: the historical single constant, now named as `mesh.VENDORED_FIXED_NOISE_DBM` because `lib/config.py` derives a per-band floor by default and leaving `fixed` to that default would have made the two arms one run | `NOISE_LEVEL` was one number, −119.25 dBm, for every preset - but the sensitivity table beside it is not. Those figures are kTB + 6 dB NF, and each lands **exactly** on its spreading factor's demodulator limit (SF7 −7.5 dB, SF11 −17.5, SF12 −20.0). A fixed floor therefore misstates SNR by 10·log₁₀(bw/anchor): roughly **5 dB optimistic at 250 kHz and 8 dB at 500 kHz.** `thermal` is the default; `fixed` reproduces runs made before this existed |
 | **No marginal link** - but delivery *is* probabilistic | every reception draws against `payload_success_probability(rssi, cr, length)`; only pairs above sensitivity are ever attempted | The draw is real and the coding rate reaches it, so a retransmission at a higher CR genuinely is more likely to land. What is missing is the *range*: `neighbours` is thresholded at sensitivity, where the vendored curve already sits at 96%, and it saturates at 99.5% by +3 dB of margin. So the whole probabilistic band is 0.96-0.995, and **a link that works a third of the time cannot exist here at all**. Consequences worth knowing: PHY loss is around 0.7% of reception attempts against 28% to collisions, so contention dominates weak links by a factor of ~56; and raising the coding rate from 5 to 8 buys +0.030 at zero margin, +0.004 at +2 dB and **exactly nothing at +3 dB or more**, which bounds what any CR-ladder result can show. `link_quality.fragile` (margin under 5 dB) and `near_miss` (within 6 dB below sensitivity) size what the threshold hides: 207 against 342 on a stock 60-node mesh. Letting sub-sensitivity pairs deliver probabilistically is the fix, and it is a change to the vendored physics |
 | Path loss                      | 3GPP Suburban Macro (`MODEL = 5`)                | one propagation environment for every run. No terrain, no clutter, no per-link environment                                         |
 | Diurnal shape                  | `commuter`, 17:1 peak-to-trough                  | invented, not measured. It sets when the mesh is busy, which the whole congestion story rests on                                    |

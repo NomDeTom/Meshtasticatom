@@ -62,8 +62,32 @@ HISTORY = [
         "separate at 2 dB. The fitted link calibration is now refused beyond its own observed "
         "envelope in the vendored budget as well as here.",
         "INVALIDATES every earlier result over a scenario with terrain or clutter, which is every "
-        "matrix and design cell: Batumi's calibrated link count moves 1704 -> 3072 on the terrain "
-        "correction alone. Flat generated meshes move too, through the shadowing term.",
+        "matrix and design cell: Batumi's directed link count moves 5033 -> 4813 at seed 7. Flat "
+        "generated meshes move too, through the shadowing term.",
+    ),
+    (
+        "1.4.0",
+        "The second half of the same physics review, and the corrections it needed. A threshold "
+        "derived from a sensitivity table can no longer outlive the noise floor it was measured "
+        "against: `effective_sensitivity` is max(datasheet, floor + the spreading factor's required "
+        "SNR), so Batumi's -110.5 dBm median raises LONG_FAST's threshold from -131.5 to -128.0. "
+        "The floor itself moves - a median with correlated spread, clamped below by kTB - and every "
+        "threshold derived from it moves with it: delivery, the CAD floor, the capture audience and "
+        "the ducted audience each read the receiver's own band for the frame, where a NoiseField "
+        "excursion previously arrived only as an RSSI penalty inside the PER curve and so could "
+        "fail a packet but never take a link down (measured: 19 directed links differ in existence "
+        "between two instants at 6 dB of spread, where none could before). `NOISE_LEVEL` derives "
+        "from the preset's bandwidth instead of being one constant across a 15 dB range of thermal "
+        "noise, and the payload curve is anchored to the modem's own requirement rather than to an "
+        "absolute SNR per coding rate. `--noise-model fixed` names the old constant explicitly, "
+        "since the vendored default is no longer it. Path loss is floored at free space. On the "
+        "vendored side, the channel-utilisation transmit gate defers instead of dropping, reliable "
+        "broadcast and unicast carry their two separate firmware budgets, duplicate suppression is "
+        "capacity-bounded at 240, and channel-busy time is charged as the union of overlapping "
+        "receptions rather than per reception.",
+        "INVALIDATES every 1.3.0 result. Batumi's directed link count moves 4813 -> 3754 at seed "
+        "7, on the sensitivity correction alone; any run with a noise profile moves again, because "
+        "an excursion can now remove a link and not merely dim it.",
     ),
 ]
 

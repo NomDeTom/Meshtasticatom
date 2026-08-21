@@ -2035,6 +2035,34 @@ class AsymmetricGain(unittest.TestCase):
 class Propagation(unittest.TestCase):
     """Stretch, a moving noise floor, and ducting."""
 
+    def test_the_fixed_noise_arm_is_not_the_thermal_arm(self):
+        """The bug this guards: `fixed` used to mean "leave the vendored default alone", and the
+        vendored default became a derived per-bandwidth thermal floor. That silently made the two
+        arms of every noise-model comparison the same run - TRAPS.md #14, in a new place.
+        """
+        for preset in ("SHORT_TURBO", "LONG_FAST", "VERY_LONG_SLOW"):
+            with self.subTest(preset=preset):
+                fixed = M.make_config(preset=preset, noise_model="fixed")
+                thermal = M.make_config(preset=preset, noise_model="thermal")
+                self.assertEqual(fixed.NOISE_LEVEL, M.VENDORED_FIXED_NOISE_DBM)
+                self.assertNotAlmostEqual(
+                    fixed.NOISE_LEVEL, thermal.NOISE_LEVEL, places=2
+                )
+
+    def test_the_fixed_arm_is_one_number_and_the_thermal_arm_follows_the_band(self):
+        """kTB scales with bandwidth: 62.5 kHz to 500 kHz is 9 dB, and a constant cannot span it."""
+        levels = {
+            preset: M.make_config(preset=preset, noise_model="thermal").NOISE_LEVEL
+            for preset in ("VERY_LONG_SLOW", "LONG_FAST", "SHORT_TURBO")
+        }
+        self.assertAlmostEqual(
+            levels["VERY_LONG_SLOW"] - levels["SHORT_TURBO"], -9.03, places=2
+        )
+        self.assertEqual(
+            len({M.make_config(preset=p, noise_model="fixed").NOISE_LEVEL for p in levels}),
+            1,
+        )
+
     def test_a_rebuild_moves_nothing_it_was_not_asked_to(self):
         """The bug this guards: _build_links redrew every pair's skew, so fitting one amplifier
         re-randomised the whole mesh and consumed the RNG the traffic generator shares.

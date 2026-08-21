@@ -1,7 +1,7 @@
-# Eighteen ways this simulator produced a confident wrong number
+# Twenty-five ways this simulator produced a confident wrong number
 
 Companion to [README.md](README.md), which is the operating manual. This is the other half: not how
-to run the thing, but how it has lied. All eighteen are fixed. They are written down because the
+to run the thing, but how it has lied. All twenty-five are fixed. They are written down because the
 **shapes** recur, and because someone extending this tree can assert against them rather than
 rediscover them one at a time.
 
@@ -130,6 +130,19 @@ to a whole analysis describing genuine comparisons as rankings of collapse.
   number was correct and only its meaning was wrong.
 - **A request and a result recorded as one number.** 6 and 9 are both a requested parameter and a
   derived one disagreeing, with only one written down.
+- **A varying input that reaches only some of its dependents.** 19 is the general case: the
+  dependents it does not reach are silently pinned to the input's median, and the discrepancy shows
+  up as the wrong *mechanism* rather than the wrong magnitude.
+- **A number that is not independent of the number beside it.** 20: a sensitivity is a noise floor
+  plus a margin, so using a tabulated one against a measured floor counts the floor twice.
+- **A control defined as "whatever the default is".** 21 turns into a duplicate arm the moment the
+  default moves, and 14 is the same failure reached differently. Every arm names its own value.
+- **One random variable standing in for two mechanisms.** 24 gets the variance of neither right, and
+  the symmetry of the wrong one.
+- **A test figure reused as a measurement.** 22: "is there enough clearance" and "how much clearance
+  is there" are different questions, and the same constant cannot answer both.
+- **An absence encoded as a value.** 23: `open` was the exporter's word for "not mapped", and three
+  separate pieces of code read it as "mapped, and empty".
 
 ## The two gates worth keeping permanently
 
@@ -334,6 +347,167 @@ bump, so it would have stayed silent while the page pooled across the boundary.
 > bump, an unversioned digest and one straddling a bump. Run health keeps the whole archive, since
 > seconds per simulated hour does not care what the airtime was. The page names what it excluded:
 > a reader who remembers a number needs to know it was superseded rather than lost.
+
+## 19. A moving noise floor could fail a packet but never take a link down
+
+Found 2026-08-21, in the vendored-physics review.
+
+`--noise-profile` has given this transport a `NoiseField` since well before that review, and the
+excursion arrived in exactly one place: as an RSSI penalty handed to `payload_success_probability`.
+So a band 8 dB above its median made every reception on every link less likely to decode, and left
+the link graph, the CAD floor, the capture audience and the ducted audience computing against a
+floor that was not there.
+
+That is not a small omission, because the two are different mechanisms with different remedies. A
+failed PER draw is a frame the receiver attempted and lost, and a higher coding rate sometimes
+rescues it. A threshold not cleared is a frame the receiver never attempted, and nothing rescues it.
+Collapsing the second into the first therefore reports congestion where the answer was range, and
+suggests a coding-rate ladder where the answer is a link that is not there.
+
+`_sensitivity_at` and `_cad_floor_at` now take the receiver's own band for the frame, and both losses
+are counted separately. Measured on a 25-node mesh at σ=6 dB: 19 directed links differ in existence
+between two instants, where none could before.
+
+> **Assert** that a quantity used as a threshold and the same quantity used as a penalty come from
+> one source. The general shape: when a varying input reaches only *some* of the things that depend
+> on it, the rest are silently pinned to its median.
+> **Enforced**: `tests/test_noise_floor.py`, plus `lost_to_noise_floor` beside
+> `lost_to_noise_excursion` in every report, so the split is visible rather than inferred.
+
+## 20. A datasheet sensitivity outlived the noise floor it was measured against
+
+Found 2026-08-21, in the same review.
+
+A sensitivity figure is not an independent property of a radio: it is a noise floor plus what the
+demodulator needs above it. The vendored table's figures are kTB + 6 dB NF + the spreading factor's
+required SNR, to two decimal places. Reading one of those figures out of the table while a scenario
+supplies its own *measured* floor therefore counts the band twice and always in the optimistic
+direction - it grants the receiver a quiet band it is not in.
+
+On Batumi, whose snapshot measured −110.5 dBm, that is 3.5 dB of links that could not exist:
+LONG_FAST's threshold is −131.5 dBm from the table and −128.0 dBm from the floor the mesh actually
+sits in. The correction removed 1059 of 4813 directed links.
+
+The fix is one line of arithmetic - `max(datasheet, floor + required_snr_db(sf))` - and the reason it
+was not obvious is that under a *thermal* floor the two agree to 0.02 dB, so every generated scenario
+looked fine.
+
+> **Assert** that a threshold derived from a table and the same threshold derived from the scenario's
+> own inputs agree, or that the code says which one wins and why.
+> **Enforced**: `tests/test_sensitivity.py`.
+
+## 21. A comparison arm quietly became a copy of the default
+
+Found 2026-08-21, while checking the manual against the code.
+
+`--noise-model fixed` existed to reproduce runs measured against the single vendored constant, and it
+worked by *not* setting anything: `thermal` assigned a derived floor, `fixed` left `Config`'s default
+alone. Then the vendored default was itself changed to derive a per-bandwidth floor - and `fixed`
+started following it. Both arms of every noise-model comparison became the same run. No error, both
+arms present in the report, identical numbers with a plausible story available for why the effect was
+small.
+
+This is [#14](#14-interference-could-not-be-turned-off) in a new place: a control that does not
+control. It is also the shape [#11](#11-the-inert-arm-check-was-half-a-check) exists to catch, which
+is why `collate.py` warns on an arm whose cells are identical - the warning would have fired here.
+
+The remedy is that **both** arms name their value. `mesh.VENDORED_FIXED_NOISE_DBM` is the constant
+`fixed` exists for, stated in the code that uses it rather than inherited from a default that is free
+to move.
+
+> **Assert** that two arms of a comparison actually differ, at the level of the parameter rather than
+> the outcome. An arm defined as "whatever the default is" is not an arm.
+> **Enforced**: `sfpp.test_mesh.Propagation.test_the_fixed_noise_arm_is_not_the_thermal_arm`, which
+> compares the two floors directly at three presets.
+
+## 22. Diffraction added its own clearance margin into the obstruction height
+
+Found 2026-08-21, in the same review.
+
+Knife-edge diffraction is parameterised by `v`, the obstruction height in units of the first Fresnel
+radius. The code tested clearance against `TERRAIN_FRESNEL_CLEARANCE * F₁` - correct, that is the
+standard 0.6 F₁ test - and then computed `v` from the line-of-sight height *plus that same margin*,
+so `v` carried a constant offset of 0.849. A path exactly grazing the obstruction, which by
+definition costs 6.03 dB, came out at 12.91 dB, and the loss stepped discontinuously from 0 to
+6.03 dB as a path crossed the clearance threshold.
+
+The two uses of the clearance figure are a *test* and a *measurement*, and the same number cannot
+serve both: the test asks "is there enough room", the measurement asks "how much room is there".
+
+> **Assert** the closed-form values a standard model has: 0 dB well clear, **6.03 dB** at grazing
+> incidence, and monotone in between with no step.
+> **Enforced**: `tests/test_terrain_diffraction.py`.
+
+## 23. Land cover charged its cheapest rate for anything it did not recognise
+
+Found 2026-08-21, in the same review.
+
+Three defects with one cause - the exporter's default for an unmapped cell is `open`, and three
+separate pieces of code treated `open` as a fact rather than as an absence.
+
+`_class_loss_db_per_km` returned the `open` rate for any class not in its table, so a typo in a
+raster, or a class a newer exporter emits, silently priced a city block as a field. A 500 m cell was
+resolved by a fixed precedence order rather than by majority, so one pond made a whole block read as
+water. And the 4× coastal discount was gated on a test that `open` satisfied, so it fired on about a
+quarter of all pairs on the packaged Batumi raster - a raster in which the Black Sea, west of a Black
+Sea coastal city, is classified `open` in 3101 of 4320 cells because it was exported before the
+tooling queried coastlines.
+
+> **Assert** that an unrecognised category raises rather than defaults, and that a discount requires
+> positive evidence of the thing it is discounting for.
+> **Enforced**: `tests/test_clutter.py` - `test_a_raster_naming_an_unknown_class_is_rejected_at_load`
+> and `test_an_unmapped_inland_path_is_not_discounted_as_coastal` - and `tests/test_osm_clutter.py`
+> for the majority resolution. The coastal discount now
+> requires non-zero water samples, and `presets/batumi.yaml` records the raster's class histogram
+> under `clutter_provenance` with `tests/test_presets.py` asserting it against the CSV.
+
+## 24. Link variation was one antisymmetric draw
+
+Found 2026-08-21, in the same review.
+
+`MODEL_ASYMMETRIC_LINKS` drew one Gaussian per pair and added it one way while subtracting it the
+other. That is the wrong shape twice over.
+
+There was **no shadowing at all** - no term that lowers a path's budget in both directions - so
+whether a pair was a link at all was a near-deterministic function of geometry, and the mesh's
+connectivity was far more regular than a real one. Meanwhile the *asymmetry* was overstated: two
+independent per-direction draws at 6 dB give a difference with an 8.5 dB standard deviation, where
+real radios differ by a few dB.
+
+Both come from confusing a property of the **path** with a property of the **endpoint**. Shadowing is
+the buildings and trees between A and B, which do not rearrange themselves depending on who is
+talking, so it is one symmetric draw per unordered pair. The radio - power amplifier, antenna match,
+front end - is per node and per direction. They are now separate terms at 6 dB and 2 dB.
+
+> **Assert** that a symmetric physical cause produces a symmetric term. The general shape: one random
+> variable standing in for two different mechanisms gets the variance of neither right.
+> **Enforced**: `tests/test_sampling.py::ShadowingIsOnThePathAndAsymmetryIsInTheRadio`, and
+> `sfpp.test_mesh.AsymmetricGain` for the per-node half.
+
+## 25. A congestion gate that dropped instead of delaying
+
+Found 2026-08-21 - and introduced by this same review, three commits earlier, which is why it is
+here.
+
+`AirTime::isTxAllowedChannelUtil` was missing entirely, so a congestion sweep measured a mesh that
+kept offering the same load however busy the air got. Adding it was right. Implementing it as a
+*discard* was not: when the gate shut, the first version skipped the interval and drew a fresh
+inter-arrival gap, which throws the message away.
+
+The firmware does not. `PositionModule.cpp` returns `RUNONCE_INTERVAL` **before** it updates
+`lastGpsSend`, and `DeviceTelemetry.cpp` calls `setLastSentToMesh` only inside its successful branch -
+so the interval stays elapsed and the message goes out as soon as the channel clears. Congestion
+costs latency, not messages.
+
+The difference is not cosmetic. On 40 nodes at a 20 s period, the gate takes offered load from 985
+messages to 96 either way, but a discard reports that as loss where a deferral reports it as 25
+messages delayed by a mean of 120 s. Reach reads 0.844 with the correct behaviour.
+
+> **Assert** what a rate limiter does to the *thing it limited*, not only to the rate. A gate is a
+> discard or a delay, and a count of originated messages looks identical under both.
+> **Enforced**: `tests/test_tx_gate.py` and `tests/test_offered_load.py`; the results carry
+> `channelUtilDeferred` and the mean deferral, with `channelUtilDropped` reserved for messages whose
+> channel never cleared before the run ended.
 
 ## What is still open
 
