@@ -95,18 +95,23 @@ rather than the three it started with, and four of them are not stdlib:
 | you want | you need | if it is missing |
 | --- | --- | --- |
 | a flat run, the test suite | nothing | - |
-| `--scenario` (terrain, clutter, a real snapshot) | `PyYAML`, and `numpy` + `simpy` transitively, through `lib.presets` -> `lib.node` and `lib.common` | `ImportError`, at the point the scenario loads |
+| `--scenario` (terrain, clutter, a real snapshot) | `PyYAML`, plus `numpy`, `pandas` and `simpy` transitively - `lib.presets`, `lib.map_input` and `lib.osm_clutter` each reach `lib.node` (simpy), `lib.common`/`lib.point` (numpy) and `lib.discrete_event` (pandas) | `ImportError`, at the point the scenario loads |
 | charts, the mesh map, the digest page | `matplotlib` | the run writes its JSON and skips the picture |
 | `sfpp.check_oracle` | a **C++ compiler** (`g++`) and a firmware checkout | see §9.2 |
 
-`requirements.txt` in the repository root is the **whole tree's**, not this simulator's: eight hard
-dependencies for the discrete-event and interactive simulators. Install it in a virtualenv - the
-versions are pinned, and a run outside those pins is not a run this tree has tested.
+**There are two requirements files, and the distinction is the whole point.**
+`sfpp/requirements.txt` is this simulator's: PyYAML required, matplotlib and pytest optional.
+`requirements.txt` at the repository root is the whole tree's - eight pinned dependencies for the
+discrete-event and interactive simulators. Install the root one in a virtualenv for anything past a
+flat run, because the scenario path reaches three of its packages transitively; the versions are
+pinned, and a run outside those pins is not a run this tree has tested.
 
-> This section said "nothing needs installing… two optional extras" until 2026-08-21. That was true
-> of `sim/requirements.txt`, which listed matplotlib and pytest and stated that nothing under `sfpp/`
-> used the vendored tree's own eight. That file did not travel with the move into this repository, so
-> the sentence kept its words and silently changed which file it was describing.
+> This section said "nothing needs installing… two optional extras" until 2026-08-21, and the reason
+> is drift between those two files rather than anything about the move. `sfpp/requirements.txt` is
+> `sim/requirements.txt` renamed, and it had already been corrected - CI caught the PyYAML gap when a
+> clean runner failed three tests on the preset path, and the file now records that. This section was
+> never updated to match its own sibling, and separately went stale on "standard library only" when
+> the vendored imports grew from three to ten.
 
 ```bash
 python3 -m unittest discover -s sfpp -t . -p 'test_*.py'   # a gate, not a formality

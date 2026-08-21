@@ -7,8 +7,15 @@
 # passed on a developer machine with PyYAML as a system package and failed on a clean runner with
 # three errors, all on the preset path.
 #
-# The vendored modules SF++ imports (lib.clutter, lib.config, lib.link_model, lib.map_input,
-# lib.osm_clutter, lib.phy, lib.radio_loss, lib.srtm, lib.terrain) are pure standard library.
+# Seven of the ten vendored modules SF++ imports are pure standard library: lib.clutter,
+# lib.config, lib.link_model, lib.phy, lib.radio_loss, lib.srtm, lib.terrain.
+#
+# The other three are not, and this list said they were. lib.presets was missing from it entirely,
+# and lib.map_input and lib.osm_clutter were named as clean. Each reaches numpy, pandas and simpy
+# transitively - simpy through lib.node, numpy through lib.common and lib.point, pandas through
+# lib.discrete_event - so anything under the scenario path needs the root requirements.txt, not just
+# PyYAML. That is the same shape of gap PyYAML was: CI caught the yaml import because it is named in
+# a module SF++ calls directly, and did not catch these because they are two hops away.
 PyYAML>=6.0
 
 # Optional, and neither is needed for a scheduled run. The charts a run draws for itself are SVG
@@ -20,5 +27,6 @@ matplotlib>=3.5   # the hand-run figure tools: figures.py, figures3.py, diagram.
 pytest>=7         # nicer test runner; unittest runs the same suite
 
 # The vendored tree's own tooling - its interactive simulator, protobuf plumbing and dataset
-# fetchers - needs more than this. See requirements.txt at the repository root; nothing under sfpp/
-# uses it.
+# fetchers - needs more than this: see requirements.txt at the repository root. sfpp/ does not use
+# that tooling, but it does reach three of its packages transitively, per the note above, so "nothing
+# under sfpp/ uses it" was true of the tooling and false of the dependencies.
