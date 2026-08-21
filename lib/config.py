@@ -800,6 +800,18 @@ class Config:
         self.CHANNEL_UTILIZATION_PERIODS = 6
         self.UTILIZATION_TX_PERIODS = 60
 
+        # AirTime::isTxAllowedChannelUtil, from src/airtime.h's hard-coded members. A device
+        # declines to originate periodic traffic when the channel is this busy, and that gate is
+        # the mesh's main self-regulation: without it a congestion sweep measures a network that
+        # keeps offering the same load however busy the air gets. Relays and ACKs are not gated,
+        # because the firmware puts the check in the modules that originate rather than in Router.
+        self.CHANNEL_UTIL_TX_LIMIT_PERCENT = 40
+        self.CHANNEL_UTIL_POLITE_TX_LIMIT_PERCENT = 25
+        self.CHANNEL_UTIL_TX_GATE_ENABLED = True
+        # Polite is the common case: PositionModule, DeviceTelemetry and the rest pass polite=true
+        # for every role but TRACKER and SENSOR. NodeInfoModule is the impolite one.
+        self.CHANNEL_UTIL_TX_GATE_POLITE = True
+
     @property
     def current_preset(self):
         """Returns the currently selected modem preset configuration"""

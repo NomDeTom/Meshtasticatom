@@ -27,6 +27,18 @@ def originated_per_node(results, nodes):
     return counts
 
 
+def offered_per_node(sim, results, nodes):
+    """What the application timer produced, whether or not the TX gate let it out.
+
+    The generator's own rate is the thing under test here; the channel-utilisation gate declining a
+    send is correct behaviour, measured in tests/test_tx_gate.py.
+    """
+    counts = originated_per_node(results, nodes)
+    for node in sim.mutated_state.nodes:
+        counts[node.nodeid] += node.droppedByChannelUtil
+    return counts
+
+
 def run(nodes, period_s=20, minutes=8, seed=44, dms=False):
     conf = Config()
     conf.NR_NODES = nodes
@@ -43,8 +55,8 @@ def run(nodes, period_s=20, minutes=8, seed=44, dms=False):
 
 class OfferedLoadMatchesItsOwnConfiguration(unittest.TestCase):
     def observed_mean(self, nodes, **kwargs):
-        conf, _, results = run(nodes, **kwargs)
-        counts = originated_per_node(results, nodes)
+        conf, sim, results = run(nodes, **kwargs)
+        counts = offered_per_node(sim, results, nodes)
         nominal = conf.SIMTIME / conf.PERIOD
         return statistics.mean(counts.values()), nominal
 
@@ -70,6 +82,16 @@ class AnAckEndsTheWait(unittest.TestCase):
         self.assertTrue(hasattr(MeshNode, "reliable_send"))
         self.assertTrue(hasattr(MeshNode, "signal_ack"))
 
+    def test_the_gate_and_the_generator_are_separate_things(self):
+        """A gated send is a decision; a stalled generator was a defect. Keep them apart."""
+        conf, sim, results = run(40)
+        offered = sum(offered_per_node(sim, results, 40).values())
+        originated = sum(originated_per_node(results, 40).values())
+        self.assertEqual(offered - originated, results["channelUtilDropped"])
+        self.assertGreater(results["channelUtilDropped"], 0)
+
+
+class AnAckEndsTheWaitAlso(unittest.TestCase):
     def test_acknowledged_messages_do_not_use_their_whole_retry_budget(self):
         """On a connected, uncongested mesh most messages are implicitly acked on the first send.
 

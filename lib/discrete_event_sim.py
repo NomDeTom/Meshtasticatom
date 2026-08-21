@@ -169,6 +169,11 @@ class SimulationResults:
             self.results["nodeUtilizationTxPercent"] = {"mean": np.nan, "max": np.nan}
 
         self.results["delayDropped"] = sum(n.droppedByDelay for n in nodes)
+        # Sends the channel-utilisation gate declined. Named rather than silent: a mesh that
+        # throttles itself is the point, and a run cannot be read without knowing it happened.
+        self.results["channelUtilDropped"] = sum(
+            getattr(n, "droppedByChannelUtil", 0) for n in nodes
+        )
         self.results["dcrTxByCr"] = {
             cr: sum(getattr(n, "dcrTxByCr", {}).get(cr, 0) for n in nodes)
             for cr in (5, 6, 7, 8)

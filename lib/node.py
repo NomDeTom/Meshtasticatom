@@ -244,6 +244,7 @@ class MeshNode:
         self.dtpSensedByTx = 0
         self.dtpTxCount = 0
         self.droppedByDelay = 0
+        self.droppedByChannelUtil = 0
         self.rebroadcastPackets = 0
         self.isMoving = False
         self.gpsEnabled = False
@@ -524,6 +525,20 @@ class MeshNode:
                 continue
             yield self.env.timeout(1)
 
+    def is_tx_allowed_channel_util(self):
+        """AirTime::isTxAllowedChannelUtil - may this node originate periodic traffic right now?
+
+        The threshold is 40%, or 25% for the polite roles, against the 60 s channel-busy share.
+        """
+        if not self.conf.CHANNEL_UTIL_TX_GATE_ENABLED:
+            return True
+        limit = (
+            self.conf.CHANNEL_UTIL_POLITE_TX_LIMIT_PERCENT
+            if self.conf.CHANNEL_UTIL_TX_GATE_POLITE
+            else self.conf.CHANNEL_UTIL_TX_LIMIT_PERCENT
+        )
+        return self.channel_utilization_percent() < limit
+
     def signal_ack(self, seq):
         """Wake a reliable send waiting on this message id.
 
@@ -555,6 +570,16 @@ class MeshNode:
                     destId = self.nodeRng.choice([i for i in range(0, len(self.nodes)) if i != self.nodeid])
                 else:
                     destId = NODENUM_BROADCAST
+
+                if not self.is_tx_allowed_channel_util():
+                    # The firmware skips the interval rather than queueing it: a message deferred
+                    # until the channel clears would arrive as a burst on top of the next one.
+                    self.droppedByChannelUtil += 1
+                    logger.debug(
+                        f"{self.env.now:.3f} Node {self.nodeid} skips a send: channel "
+                        f"{self.channel_utilization_percent():.1f}% busy"
+                    )
+                    continue
 
                 p = self.send_packet(destId)
                 if p.wantAck:
