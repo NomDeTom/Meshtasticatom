@@ -27,7 +27,7 @@ def required_snr_db(sf):
     return REQUIRED_SNR_DB[int(sf)]
 
 
-def effective_sensitivity(conf, preset=None):
+def effective_sensitivity(conf, preset=None, noise_dbm=None):
     """The weakest signal this receiver can actually decode, given the noise it sits in.
 
     A preset's sensitivity is a datasheet figure: kTB for its bandwidth, plus a noise figure, plus
@@ -40,18 +40,23 @@ def effective_sensitivity(conf, preset=None):
     So the threshold is whichever is harder: the datasheet figure, or the noise the receiver is
     actually in plus the SNR the modem needs. A floor quieter than thermal cannot help, because the
     receiver's own noise dominates there.
+
+    A real floor is not the thermal one and does not hold still, so `noise_dbm` takes the band the
+    receiver is actually in at this instant; it defaults to the config's median. The datasheet figure
+    still bounds it from below, because a band quieter than the receiver's own noise cannot help.
     """
     preset = preset or conf.current_preset
     datasheet = preset["sensitivity"]
-    from_noise = conf.NOISE_LEVEL + required_snr_db(preset["sf"])
+    noise = conf.NOISE_LEVEL if noise_dbm is None else noise_dbm
+    from_noise = noise + required_snr_db(preset["sf"])
     return max(datasheet, from_noise)
 
 
-def effective_cad_threshold(conf, preset=None):
+def effective_cad_threshold(conf, preset=None, noise_dbm=None):
     """Energy detection reaches below decodability, by the margin the preset table declares."""
     preset = preset or conf.current_preset
     margin = preset["sensitivity"] - preset["cad_threshold"]
-    return effective_sensitivity(conf, preset) - margin
+    return effective_sensitivity(conf, preset, noise_dbm) - margin
 
 #                           CAD duration   +     airPropagationTime+TxRxTurnaround+MACprocessing
 def get_current_slot_time(conf): # from RadioInterface::computeSlotTimeMsec

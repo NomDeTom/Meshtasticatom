@@ -688,7 +688,15 @@ class Config:
         self.FREQ = self.frequency()
         self.HEADERLENGTH = 16  # number of Meshtastic header bytes
         self.ACKLENGTH = 2  # ACK payload in bytes
+        # The *median* noise floor. A real one is not the thermal floor and does not hold still:
+        # it is a distribution with a median well above kTB+NF and several decibels of spread,
+        # varying by site and by hour. NOISE_SIGMA_DB gives it that spread, correlated over
+        # NOISE_TAU_MSEC so the band drifts rather than flickering per packet, and clamped below by
+        # the thermal floor. Zero reproduces a constant floor exactly, which is the default so no
+        # existing result moves until a scenario asks for the variation.
         self.NOISE_LEVEL = -119.25  # some noise level in dB, based on SNR_MIN and minimum receiver sensitivity
+        self.NOISE_SIGMA_DB = 0.0
+        self.NOISE_TAU_MSEC = 60_000.0
         self.GAMMA = 2.08  # PHY parameter
         self.D0 = 40.0  # PHY parameter
         self.LPLD0 = 127.41  # PHY parameter

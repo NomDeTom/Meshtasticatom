@@ -16,9 +16,12 @@ upstream Meshtasticator until a scenario explicitly enables it.
 import math
 
 
-def estimate_snr(conf, rssi):
-    """Estimate packet SNR from simulated RSSI and the configured noise floor."""
-    snr = rssi - conf.NOISE_LEVEL
+def estimate_snr(conf, rssi, noise_dbm=None):
+    """Estimate packet SNR from simulated RSSI and the noise floor it was received in.
+
+    `noise_dbm` is the band at that instant; without it, the config's median.
+    """
+    snr = rssi - (conf.NOISE_LEVEL if noise_dbm is None else noise_dbm)
     if conf.REPORTED_SNR_MIN_DB is not None:
         snr = max(conf.REPORTED_SNR_MIN_DB, snr)
     if conf.REPORTED_SNR_MAX_DB is not None:
@@ -47,12 +50,12 @@ def apply_link_calibration(conf, rssi, features):
     return conf.NOISE_LEVEL + calibrated_snr
 
 
-def payload_success_probability(conf, rssi, cr, packet_len):
+def payload_success_probability(conf, rssi, cr, packet_len, noise_dbm=None):
     """Return the probability that a heard packet's payload decodes.
 
     Sensitivity gates hearing elsewhere; CR helps a weak link but cannot go below that.
     """
-    snr = estimate_snr(conf, rssi)
+    snr = estimate_snr(conf, rssi, noise_dbm)
     p50_by_cr = conf.PHY_LOSS_SNR_P50_BY_CR
     p50 = p50_by_cr.get(cr, p50_by_cr[5])
 
@@ -66,9 +69,9 @@ def payload_success_probability(conf, rssi, cr, packet_len):
     return min(conf.PHY_LOSS_MAX_SUCCESS_PROB, max(conf.PHY_LOSS_MIN_SUCCESS_PROB, probability))
 
 
-def payload_is_lost(conf, rssi, cr, packet_len, random_draw):
+def payload_is_lost(conf, rssi, cr, packet_len, random_draw, noise_dbm=None):
     """Decide whether this packet copy is lost to weak-link PHY errors."""
     if not conf.PHY_LOSS_MODEL_ENABLED:
         return False
 
-    return random_draw > payload_success_probability(conf, rssi, cr, packet_len)
+    return random_draw > payload_success_probability(conf, rssi, cr, packet_len, noise_dbm)

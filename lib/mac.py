@@ -23,7 +23,9 @@ def set_transmit_delay(node, packet):  # from RadioLibInterface::setTransmitDela
 def get_tx_delay_msec_weighted(node, rssi):  # from RadioInterface::getTxDelayMsecWeighted
     # Use the same reported-SNR estimate as the packet-loss model so calibrated
     # presets do not drive relay delay from an impossible near-field SNR tail.
-    snr = estimate_snr(node.conf, rssi)
+    floor = getattr(node, "noiseFloor", None)
+    noise = floor.level_at(node.env.now) if floor is not None else None
+    snr = estimate_snr(node.conf, rssi, noise)
     SNR_MIN = -20
     SNR_MAX = 10
     slot_time_msec = get_current_slot_time(node.conf)

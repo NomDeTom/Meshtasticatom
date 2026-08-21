@@ -91,6 +91,18 @@ class MeshPacket:
         self.ackReceived = False
         self.hopLimit = self.tx_node.hopLimit
 
+    def noise_at(self, rx_node_id):
+        """The noise floor the receiver is sitting in at this packet's time.
+
+        Falls back to the config's median for a node with no band of its own, which is what a stub
+        in a test is.
+        """
+        node = self.nodes[rx_node_id]
+        floor = getattr(node, "noiseFloor", None)
+        if floor is None:
+            return self.conf.NOISE_LEVEL
+        return floor.level_at(self.now)
+
     @staticmethod
     def reliable_attempts(conf, destId):
         """Total sends including the first, for a packet addressed to `destId`."""
@@ -131,7 +143,9 @@ class MeshPacket:
             self.clutterLossAtN[rx_node.nodeid] = budget.clutter_loss_db
             self.LplAtN[rx_node.nodeid] = budget.calibrated_path_loss_db
             self.rssiAtN[rx_node.nodeid] = budget.rssi_dbm
-            self.detectedByN[rx_node.nodeid] = self.rssiAtN[rx_node.nodeid] >= effective_cad_threshold(self.conf)
+            self.detectedByN[rx_node.nodeid] = self.rssiAtN[rx_node.nodeid] >= effective_cad_threshold(
+                self.conf, noise_dbm=self.noise_at(rx_node.nodeid)
+            )
             if self.detectedByN[rx_node.nodeid]:
                 self.detected_node_ids.append(rx_node.nodeid)
         self.refresh_phy_reception()
@@ -167,7 +181,8 @@ class MeshPacket:
             if rx_node_id == self.txNodeId:
                 continue
 
-            self.sensedByN[rx_node_id] = rssi >= effective_sensitivity(self.conf)
+            noise = self.noise_at(rx_node_id)
+            self.sensedByN[rx_node_id] = rssi >= effective_sensitivity(self.conf, noise_dbm=noise)
             if self.sensedByN[rx_node_id]:
                 self.sensed_node_ids.append(rx_node_id)
             self.phyLostAtN[rx_node_id] = False
@@ -179,6 +194,7 @@ class MeshPacket:
                     self.cr,
                     self.packetLen,
                     self.phyLossDrawAtN[rx_node_id],
+                    noise_dbm=noise,
                 )
 
 
