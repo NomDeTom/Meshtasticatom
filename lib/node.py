@@ -226,6 +226,9 @@ class MeshNode:
 
         self.nrPacketsSent = 0
         self.timesReceived = {}
+        # message id -> an event a reliable send is waiting on, so an ACK ends the wait rather
+        # than being noticed after the retransmission deadline has already elapsed.
+        self.ackSignal = {}
         self.isReceiving = []
         self.isTransmitting = False
         self.usefulPackets = 0
@@ -521,7 +524,26 @@ class MeshNode:
                 continue
             yield self.env.timeout(1)
 
+    def signal_ack(self, seq):
+        """Wake a reliable send waiting on this message id.
+
+        The retransmission timer is a deadline, not a sleep: the firmware's pending list stops
+        retransmitting the moment an ACK arrives, and the application that queued the message was
+        never waiting on either.
+        """
+        signal = self.ackSignal.get(seq)
+        if signal is not None and not signal.triggered:
+            signal.succeed()
+
     def generate_message(self):
+        """The application's own timer. Nothing downstream of it may hold it up.
+
+        The reliable send runs as its own process, because this loop used to sit inside it: every
+        message stalled its node for a full retransmission timeout - about 7.4 s at LONG_FAST -
+        before the loop even looked to see whether the implicit ACK had already arrived. Offered
+        load came out 8.9% under nominal on a five-node mesh and 16.9% under on a sixty-node one,
+        so the load fell as the mesh grew, which is a feedback the firmware does not have.
+        """
         while True:
             # Returns -1 if we don't make it before the sim ends
             nextGen = self.get_next_time(self.period)
@@ -535,40 +557,47 @@ class MeshNode:
                     destId = NODENUM_BROADCAST
 
                 p = self.send_packet(destId)
-
-                while p.wantAck:  # ReliableRouter: retransmit message if no ACK received after timeout
-                    retry_timer_packet = self.latest_retry_timer_packet(p)
-                    yield from self.wait_for_retry_timer_airtime(retry_timer_packet)
-                    if retry_timer_packet not in self.packets:
-                        break
-                    retransmissionMsec = get_retransmission_msec(self, retry_timer_packet)
-                    yield self.env.timeout(retransmissionMsec)
-
-                    ackReceived = False  # check whether you received an ACK on the transmitted message
-                    minRetransmissions = p.maxRetransmissions
-                    for packetSent in self.packets:
-                        if packetSent.origTxNodeId == self.nodeid and packetSent.seq == p.seq:
-                            if packetSent.retransmissions < minRetransmissions:
-                                minRetransmissions = packetSent.retransmissions
-                            if packetSent.ackReceived:
-                                ackReceived = True
-                    if ackReceived:
-                        logger.debug(f"{self.env.now:.3f} Node {self.nodeid} received ACK on generated message with seq. nr. {p.seq}")
-                        break
-                    else:
-                        if minRetransmissions > 0:  # generate new packet with same sequence number
-                            pNew = MeshPacket(self.conf, self.nodes, self.nodeid, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
-                            pNew.transmission_started_event = self.env.event()
-                            pNew.retransmissions = minRetransmissions - 1
-                            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} wants to retransmit its generated packet to {destId} with seq.nr. {p.seq} minRetransmissions {minRetransmissions}")
-                            self.packets.append(pNew)
-                            self.env.process(self.transmit(pNew))
-                            p = pNew
-                        else:
-                            logger.debug(f"{self.env.now:.3f} Node {self.nodeid} reliable send of {p.seq} failed.")
-                            break
+                if p.wantAck:
+                    self.env.process(self.reliable_send(p))
             else:  # do not send this message anymore, since it is close to the end of the simulation
                 break
+
+    def reliable_send(self, p):
+        """ReliableRouter: retransmit until the message is acknowledged or the budget runs out."""
+        destId = p.destId
+        signal = self.env.event()
+        self.ackSignal[p.seq] = signal
+        try:
+            while True:
+                retry_timer_packet = self.latest_retry_timer_packet(p)
+                yield from self.wait_for_retry_timer_airtime(retry_timer_packet)
+                if retry_timer_packet not in self.packets:
+                    break
+                retransmissionMsec = get_retransmission_msec(self, retry_timer_packet)
+                # A deadline raced against the ACK, not a sleep taken before looking for it.
+                yield self.env.timeout(retransmissionMsec) | signal
+                if signal.triggered:
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} received ACK on generated message with seq. nr. {p.seq}")
+                    break
+
+                minRetransmissions = p.maxRetransmissions
+                for packetSent in self.packets:
+                    if packetSent.origTxNodeId == self.nodeid and packetSent.seq == p.seq:
+                        if packetSent.retransmissions < minRetransmissions:
+                            minRetransmissions = packetSent.retransmissions
+                if minRetransmissions > 0:  # generate new packet with same sequence number
+                    pNew = MeshPacket(self.conf, self.nodes, self.nodeid, p.destId, self.nodeid, p.packetLen, p.seq, p.genTime, p.wantAck, False, None, self.env.now, self.connectivity_map, self.baseline_pathloss_matrix)
+                    pNew.transmission_started_event = self.env.event()
+                    pNew.retransmissions = minRetransmissions - 1
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} wants to retransmit its generated packet to {destId} with seq.nr. {p.seq} minRetransmissions {minRetransmissions}")
+                    self.packets.append(pNew)
+                    self.env.process(self.transmit(pNew))
+                    p = pNew
+                else:
+                    logger.debug(f"{self.env.now:.3f} Node {self.nodeid} reliable send of {p.seq} failed.")
+                    break
+        finally:
+            self.ackSignal.pop(p.seq, None)
 
     def transmit(self, packet):
         with self.transmitter.request() as request:
@@ -729,6 +758,7 @@ class MeshNode:
             else:
                 logger.debug(f"Node {self.nodeid} received implicit ACK on message sent.")
             p.ackReceived = True
+            self.signal_ack(p.seq)
             return
 
         ackReceived = False
@@ -739,11 +769,13 @@ class MeshNode:
                 logger.debug(f"{self.env.now:.3f} Node {self.nodeid} received implicit ACK for message in queue.")
                 ackReceived = True
                 sentPacket.ackReceived = True
+                self.signal_ack(sentPacket.seq)
             # check if real ACK for message sent
             if sentPacket.origTxNodeId == self.nodeid and p.isAck and sentPacket.seq == p.requestId:
                 logger.debug(f"{self.env.now:.3f} Node {self.nodeid} received real ACK.")
                 realAckReceived = True
                 sentPacket.ackReceived = True
+                self.signal_ack(sentPacket.seq)
 
         # send real ACK if you are the destination and you did not yet send the ACK
         if p.wantAck and p.destId == self.nodeid and not any(pA.requestId == p.seq for pA in self.packets):

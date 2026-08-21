@@ -269,32 +269,37 @@ class TestDiscreteEventSim(unittest.TestCase):
         # 60 s union of audible air rather than a lifetime mean of every sensed packet's full
         # airtime, so the window this ten-node mesh draws from is different and the mean delay
         # follows it (4051 -> 4234 ms).
-        self.assertEqual(appMessages, 182, "expected number of application messages created")
+        #
+        # Moved again by decoupling the generator from the reliable send: every message used to
+        # stall its node for a retransmission timeout before the loop looked for the ACK, so this
+        # mesh was offering about 8% less load than its own PERIOD asks for. 182 -> 197 messages,
+        # and everything downstream of the load follows.
+        self.assertEqual(appMessages, 197, "expected number of application messages created")
         sent = results['sent']
         potentialReceivers = results['potentialReceivers']
-        self.assertEqual(sent, 799, "expected number of packets sent")
-        self.assertEqual(potentialReceivers, 7191, "expected number of potential receivers")
+        self.assertEqual(sent, 923, "expected number of packets sent")
+        self.assertEqual(potentialReceivers, 8307, "expected number of potential receivers")
 
         nrCollisions = results['nrCollisions']
-        self.assertEqual(nrCollisions, 196, "expected number of collisions")
+        self.assertEqual(nrCollisions, 236, "expected number of collisions")
         nrSensed = results['nrSensed']
-        self.assertEqual(nrSensed, 2706, "expected number of packets sensed")
+        self.assertEqual(nrSensed, 3245, "expected number of packets sensed")
 
         nrReceived = results['nrReceived']
-        self.assertEqual(nrReceived, 2498, "expected number of packets received")
+        self.assertEqual(nrReceived, 3006, "expected number of packets received")
         meanDelay = results['meanDelay']
-        self.assertEqual(round(meanDelay, 2), 4234.07, "expected rounded delay average")
+        self.assertEqual(round(meanDelay, 2), 5127.6, "expected rounded delay average")
         txAirUtilizationRate = results['txAirUtilizationRate']
-        self.assertEqual(round(txAirUtilizationRate * 100, 2), 3.01, "expected rounded average tx air utilization")
+        self.assertEqual(round(txAirUtilizationRate * 100, 2), 3.49, "expected rounded average tx air utilization")
 
         nodeReach = results['nodeReach']
-        self.assertEqual(round(nodeReach*100, 2), 80.28, "expected rounded percentage of nodes reached")
+        self.assertEqual(round(nodeReach*100, 2), 83.08, "expected rounded percentage of nodes reached")
 
         usefulness = results['usefulness']
-        self.assertEqual(round(usefulness*100, 2), 52.64, "expected rounded 'usefulness' percentage")
+        self.assertEqual(round(usefulness*100, 2), 49.0, "expected rounded 'usefulness' percentage")
 
         delayDropped = results['delayDropped']
-        self.assertEqual(delayDropped, 1101, "expected number of packets dropped")
+        self.assertEqual(delayDropped, 1335, "expected number of packets dropped")
         # default config has both asymmetric links and movement enabled
         noLinkRate = results['noLinkRate']
         self.assertEqual(round(noLinkRate * 100, 2), 55.56, "expected rounded percentage of 'no' links")
@@ -309,8 +314,8 @@ class TestDiscreteEventSim(unittest.TestCase):
         # than all the time, and the figure the contention window used to read hit 117.5%.
         chutil = results['nodeChannelUtilPercent']
         self.assertLessEqual(chutil['max'], 100.0, "a channel cannot be busy more than all the time")
-        self.assertEqual(round(chutil['mean'], 2), 9.99, "expected mean channel utilization")
-        self.assertEqual(round(chutil['max'], 2), 13.64, "expected busiest node's channel utilization")
+        self.assertEqual(round(chutil['mean'], 2), 13.67, "expected mean channel utilization")
+        self.assertEqual(round(chutil['max'], 2), 18.19, "expected busiest node's channel utilization")
         # Own transmissions over the last hour: the other window, and a tenth of the first.
         utilTx = results['nodeUtilizationTxPercent']
         self.assertLess(utilTx['max'], chutil['max'])
