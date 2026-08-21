@@ -244,18 +244,23 @@ def terrain_obstruction_loss(conf, tx_point, rx_point, freq):
 
         fresnel_radius = math.sqrt(wavelength * d1 * d2 / horizontal_distance)
         # A flat projection makes long links look too clear, so each sample gets the
-        # 4/3 earth bulge before Fresnel clearance is measured against the antenna line.
+        # 4/3 earth bulge before clearance is measured against the antenna line.
         earth_bulge = curvature_scale * fraction * (1.0 - fraction)
-        obstruction_height = (
-            ground
-            + earth_bulge
-            + conf.TERRAIN_FRESNEL_CLEARANCE * fresnel_radius
-            - los_height
-        )
-        if obstruction_height <= 0:
+        # Metres of clearance between the antenna line and the ground: positive when the path is
+        # clear over this sample, negative when the terrain rises through it.
+        clearance = los_height - (ground + earth_bulge)
+
+        # TERRAIN_FRESNEL_CLEARANCE is a clearance *requirement*, not a height to add to the
+        # obstruction. Adding it in offset v by a constant 0.6*sqrt(2) = 0.849, because the first
+        # Fresnel radius is exactly the reciprocal of v's own scaling - so a grazing path was
+        # charged 12.9 dB against a true 6.0, a path with 0.2*F1 of clearance 10.8 dB against
+        # 3.7, and the loss jumped from 0 to 6.03 dB across the threshold. The requirement now
+        # only decides when to stop looking, and at 0.6*F1 the ITU curve is already zero, so the
+        # model is continuous in clearance.
+        if clearance >= conf.TERRAIN_FRESNEL_CLEARANCE * fresnel_radius:
             continue
 
-        v = obstruction_height * math.sqrt(2.0 * horizontal_distance / (wavelength * d1 * d2))
+        v = -clearance * math.sqrt(2.0 * horizontal_distance / (wavelength * d1 * d2))
         worst_loss = max(worst_loss, knife_edge_loss_db(v))
 
     loss = min(worst_loss, conf.TERRAIN_MAX_LOSS_DB)
