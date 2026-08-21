@@ -49,6 +49,12 @@ class ClutterGrid:
 
         if not samples:
             raise ValueError(f"clutter CSV has no samples: {path}")
+        unknown = sorted({name for _, _, name in samples} - KNOWN_CLASSES)
+        if unknown:
+            raise ValueError(
+                f"clutter CSV {path} names classes the loss table does not know: "
+                f"{', '.join(unknown)}"
+            )
         return cls(samples)
 
     @staticmethod
@@ -93,16 +99,36 @@ def _clutter_grid(conf):
     return conf._clutter_grid
 
 
+URBAN_CLASSES = {"urban", "building"}
+SUBURBAN_CLASSES = {"suburban", "residential"}
+FOREST_CLASSES = {"forest", "wood"}
+WATER_CLASSES = {"water", "coastal_water"}
+OPEN_CLASSES = {"open", "beach"}
+KNOWN_CLASSES = URBAN_CLASSES | SUBURBAN_CLASSES | FOREST_CLASSES | WATER_CLASSES | OPEN_CLASSES
+
+
 def _class_loss_db_per_km(conf, clutter_class):
-    if clutter_class in {"urban", "building"}:
+    """Per-km loss for a land-cover class, refusing classes it does not know.
+
+    It used to fall through to the open rate - the cheapest of the five - so a raster naming
+    `industrial`, `agriculture`, `grass` or a typo was charged as open ground and produced a
+    well-formed number. `beach`, which the exporter can emit and the coastal test counts, was one
+    of those.
+    """
+    if clutter_class in URBAN_CLASSES:
         return conf.CLUTTER_URBAN_LOSS_DB_PER_KM
-    if clutter_class in {"suburban", "residential"}:
+    if clutter_class in SUBURBAN_CLASSES:
         return conf.CLUTTER_SUBURBAN_LOSS_DB_PER_KM
-    if clutter_class in {"forest", "wood"}:
+    if clutter_class in FOREST_CLASSES:
         return conf.CLUTTER_FOREST_LOSS_DB_PER_KM
-    if clutter_class in {"water", "coastal_water"}:
+    if clutter_class in WATER_CLASSES:
         return conf.CLUTTER_WATER_LOSS_DB_PER_KM
-    return conf.CLUTTER_OPEN_LOSS_DB_PER_KM
+    if clutter_class in OPEN_CLASSES:
+        return conf.CLUTTER_OPEN_LOSS_DB_PER_KM
+    raise ValueError(
+        f"unknown clutter class {clutter_class!r}; known classes are "
+        f"{', '.join(sorted(KNOWN_CLASSES))}"
+    )
 
 
 def clutter_path_features(conf, tx_point, rx_point):
@@ -152,14 +178,16 @@ def clutter_path_features(conf, tx_point, rx_point):
     endpoint_urban_count = 0
     for point in (tx_point, rx_point):
         endpoint_class = grid.class_at(point.x, point.y)
-        if endpoint_class in {"urban", "building", "suburban", "residential"}:
+        if endpoint_class in URBAN_CLASSES | SUBURBAN_CLASSES:
             endpoint_urban_count += 1
 
+    # One definition of each share, from the same class sets the loss table uses: the fractions and
+    # the loss were counting `beach` differently, so a raster using it disagreed with itself.
     features = {
-        "urban_fraction": class_counts.get("urban", 0) / samples,
-        "open_fraction": class_counts.get("open", 0) / samples,
-        "water_fraction": (class_counts.get("water", 0) + class_counts.get("coastal_water", 0)) / samples,
-        "forest_fraction": (class_counts.get("forest", 0) + class_counts.get("wood", 0)) / samples,
+        "urban_fraction": sum(class_counts.get(n, 0) for n in URBAN_CLASSES) / samples,
+        "open_fraction": sum(class_counts.get(n, 0) for n in OPEN_CLASSES) / samples,
+        "water_fraction": sum(class_counts.get(n, 0) for n in WATER_CLASSES) / samples,
+        "forest_fraction": sum(class_counts.get(n, 0) for n in FOREST_CLASSES) / samples,
         "endpoint_urban_count": float(endpoint_urban_count),
     }
     cache[cache_key] = features
@@ -227,9 +255,13 @@ def clutter_obstruction_loss(conf, tx_point, rx_point):
 
     # Coastal or sea-adjacent paths are often real line-of-sight corridors. Do
     # not let a few nearby urban cells make them look like street-canyon links.
-    water_samples = class_counts.get("water", 0) + class_counts.get("coastal_water", 0)
-    open_samples = class_counts.get("open", 0) + class_counts.get("beach", 0)
-    if (water_samples + open_samples) / samples >= conf.CLUTTER_COASTAL_SAMPLE_FRACTION:
+    water_samples = sum(class_counts.get(name, 0) for name in WATER_CLASSES)
+    open_samples = sum(class_counts.get(name, 0) for name in OPEN_CLASSES)
+    # The path has to actually cross water. Without that condition this was an "over half the path
+    # is unmapped" test: `open` is the exporter's default for a cell it found no polygon for, and
+    # on the packaged Batumi raster that is 72% of cells, so a quarter of all pairs - inland ones
+    # included - collected a 4x discount for having crossed ground OSM did not describe.
+    if water_samples and (water_samples + open_samples) / samples >= conf.CLUTTER_COASTAL_SAMPLE_FRACTION:
         path_loss *= conf.CLUTTER_COASTAL_PATH_LOSS_FACTOR
 
     tx_high = _is_high_vantage(conf, tx_point)
@@ -240,7 +272,7 @@ def clutter_obstruction_loss(conf, tx_point, rx_point):
     endpoint_loss = 0.0
     for point, high_vantage in ((tx_point, tx_high), (rx_point, rx_high)):
         endpoint_class = grid.class_at(point.x, point.y)
-        if endpoint_class in {"urban", "building", "suburban", "residential"} and not high_vantage:
+        if endpoint_class in URBAN_CLASSES | SUBURBAN_CLASSES and not high_vantage:
             endpoint_loss += conf.CLUTTER_URBAN_ENDPOINT_LOSS_DB
 
     loss = min(path_loss + endpoint_loss, conf.CLUTTER_MAX_LOSS_DB)

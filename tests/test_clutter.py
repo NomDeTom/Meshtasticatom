@@ -122,3 +122,81 @@ class TestClutter(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnknownClassesAreRefused(unittest.TestCase):
+    """A silent substitution produced a well-formed number for a raster nobody had checked."""
+
+    def test_an_unrecognised_class_raises_rather_than_charging_the_open_rate(self):
+        from lib.clutter import _class_loss_db_per_km
+
+        conf = Config()
+        for name in ("industrial", "agriculture", "grass", "Urban", ""):
+            with self.subTest(clutter_class=name):
+                with self.assertRaises(ValueError):
+                    _class_loss_db_per_km(conf, name)
+
+    def test_every_class_the_exporter_emits_is_known_to_the_loss_table(self):
+        from lib.clutter import KNOWN_CLASSES
+        from lib.osm_clutter import classify_osm_element
+
+        emitted = {
+            classify_osm_element(tags)
+            for tags in (
+                {"building": "yes"},
+                {"landuse": "residential"},
+                {"landuse": "forest"},
+                {"natural": "water"},
+                {"natural": "beach"},
+                {"natural": "grassland"},
+            )
+        }
+        self.assertTrue(emitted)
+        self.assertLessEqual(emitted, KNOWN_CLASSES)
+
+    def test_a_raster_naming_an_unknown_class_is_rejected_at_load(self):
+        import tempfile
+        from pathlib import Path
+
+        from lib.clutter import ClutterGrid
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bad.csv"
+            path.write_text("x_m,y_m,clutter_class\n0,0,open\n500,0,industrial\n")
+            with self.assertRaises(ValueError):
+                ClutterGrid.from_csv(path)
+
+
+class TheCoastalDiscountNeedsACoast(unittest.TestCase):
+    def test_an_unmapped_inland_path_is_not_discounted_as_coastal(self):
+        """`open` is the exporter's default for a cell it found nothing in, and 72% of the packaged
+        Batumi raster is open, so this test used to fire on a quarter of all pairs."""
+        from lib.clutter import clutter_obstruction_loss
+
+        conf = Config()
+        conf.CLUTTER_ENABLED = True
+        conf.CLUTTER_GRID_FILE = self.write_grid(["open"] * 9)
+        inland = clutter_obstruction_loss(conf, Point(0.0, 0.0, 2.0), Point(2000.0, 0.0, 2.0))
+
+        conf._clutter_grid = None
+        conf.CLUTTER_GRID_FILE = self.write_grid(["water"] * 9)
+        coastal = clutter_obstruction_loss(conf, Point(0.0, 0.0, 2.0), Point(2000.0, 0.0, 2.0))
+
+        # Water costs less per km than open ground, so the coastal path is cheaper - but the
+        # inland one gets no 4x discount for being unmapped.
+        self.assertGreater(inland, coastal)
+
+    def write_grid(self, classes):
+        import tempfile
+        from pathlib import Path
+
+        directory = tempfile.mkdtemp()
+        path = Path(directory) / "grid.csv"
+        rows = ["x_m,y_m,clutter_class"]
+        index = 0
+        for x in (-1000, 1000, 3000):
+            for y in (-1000, 0, 1000):
+                rows.append(f"{x},{y},{classes[index]}")
+                index += 1
+        path.write_text("\n".join(rows) + "\n")
+        return str(path)

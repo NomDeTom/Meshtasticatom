@@ -21,7 +21,11 @@ class TestOsmClutter(unittest.TestCase):
         self.assertEqual(classify_osm_element({"landuse": "residential"}), "urban")
         self.assertEqual(classify_osm_element({"natural": "wood"}), "forest")
         self.assertEqual(classify_osm_element({"natural": "water"}), "water")
-        self.assertEqual(classify_osm_element({"natural": "beach"}), "open")
+        # beach is its own class now: the coastal test counts it and the loss table knows it, so
+        # folding it into open meant the two disagreed about the same cell.
+        self.assertEqual(classify_osm_element({"natural": "beach"}), "beach")
+        self.assertEqual(classify_osm_element({"natural": "coastline"}), "coastline")
+        self.assertEqual(classify_osm_element({"natural": "grassland"}), "open")
 
     def test_parse_origin_rejects_non_finite_values(self):
         self.assertEqual(parse_origin("41.6,41.6"), (41.6, 41.6))

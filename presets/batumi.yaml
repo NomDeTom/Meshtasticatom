@@ -36,6 +36,35 @@ radio_calibration:
       water_fraction: 0.0
       forest_fraction: 0.0
       endpoint_urban_count: -1.642182
+clutter_provenance:
+  # What the packaged raster is, and what is wrong with it, recorded because it cannot be
+  # regenerated from here: the exporter needs Overpass and this environment's network policy
+  # denies it.
+  #
+  # It was exported before lib/osm_clutter.py queried relations or natural=coastline, and open sea
+  # is neither a closed way nor tagged natural=water - it comes from coastline processing. So the
+  # Black Sea, west of a Black Sea coastal city, is classified `open`: five water cells in 4320.
+  # Every consequence follows from that. water_fraction has no variance over the mesh, which is
+  # why the fit's coefficient for it is exactly 0.0; CLUTTER_WATER_LOSS_DB_PER_KM is unreachable;
+  # and the coastal discount was firing on a quarter of all pairs as an "over half this path is
+  # unmapped" test until it was made to require actual water.
+  #
+  # Regenerating it needs:
+  #   python3 tools/osm_to_clutter_csv.py --bbox 41.500396,41.501032,41.819656,41.856051 \
+  #     --origin 41.6442879,41.61536 --step-meters 500 --output presets/batumi_clutter.csv
+  # and then re-deriving the link calibration against the new raster, since the fit's clutter
+  # terms were trained on this one.
+  exporter: pre-coastline
+  regenerate_required: true
+  step_meters: 500
+  bbox: [41.500396, 41.501032, 41.819656, 41.856051]
+  # Asserted against the CSV by tests/test_presets.py, so this cannot go stale unnoticed.
+  class_histogram:
+    open: 3101
+    urban: 1209
+    forest: 5
+    water: 5
+  total_cells: 4320
 calibration_observations:
   # Directed observed-neighbor links from the aggregate calibration window.
   # Node indexes are local to this sanitized preset; source IDs and names are intentionally omitted.

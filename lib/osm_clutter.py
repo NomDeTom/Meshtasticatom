@@ -31,21 +31,33 @@ URBAN_LANDUSE = {
     "retail",
 }
 FOREST_VALUES = {"forest", "wood"}
-WATER_VALUES = {"basin", "reservoir", "salt_pond", "water"}
-OPEN_NATURAL = {"beach", "grassland", "heath", "sand", "scrub"}
+WATER_VALUES = {"basin", "reservoir", "salt_pond", "water", "wetland"}
+OPEN_NATURAL = {"grassland", "heath", "sand", "scrub"}
 
 
 def overpass_query(bbox):
-    """Build a bounded Overpass query for clutter-relevant OSM polygons."""
+    """Build a bounded Overpass query for clutter-relevant OSM polygons.
+
+    Relations as well as ways, and the coastline. Large water bodies and most sizeable landuse areas
+    are mapped as multipolygon *relations*, and open sea is not a closed way at all - it comes from
+    `natural=coastline`. Querying ways alone returned five water cells out of 4320 for a Black Sea
+    coastal city, so the sea was classified as open ground and the water class was dead.
+    """
     min_lat, min_lon, max_lat, max_lon = bbox
     box = f"{min_lat},{min_lon},{max_lat},{max_lon}"
+    landuse = "^(commercial|construction|garages|industrial|military|railway|residential|retail|forest)$"
+    natural = "^(beach|grassland|heath|sand|scrub|water|wetland|wood)$"
     return f"""
-[out:json][timeout:90];
+[out:json][timeout:180];
 (
   way["building"]({box});
-  way["landuse"~"^(commercial|construction|garages|industrial|military|railway|residential|retail|forest)$"]({box});
-  way["natural"~"^(beach|grassland|heath|sand|scrub|water|wood)$"]({box});
+  way["landuse"~"{landuse}"]({box});
+  way["natural"~"{natural}"]({box});
   way["water"]({box});
+  way["natural"="coastline"]({box});
+  relation["landuse"~"{landuse}"]({box});
+  relation["natural"~"{natural}"]({box});
+  relation["water"]({box});
 );
 out tags geom;
 """
@@ -97,6 +109,12 @@ def classify_osm_element(tags):
         return "forest"
     if landuse in WATER_VALUES or natural in WATER_VALUES or water:
         return "water"
+    if natural == "coastline":
+        # A linear way, not an area: it marks where the sea begins, and the rasteriser turns the
+        # seaward side into coastal_water. Emitted as its own class so that is explicit.
+        return "coastline"
+    if natural == "beach":
+        return "beach"
     if natural in OPEN_NATURAL:
         return "open"
     return None
@@ -191,9 +209,19 @@ def _frange(start, stop, step):
         value += step
 
 
+# Ties break towards the higher loss, so a cell that is genuinely half built is not called open.
+_CLASS_PRECEDENCE = ("urban", "forest", "beach", "open", "water", "coastal_water")
+
+
 def classify_cell(x, y, polygons, step_m):
-    """Classify one clutter grid cell from intersecting OSM polygons."""
-    hits = {"urban": 0, "forest": 0, "water": 0, "open": 0}
+    """Classify one clutter grid cell by the strongest evidence over it.
+
+    The majority class, not a fixed order. It used to return `water` whenever any water polygon
+    touched the cell, then `urban`, then `forest` - so a 500 m cell of dense city containing one
+    pond came out as water, the lowest-loss class there is, on a raster whose cells are 25 times
+    the size of the buildings in them.
+    """
+    hits = {}
     half = step_m / 2.0
     for clutter_class, polygon, bounds, centroid in polygons:
         min_x, min_y, max_x, max_y = bounds
@@ -207,14 +235,15 @@ def classify_cell(x, y, polygons, step_m):
         elif clutter_class == "urban" and min_x - half <= x <= max_x + half and min_y - half <= y <= max_y + half:
             cx, cy = centroid
             if abs(cx - x) <= half and abs(cy - y) <= half:
-                hits["urban"] += 1
+                hits["urban"] = hits.get("urban", 0) + 1
 
-    if hits["water"] > 0:
-        return "water"
-    if hits["urban"] > 0:
-        return "urban"
-    if hits["forest"] > 0:
-        return "forest"
+    hits.pop("coastline", None)  # a line, not an area: it never classifies a cell by itself
+    if not hits:
+        return "open"
+    best = max(hits.values())
+    for name in _CLASS_PRECEDENCE:
+        if hits.get(name, 0) == best:
+            return name
     return "open"
 
 

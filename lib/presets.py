@@ -142,6 +142,16 @@ def load_preset_terrain_grid(name):
         )
 
 
+def preset_clutter_provenance(name):
+    """What the packaged clutter raster is, and what is known to be wrong with it.
+
+    Recorded rather than assumed: the raster cannot be regenerated without Overpass, and a reader
+    comparing water_fraction coefficients needs to know the class never varies.
+    """
+    raw = load_preset_raw(name)
+    return raw.get("clutter_provenance", {}) if isinstance(raw, dict) else {}
+
+
 def preset_clutter_grid(name):
     clutter_path = preset_paths(name).get("clutter")
     if clutter_path and clutter_path.exists():

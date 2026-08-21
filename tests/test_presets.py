@@ -102,3 +102,41 @@ class TestPresets(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClutterProvenanceMatchesTheRaster(unittest.TestCase):
+    """A note about the data that cannot go stale, because the data is counted against it.
+
+    The packaged Batumi raster was exported before the OSM query asked for relations or for
+    natural=coastline, so the Black Sea is classified `open` - five water cells in 4320. That is
+    recorded in the preset rather than left to be rediscovered, and regenerating it needs network
+    access to Overpass.
+    """
+
+    def histogram(self):
+        import csv
+        from collections import Counter
+
+        from lib.presets import preset_clutter_grid
+
+        with open(preset_clutter_grid("batumi"), newline="", encoding="utf-8") as handle:
+            return Counter(row["clutter_class"] for row in csv.DictReader(handle))
+
+    def test_the_recorded_histogram_is_the_rasters_own(self):
+        from lib.presets import preset_clutter_provenance
+
+        provenance = preset_clutter_provenance("batumi")
+        self.assertTrue(provenance, "the packaged preset records no clutter provenance")
+
+        counted = self.histogram()
+        self.assertEqual(dict(counted), provenance["class_histogram"])
+        self.assertEqual(sum(counted.values()), provenance["total_cells"])
+
+    def test_the_raster_is_still_marked_as_needing_regeneration(self):
+        """If it is regenerated, this flag and the histogram above both have to move."""
+        from lib.presets import preset_clutter_provenance
+
+        provenance = preset_clutter_provenance("batumi")
+        water = provenance["class_histogram"].get("water", 0)
+        implausible = water / provenance["total_cells"] < 0.01
+        self.assertEqual(provenance["regenerate_required"], implausible)
