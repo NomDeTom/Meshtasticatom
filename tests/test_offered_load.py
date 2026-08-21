@@ -28,18 +28,11 @@ def originated_per_node(results, nodes):
 
 
 def offered_per_node(sim, results, nodes):
-    """What the application timer produced, whether or not the TX gate let it out.
-
-    The generator's own rate is the thing under test here; the channel-utilisation gate declining a
-    send is correct behaviour, measured in tests/test_tx_gate.py.
-    """
-    counts = originated_per_node(results, nodes)
-    for node in sim.mutated_state.nodes:
-        counts[node.nodeid] += node.droppedByChannelUtil
-    return counts
+    """What the application timer produced. With the gate off, that is every message it drew."""
+    return originated_per_node(results, nodes)
 
 
-def run(nodes, period_s=20, minutes=8, seed=44, dms=False):
+def run(nodes, period_s=20, minutes=8, seed=44, dms=False, gate=False):
     conf = Config()
     conf.NR_NODES = nodes
     conf.SIMTIME = int(minutes * 60 * 1000)
@@ -47,6 +40,13 @@ def run(nodes, period_s=20, minutes=8, seed=44, dms=False):
     conf.SEED = seed
     conf.MOVEMENT_ENABLED = False
     conf.DMs = dms
+    # The channel-utilisation gate is off here on purpose. A shut gate legitimately rate-limits the
+    # generator - the module cannot send faster than the channel allows, and the firmware's
+    # interval restarts from the actual send - so with it on, "offered load equals nominal" is not
+    # the right expectation. What this file tests is that nothing *downstream* of the timer holds
+    # it up, which is what the reliable-send loop used to do. The gate's own effect is measured in
+    # tests/test_tx_gate.py.
+    conf.CHANNEL_UTIL_TX_GATE_ENABLED = gate
     random.seed(seed)
     sim = DiscreteEventSim(conf, default_generate_node_list(conf))
     sim.run_simulation()
@@ -83,12 +83,18 @@ class AnAckEndsTheWait(unittest.TestCase):
         self.assertTrue(hasattr(MeshNode, "signal_ack"))
 
     def test_the_gate_and_the_generator_are_separate_things(self):
-        """A gated send is a decision; a stalled generator was a defect. Keep them apart."""
-        conf, sim, results = run(40)
-        offered = sum(offered_per_node(sim, results, 40).values())
-        originated = sum(originated_per_node(results, 40).values())
-        self.assertEqual(offered - originated, results["channelUtilDropped"])
-        self.assertGreater(results["channelUtilDropped"], 0)
+        """A deferred send is a delay the firmware has; a stalled generator was a defect.
+
+        With the gate off the timer produces its nominal rate. With it on the same mesh produces
+        less, and that difference is the channel telling it to wait - not the timer being held up
+        by its own retransmissions.
+        """
+        _, _, ungated = run(40, gate=False)
+        _, _, gated = run(40, gate=True)
+        self.assertEqual(ungated["channelUtilDeferred"], 0)
+        self.assertGreater(gated["channelUtilDeferred"], 0)
+        self.assertGreater(gated["meanChannelUtilDeferralMsec"], 0.0)
+        self.assertLess(gated["appMessages"], ungated["appMessages"])
 
 
 class AnAckEndsTheWaitAlso(unittest.TestCase):

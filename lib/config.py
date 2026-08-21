@@ -830,6 +830,9 @@ class Config:
         self.CHANNEL_UTIL_TX_LIMIT_PERCENT = 40
         self.CHANNEL_UTIL_POLITE_TX_LIMIT_PERCENT = 25
         self.CHANNEL_UTIL_TX_GATE_ENABLED = True
+        # PositionModule returns RUNONCE_INTERVAL when the gate is shut, so it retries on that
+        # cadence. 5000 ms, from PositionModule.cpp.
+        self.CHANNEL_UTIL_TX_RETRY_MSEC = 5000
         # Polite is the common case: PositionModule, DeviceTelemetry and the rest pass polite=true
         # for every role but TRACKER and SENSOR. NodeInfoModule is the impolite one.
         self.CHANNEL_UTIL_TX_GATE_POLITE = True

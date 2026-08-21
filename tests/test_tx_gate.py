@@ -59,26 +59,48 @@ class TheThresholdIsTheFirmwareEsts(unittest.TestCase):
         node._util = 40.0
         self.assertFalse(node.is_tx_allowed_channel_util())
 
-    def test_the_gate_can_be_turned_off_and_then_declines_nothing(self):
+    def test_the_gate_can_be_turned_off_and_then_defers_nothing(self):
         results = run(10, 100, 15000, gate=False)
+        self.assertEqual(results["channelUtilDeferred"], 0)
         self.assertEqual(results["channelUtilDropped"], 0)
 
 
 class AGatedMeshDoesNotDrown(unittest.TestCase):
     """The finding this exists for: without the gate, an offered load past capacity collapses."""
 
-    def test_a_saturated_mesh_sheds_load_instead_of_collapsing(self):
+    def test_a_saturated_mesh_waits_instead_of_collapsing(self):
         ungated = run(25, 5, 4000, gate=False)
         gated = run(25, 5, 4000, gate=True)
 
+        self.assertEqual(ungated["channelUtilDeferred"], 0)
         self.assertEqual(ungated["channelUtilDropped"], 0)
-        self.assertGreater(gated["channelUtilDropped"], 0)
-        # It stops originating, so it originates far less...
+        # The gate held sends back. On a mesh this saturated most of the waiting is still going on
+        # when the run ends, so it lands in channelUtilDropped - see the next test for a mesh where
+        # the waiting completes.
+        self.assertGreater(gated["channelUtilDeferred"] + gated["channelUtilDropped"], 0)
         self.assertLess(gated["appMessages"], ungated["appMessages"])
-        # ...and what it does originate actually arrives.
+        # And what it does send actually arrives.
         self.assertGreater(gated["nodeReach"], ungated["nodeReach"])
         self.assertLess(gated["nodeChannelUtilPercent"]["mean"],
                         ungated["nodeChannelUtilPercent"]["mean"])
+
+    def test_a_deferred_send_goes_out_late_rather_than_never(self):
+        """The distinction the firmware draws: congestion delays a packet, it does not drop it.
+
+        PositionModule returns RUNONCE_INTERVAL before updating lastGpsSend, and DeviceTelemetry
+        calls setLastSentToMesh only on success, so the interval stays elapsed and the message
+        leaves as soon as the channel clears.
+        """
+        results = run(40, 20, 6000, gate=True)
+        self.assertGreater(results["channelUtilDeferred"], 0)
+        # Tens of seconds late, not milliseconds: this is a real wait for a real channel.
+        self.assertGreater(results["meanChannelUtilDeferralMsec"], 10_000.0)
+        self.assertGreater(results["appMessages"], 0)
+
+    def test_nothing_is_lost_except_at_the_end_of_a_finite_run(self):
+        """channelUtilDropped counts only messages whose channel never cleared before the run ended."""
+        quiet = run(10, 100, 15000, gate=True)
+        self.assertEqual(quiet["channelUtilDropped"], 0)
 
     def test_a_quiet_mesh_is_barely_gated(self):
         """The gate must be off the critical path when the channel is not busy.
@@ -87,8 +109,8 @@ class AGatedMeshDoesNotDrown(unittest.TestCase):
         sees a busy 60-second window, which is a real condition rather than a threshold artefact.
         """
         results = run(5, 100, 15000)
-        offered = results["appMessages"] + results["channelUtilDropped"]
-        self.assertLess(results["channelUtilDropped"] / max(1, offered), 0.15)
+        offered = results["appMessages"] + results["channelUtilDeferred"]
+        self.assertLess(results["channelUtilDeferred"] / max(1, offered), 0.20)
 
 
 if __name__ == "__main__":

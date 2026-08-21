@@ -8,6 +8,51 @@ logger = logging.getLogger(__name__)
 NUM_SYM_CAD = 2
 NUM_SYM_CAD_24GHZ = 4
 
+# Demodulator floor per spreading factor, from the SX1262 datasheet (rev 2.1, table 13-11). These
+# are the numbers the preset sensitivities are built from: a preset's sensitivity is kTB for its
+# bandwidth, plus the receiver noise figure, plus the figure below.
+REQUIRED_SNR_DB = {6: -5.0, 7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
+
+THERMAL_NOISE_DBM_PER_HZ = -174.0
+RECEIVER_NOISE_FIGURE_DB = 6.0
+
+
+def thermal_noise_floor(bw_hz, noise_figure_db=RECEIVER_NOISE_FIGURE_DB):
+    """kTB + NF for one bandwidth. Doubling the bandwidth costs 3 dB."""
+    return THERMAL_NOISE_DBM_PER_HZ + 10.0 * math.log10(bw_hz) + noise_figure_db
+
+
+def required_snr_db(sf):
+    """The modem's demodulation floor for this spreading factor."""
+    return REQUIRED_SNR_DB[int(sf)]
+
+
+def effective_sensitivity(conf, preset=None):
+    """The weakest signal this receiver can actually decode, given the noise it sits in.
+
+    A preset's sensitivity is a datasheet figure: kTB for its bandwidth, plus a noise figure, plus
+    the modem's required SNR. It is therefore a statement about a *thermal* noise floor, and it
+    cannot be combined with a measured or fitted noise level without double-counting - raising the
+    noise floor by 9.5 dB and keeping the sensitivity says the modem decodes 9.5 dB below its own
+    limit. On the packaged Batumi calibration, whose floor is -110.5 dBm, that made LONG_FAST's
+    weakest audible link sit 3.5 dB below what SF11 can demodulate, and LONG_SLOW's 6.5 dB below.
+
+    So the threshold is whichever is harder: the datasheet figure, or the noise the receiver is
+    actually in plus the SNR the modem needs. A floor quieter than thermal cannot help, because the
+    receiver's own noise dominates there.
+    """
+    preset = preset or conf.current_preset
+    datasheet = preset["sensitivity"]
+    from_noise = conf.NOISE_LEVEL + required_snr_db(preset["sf"])
+    return max(datasheet, from_noise)
+
+
+def effective_cad_threshold(conf, preset=None):
+    """Energy detection reaches below decodability, by the margin the preset table declares."""
+    preset = preset or conf.current_preset
+    margin = preset["sensitivity"] - preset["cad_threshold"]
+    return effective_sensitivity(conf, preset) - margin
+
 #                           CAD duration   +     airPropagationTime+TxRxTurnaround+MACprocessing
 def get_current_slot_time(conf): # from RadioInterface::computeSlotTimeMsec
     """Slot time in ms for `conf`'s preset and region.

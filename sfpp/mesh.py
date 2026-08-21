@@ -1923,6 +1923,13 @@ THERMAL_NOISE_DBM_PER_HZ = -174.0
 RECEIVER_NOISE_FIGURE_DB = 6.0
 
 
+def _phy():
+    """lib.phy, imported lazily as everything else in this module does."""
+    import lib.phy as phy
+
+    return phy
+
+
 def thermal_noise_floor(bw_hz, noise_figure_db=RECEIVER_NOISE_FIGURE_DB):
     """kTB + NF for one bandwidth. Doubling the bandwidth costs 3 dB."""
     return THERMAL_NOISE_DBM_PER_HZ + 10.0 * math.log10(bw_hz) + noise_figure_db
@@ -2251,7 +2258,7 @@ class Mesh:
         n = len(self.nodes)
         self.rssi = [[-999.0] * n for _ in range(n)]
         self.neighbours = [[] for _ in range(n)]
-        sensitivity = conf.current_preset["sensitivity"]
+        sensitivity = _phy().effective_sensitivity(conf)
 
         # Drawn ONCE for the life of the mesh, so a rebuild moves nothing it was not asked to
         # move and advances no shared stream. TRANSPORT.md.
@@ -2370,7 +2377,7 @@ class Mesh:
 
         Zero below sensitivity, where a pair is never offered a packet; the PER curve above it.
         """
-        sensitivity = self.conf.current_preset["sensitivity"]
+        sensitivity = _phy().effective_sensitivity(self.conf)
         if self.rssi[i][j] < sensitivity:
             return 0.0
         if not self.conf.PHY_LOSS_MODEL_ENABLED:
@@ -2390,7 +2397,7 @@ class Mesh:
         Read the per-thousand-pairs share, not the share of live links - TRANSPORT.md.
         """
         conf = self.conf
-        sensitivity = conf.current_preset["sensitivity"]
+        sensitivity = _phy().effective_sensitivity(conf)
         bands = {"comfortable": 0, "adequate": 0, "fragile": 0}
         per_node_fragile = [0] * len(self.nodes)
         one_way = 0
@@ -2487,7 +2494,7 @@ class Mesh:
 
         factor = getattr(self, "stretch", 1.0)
         conf = self.conf
-        sensitivity = conf.current_preset["sensitivity"]
+        sensitivity = phy.effective_sensitivity(conf)
         n = len(self.nodes)
         was_link = still = marginal = lost = 0
         for i in range(n):
@@ -2748,7 +2755,7 @@ class Mesh:
 
     def _channel_busy(self, node):
         """CAD: is anything audible at this node on the air right now?"""
-        threshold = self.conf.current_preset["sensitivity"] - 3 - self.lift_db(self.now)
+        threshold = _phy().effective_cad_threshold(self.conf) - self.lift_db(self.now)
         for t in self._recent(self.now - self.max_airtime_ms):
             if t.end <= self.now:
                 continue
@@ -3010,7 +3017,7 @@ class Mesh:
     def _deliver(self, tx):
         """Decide, at end of transmission, who actually received it."""
         packet = tx.packet
-        sensitivity = self.conf.current_preset["sensitivity"]
+        sensitivity = _phy().effective_sensitivity(self.conf)
         interferers = self._overlapping(tx)
         self._prune()
 

@@ -293,32 +293,40 @@ class TestDiscreteEventSim(unittest.TestCase):
         # reads 88.2%. And the per-node streams are seeded from the run seed as well as the node
         # id, so the mobility assignment and the message schedule are this seed's rather than every
         # seed's: three nodes move here where four did at every seed before.
-        self.assertEqual(appMessages, 167, "expected number of application messages created")
+        #
+        # Moved again by two corrections. Congestion *delays* a packet rather than dropping it:
+        # PositionModule returns RUNONCE_INTERVAL before it updates lastGpsSend, so a shut gate
+        # holds the send and it leaves as soon as the channel clears. This mesh defers 36 sends by
+        # a mean of 31.5 s and loses none. And a preset's sensitivity is a datasheet figure built
+        # on a thermal noise floor, so it now yields to `NOISE_LEVEL + required SNR` when a
+        # scenario's floor is higher - inert at the default floor for every deployed preset, which
+        # is why this run's link set is unchanged (noLinkRate still 53.33).
+        self.assertEqual(appMessages, 185, "expected number of application messages created")
         sent = results['sent']
         potentialReceivers = results['potentialReceivers']
-        self.assertEqual(sent, 934, "expected number of packets sent")
-        self.assertEqual(potentialReceivers, 8406, "expected number of potential receivers")
+        self.assertEqual(sent, 1044, "expected number of packets sent")
+        self.assertEqual(potentialReceivers, 9396, "expected number of potential receivers")
 
         nrCollisions = results['nrCollisions']
-        self.assertEqual(nrCollisions, 673, "expected number of collisions")
+        self.assertEqual(nrCollisions, 823, "expected number of collisions")
         nrSensed = results['nrSensed']
-        self.assertEqual(nrSensed, 3622, "expected number of packets sensed")
+        self.assertEqual(nrSensed, 4050, "expected number of packets sensed")
 
         nrReceived = results['nrReceived']
-        self.assertEqual(nrReceived, 2950, "expected number of packets received")
+        self.assertEqual(nrReceived, 3227, "expected number of packets received")
         meanDelay = results['meanDelay']
-        self.assertEqual(round(meanDelay, 2), 5295.48, "expected rounded delay average")
+        self.assertEqual(round(meanDelay, 2), 5590.7, "expected rounded delay average")
         txAirUtilizationRate = results['txAirUtilizationRate']
-        self.assertEqual(round(txAirUtilizationRate * 100, 2), 3.54, "expected rounded average tx air utilization")
+        self.assertEqual(round(txAirUtilizationRate * 100, 2), 3.96, "expected rounded average tx air utilization")
 
         nodeReach = results['nodeReach']
-        self.assertEqual(round(nodeReach*100, 2), 88.16, "expected rounded percentage of nodes reached")
+        self.assertEqual(round(nodeReach*100, 2), 86.67, "expected rounded percentage of nodes reached")
 
         usefulness = results['usefulness']
-        self.assertEqual(round(usefulness*100, 2), 44.92, "expected rounded 'usefulness' percentage")
+        self.assertEqual(round(usefulness*100, 2), 44.72, "expected rounded 'usefulness' percentage")
 
         delayDropped = results['delayDropped']
-        self.assertEqual(delayDropped, 1313, "expected number of packets dropped")
+        self.assertEqual(delayDropped, 1419, "expected number of packets dropped")
         # default config has both asymmetric links and movement enabled
         noLinkRate = results['noLinkRate']
         self.assertEqual(round(noLinkRate * 100, 2), 53.33, "expected rounded percentage of 'no' links")
@@ -333,14 +341,18 @@ class TestDiscreteEventSim(unittest.TestCase):
         # than all the time, and the figure the contention window used to read hit 117.5%.
         chutil = results['nodeChannelUtilPercent']
         self.assertLessEqual(chutil['max'], 100.0, "a channel cannot be busy more than all the time")
-        self.assertEqual(round(chutil['mean'], 2), 11.84, "expected mean channel utilization")
-        self.assertEqual(round(chutil['max'], 2), 15.78, "expected busiest node's channel utilization")
+        self.assertEqual(round(chutil['mean'], 2), 9.29, "expected mean channel utilization")
+        self.assertEqual(round(chutil['max'], 2), 12.05, "expected busiest node's channel utilization")
         # Own transmissions over the last hour: the other window, and a tenth of the first.
         utilTx = results['nodeUtilizationTxPercent']
         self.assertLess(utilTx['max'], chutil['max'])
 
-        # Sends this mesh declined because the channel was over the polite 25% limit.
-        self.assertEqual(results['channelUtilDropped'], 33, "expected sends declined by the tx gate")
+        # Sends this mesh held back because the channel was over the polite 25% limit. Deferred,
+        # not dropped: nothing is lost unless the run ends while a node is still waiting.
+        self.assertEqual(results['channelUtilDeferred'], 36, "expected sends deferred by the tx gate")
+        self.assertEqual(results['channelUtilDropped'], 0, "nothing should be lost on a 30-minute run")
+        self.assertEqual(round(results['meanChannelUtilDeferralMsec'], 1), 31527.8,
+                         "expected mean deferral")
 
     def test_sim_does_not_change_config(self):
         import copy

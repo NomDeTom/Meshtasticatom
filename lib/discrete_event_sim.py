@@ -14,7 +14,7 @@ from lib.node import MeshNode, NodeConfig
 if TYPE_CHECKING:
     from lib.gui import Graph
 from lib.packet import MeshPacket
-from lib.phy import estimate_path_loss
+from lib.phy import effective_sensitivity, estimate_path_loss
 
 logger = logging.getLogger(__name__)
 
@@ -169,8 +169,14 @@ class SimulationResults:
             self.results["nodeUtilizationTxPercent"] = {"mean": np.nan, "max": np.nan}
 
         self.results["delayDropped"] = sum(n.droppedByDelay for n in nodes)
-        # Sends the channel-utilisation gate declined. Named rather than silent: a mesh that
-        # throttles itself is the point, and a run cannot be read without knowing it happened.
+        # What the channel-utilisation gate did. A shut gate delays a send, so the headline figure
+        # is the deferral, not a loss: `channelUtilDropped` counts only the messages whose channel
+        # never cleared before the run ended, which is an artefact of a finite run.
+        deferred = sum(getattr(n, "deferredByChannelUtil", 0) for n in nodes)
+        deferral_ms = sum(getattr(n, "channelUtilDeferralMsec", 0.0) for n in nodes)
+        self.results["channelUtilDeferred"] = deferred
+        self.results["channelUtilDeferralMsec"] = deferral_ms
+        self.results["meanChannelUtilDeferralMsec"] = deferral_ms / deferred if deferred else 0.0
         self.results["channelUtilDropped"] = sum(
             getattr(n, "droppedByChannelUtil", 0) for n in nodes
         )
@@ -306,11 +312,11 @@ class DiscreteEventSim:
                 (rssi, pl) = tx_node.compute_rssi_and_pathloss_to(rx_node, self.conf)
 
                 # compare with extra margin (set based on 10-node standard test)
-                if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > self.conf.current_preset['sensitivity']:
+                if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > effective_sensitivity(self.conf):
                     reachable_node_set.add(rx_node.node_id)
 
                 # compute total/no links without margin
-                if rssi >= self.conf.current_preset['sensitivity']:
+                if rssi >= effective_sensitivity(self.conf):
                     self.data_tracking.totalLinks += 1
                 else:
                     self.data_tracking.noLinks += 1

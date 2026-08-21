@@ -15,7 +15,7 @@ from lib.geo import valid_lat_lon
 from lib.interference import build as interference_for
 from lib.link_model import calculate_link_budget
 from lib.mac import set_transmit_delay, get_retransmission_msec
-from lib.phy import check_collision, is_channel_active, airtime
+from lib.phy import check_collision, effective_sensitivity, is_channel_active, airtime
 from lib.packet import NODENUM_BROADCAST, MeshPacket, MeshMessage
 from lib.point import Point
 from lib.radio_loss import estimate_snr
@@ -262,6 +262,8 @@ class MeshNode:
         self.dtpTxCount = 0
         self.droppedByDelay = 0
         self.droppedByChannelUtil = 0
+        self.deferredByChannelUtil = 0
+        self.channelUtilDeferralMsec = 0.0
         self.rebroadcastPackets = 0
         self.isMoving = False
         self.gpsEnabled = False
@@ -437,7 +439,7 @@ class MeshNode:
                     (rssi, pl) = self.node_conf.compute_rssi_and_pathloss_to(rx_node.node_conf, self.conf)
 
                     # compare with extra margin (set based on 10-node standard test)
-                    if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > self.conf.current_preset['sensitivity']:
+                    if rssi + self.conf.CONNECTIVITY_MAP_RSSI_MARGIN > effective_sensitivity(self.conf):
                         new_reachable_set.add(rx_node.nodeid)
 
                     # cache path loss (it is symmetric, and static until one of the nodes moves)
@@ -595,30 +597,42 @@ class MeshNode:
         while True:
             # Returns -1 if we don't make it before the sim ends
             nextGen = self.get_next_time(self.period)
-            # do not generate a message near the end of the simulation (otherwise flooding cannot finish in time)
-            if nextGen >= 0:
-                yield self.env.timeout(nextGen)
+            if nextGen < 0:
+                # do not send this message anymore, since it is close to the end of the simulation
+                break
+            yield self.env.timeout(nextGen)
 
-                if self.conf.DMs:
-                    destId = self.nodeRng.choice([i for i in range(0, len(self.nodes)) if i != self.nodeid])
-                else:
-                    destId = NODENUM_BROADCAST
+            if self.conf.DMs:
+                destId = self.nodeRng.choice([i for i in range(0, len(self.nodes)) if i != self.nodeid])
+            else:
+                destId = NODENUM_BROADCAST
 
-                if not self.is_tx_allowed_channel_util():
-                    # The firmware skips the interval rather than queueing it: a message deferred
-                    # until the channel clears would arrive as a burst on top of the next one.
+            # A shut channel-utilisation gate *delays* the send; it does not discard it.
+            # PositionModule returns RUNONCE_INTERVAL before it updates lastGpsSend, and
+            # DeviceTelemetry calls setLastSentToMesh only inside its successful branch - so the
+            # interval stays elapsed and the message goes out as soon as the channel clears. One
+            # pending send and no backlog: the next interval is measured from when this one
+            # actually left, which is what not updating lastGpsSend amounts to.
+            waited = 0.0
+            while not self.is_tx_allowed_channel_util():
+                if self.env.now + self.conf.CHANNEL_UTIL_TX_RETRY_MSEC >= self.conf.SIMTIME:
+                    # The run ends before the channel clears. This is the only case that loses a
+                    # message, and it is an artefact of a finite run rather than of the gate.
                     self.droppedByChannelUtil += 1
+                    break
+                yield self.env.timeout(self.conf.CHANNEL_UTIL_TX_RETRY_MSEC)
+                waited += self.conf.CHANNEL_UTIL_TX_RETRY_MSEC
+            else:
+                if waited:
+                    self.deferredByChannelUtil += 1
+                    self.channelUtilDeferralMsec += waited
                     logger.debug(
-                        f"{self.env.now:.3f} Node {self.nodeid} skips a send: channel "
-                        f"{self.channel_utilization_percent():.1f}% busy"
+                        f"{self.env.now:.3f} Node {self.nodeid} sends {waited:.0f} ms late: "
+                        f"the channel was over the limit"
                     )
-                    continue
-
                 p = self.send_packet(destId)
                 if p.wantAck:
                     self.env.process(self.reliable_send(p))
-            else:  # do not send this message anymore, since it is close to the end of the simulation
-                break
 
     def reliable_send(self, p):
         """ReliableRouter: retransmit until the message is acknowledged or the budget runs out."""

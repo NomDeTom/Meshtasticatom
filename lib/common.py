@@ -41,7 +41,7 @@ def find_random_position(conf, node_configs) -> (float, float):
             pathLoss = phy.estimate_path_loss(conf, dist, conf.FREQ)
             rssi = conf.PTX + 2*conf.GL - pathLoss
             # At least one node should be able to reach it
-            if rssi >= conf.current_preset["sensitivity"]:
+            if rssi >= phy.effective_sensitivity(conf):
                 in_range = True
         if far_enough and in_range:
             return max(-conf.XSIZE/2, pos_candidate.x), max(-conf.YSIZE/2, pos_candidate.y)
@@ -106,8 +106,9 @@ def setup_asymmetric_links(conf, nodes):
                 budgetAB = calculate_link_budget(conf, nodeA, nodeB, conf.LINK_OFFSET[(a, b)])
                 budgetBA = calculate_link_budget(conf, nodeB, nodeA, conf.LINK_OFFSET[(b, a)])
 
-                canAhearB = (budgetAB.rssi_dbm >= conf.current_preset["sensitivity"])
-                canBhearA = (budgetBA.rssi_dbm >= conf.current_preset["sensitivity"])
+                sensitivity = phy.effective_sensitivity(conf)
+                canAhearB = (budgetAB.rssi_dbm >= sensitivity)
+                canBhearA = (budgetBA.rssi_dbm >= sensitivity)
 
                 totalPairs += 1
                 if canAhearB and canBhearA:

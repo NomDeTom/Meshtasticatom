@@ -3,7 +3,7 @@ import random
 
 from lib.discrete_event_sim_components import Counter
 from lib.link_model import calculate_link_budget
-from lib.phy import airtime
+from lib.phy import airtime, effective_cad_threshold, effective_sensitivity
 from lib.radio_loss import payload_is_lost
 
 NODENUM_BROADCAST = 0xFFFFFFFF
@@ -131,7 +131,7 @@ class MeshPacket:
             self.clutterLossAtN[rx_node.nodeid] = budget.clutter_loss_db
             self.LplAtN[rx_node.nodeid] = budget.calibrated_path_loss_db
             self.rssiAtN[rx_node.nodeid] = budget.rssi_dbm
-            self.detectedByN[rx_node.nodeid] = self.rssiAtN[rx_node.nodeid] >= self.conf.current_preset["cad_threshold"]
+            self.detectedByN[rx_node.nodeid] = self.rssiAtN[rx_node.nodeid] >= effective_cad_threshold(self.conf)
             if self.detectedByN[rx_node.nodeid]:
                 self.detected_node_ids.append(rx_node.nodeid)
         self.refresh_phy_reception()
@@ -167,7 +167,7 @@ class MeshPacket:
             if rx_node_id == self.txNodeId:
                 continue
 
-            self.sensedByN[rx_node_id] = rssi >= self.conf.current_preset["sensitivity"]
+            self.sensedByN[rx_node_id] = rssi >= effective_sensitivity(self.conf)
             if self.sensedByN[rx_node_id]:
                 self.sensed_node_ids.append(rx_node_id)
             self.phyLostAtN[rx_node_id] = False

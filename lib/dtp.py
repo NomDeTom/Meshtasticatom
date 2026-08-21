@@ -9,6 +9,7 @@ TX power just before it goes on air.
 from dataclasses import dataclass
 
 from lib.dcr import CR_RESCUE, classify_channel_pressure
+from lib.phy import effective_sensitivity
 from lib.packet import NODENUM_BROADCAST
 
 
@@ -53,13 +54,13 @@ def _prior_hop_margin_db(conf, packet) -> float | None:
     """
     prior_rssi = getattr(packet, "priorHopRssi", None)
     if prior_rssi is not None:
-        return prior_rssi - conf.current_preset["sensitivity"]
+        return prior_rssi - effective_sensitivity(conf)
 
     prior_snr = getattr(packet, "priorHopSnr", None)
     if prior_snr is None:
         return None
 
-    sensitivity_snr = conf.current_preset["sensitivity"] - conf.NOISE_LEVEL
+    sensitivity_snr = effective_sensitivity(conf) - conf.NOISE_LEVEL
     return prior_snr - sensitivity_snr
 
 
