@@ -36,7 +36,7 @@ tree's own discrete-event simulator - `discrete_event_sim.py`, `mac.py`, `node.p
 looking for firmware behaviour, it is in `sfpp/mesh.py` and nowhere else.
 
 **It is not** regulatory evidence, a substitute for hardware, or a model of mobility. Terrain and
-clutter are modelled only when `--scenario` asks for them (§5.1h); without it the world is flat.
+clutter are modelled only when `--scenario` asks for them (§5.10); without it the world is flat.
 Duty cycle is not enforced: airtime figures are what the protocol _asks for_, not what a region
 permits, though `node_air_util_tx_percent` now reports what each node would have to declare.
 **§10 is the full list of what is simplified, assumed and absent, and every result from this tool is
@@ -163,7 +163,7 @@ under `--grid` carries the grid in its filename, which is the usual reason one i
 cells of the cross. `python3 -m sfpp.matrix --list` prints the matrix cells and, since each carries a
 sentence, what each one covers.
 
-### 3.0 Version, and whether two runs are comparable
+### 3.1 Version, and whether two runs are comparable
 
 Every report, digest, figure footer and CI artifact carries **`sim_version`** beside the transport
 commit, because they answer different questions: the commit says exactly which code produced a run, the
@@ -180,7 +180,7 @@ Current: **1.1.0** - placement draws from its own RNG stream (TRAPS.md #12), and
 72 simulated hours rather than 2 and 24. **Both invalidate earlier figures**: anything involving
 `random-any` or `random-clients`, and every matrix or design number measured at the old durations.
 
-### 3.1 The four sweep surfaces, and what each is for
+### 3.2 The four sweep surfaces, and what each is for
 
 Four things declare cells, they answer different questions, and a result from one does not substitute
 for a result from another. Every cell of all four carries a one-sentence description, enforced by a
@@ -237,7 +237,7 @@ block sweep for mechanism and the cross for deployment advice.
 | `--area`                 | 8000             | side of the placement square, metres                                                                                  |
 | `--scale-area`           | off              | grow the area as √(n/60) so **density is held constant**. Without it, a size sweep measures density and calls it size |
 | `--topology`             | `uniform`        | see §5                                                                                                                |
-| `--stretch`              | 1.0              | scale every distance by this factor, about the centroid, **after** placement. Unlike `--area` it keeps the same nodes in the same arrangement, so an arm is paired with its own control. Read `report["stretch"]` and see §5.1e |
+| `--stretch`              | 1.0              | scale every distance by this factor, about the centroid, **after** placement. Unlike `--area` it keeps the same nodes in the same arrangement, so an arm is paired with its own control. Read `report["stretch"]` and see §5.7 |
 | `--router-fraction`      | 0.1              | share promoted to ROUTER, chosen by degree                                                                            |
 | `--router-late-fraction` | 0.0              | share as ROUTER_LATE                                                                                                  |
 | `--client-base-fraction` | 0.0              | share as CLIENT_BASE                                                                                                  |
@@ -321,7 +321,7 @@ thirds of rebroadcast attempts.
 | `--burst-loss` | 0.0     | chance a node is deaf for a whole window                                                                              |
 | `--burst-ms`   | 60000   | length of that window. A 60 s outage is nothing to a bucket that takes an hour to fill; 1800000 is the one that bites |
 
-**The ground under the mesh** (§5.1h). Terrain, land cover, and real node geometry. Without
+**The ground under the mesh** (§5.10). Terrain, land cover, and real node geometry. Without
 `--scenario` the world is flat and every figure below is inert, which is what every run before this
 assumed without saying so.
 
@@ -339,7 +339,7 @@ assumed without saying so.
 `--stretch` is refused on a real-geometry scenario rather than ignored: moving Batumi's nodes apart
 makes it somewhere else, and the result would still be labelled `batumi`.
 
-**A noise floor that moves** (§5.1f). `--noise-model` sets the *static* floor; these vary it in time.
+**A noise floor that moves** (§5.8). `--noise-model` sets the *static* floor; these vary it in time.
 
 | Flag                        | Default | Meaning                                                                                          |
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
@@ -353,7 +353,7 @@ makes it somewhere else, and the result would still be labelled `batumi`.
 | `--noise-pulse-interval-ms` | 10000   | period of the `periodic` emitter                                                                   |
 | `--noise-pulse-ms`          | 200     | how long it holds the channel each time it fires                                                    |
 
-**Tropospheric ducting** (§5.1g). Not noise - the propagation path improving.
+**Tropospheric ducting** (§5.9). Not noise - the propagation path improving.
 
 | Flag              | Default | Meaning                                                                                            |
 | ----------------- | ------- | -------------------------------------------------------------------------------------------------- |
@@ -372,7 +372,7 @@ rest of the mesh keeps believing routes through a node that has gone. Not yet ex
 | `--protocol`          | `sr`        | `none` (paired baseline, servers still _sited_ and instrumented), `chain` (today's SF++), `sr` (the sketch)            |
 | `--baseline`          | off         | no servers **and no observers** - a plain mesh. `--protocol none` is the paired control; this is the unpaired one     |
 | `--servers`           | 3           | archive count                                                                                                          |
-| `--place`             | `spread`    | see §5.2. Placement draws from its own RNG stream, so a randomised strategy carries the same offered load as the control - it did not before 1.1.0 (TRAPS.md #12) |
+| `--place`             | `spread`    | see §5.11. Placement draws from its own RNG stream, so a randomised strategy carries the same offered load as the control - it did not before 1.1.0 (TRAPS.md #12) |
 | `--hops-apart`        | 3           | target separation for `hops-apart`                                                                                     |
 | `--bucket-mode`       | `local`     | `local` is what the firmware does; `global` is a labelled fiction; `time` and `window` need no agreement               |
 | `--capacity`          | 32          | sketch capacity                                                                                                        |
@@ -429,7 +429,7 @@ measured across a fragmented graph is the diameter of whichever fragment the wal
 `link_stats()` reports `components`, `largest_component` and `connected`, and `diameter()` returns
 `None` rather than a misleading number when the mesh is not connected.
 
-### 5.1a Adversarial meshes
+### 5.2 Adversarial meshes
 
 Most named mixes describe a mesh somebody has. These describe one nobody would build on purpose, and
 exist to find the floor a design has to clear rather than to predict a deployment.
@@ -487,7 +487,7 @@ Three things worth knowing before using these:
   because there is no mesh left. Use `local-typical` for a hard-but-alive mesh; `worst-case` is a
   connectivity floor, not a traffic experiment.
 
-### 5.1b Can an operator actually administer this mesh?
+### 5.3 Can an operator actually administer this mesh?
 
 A configuration change is not a broadcast some nodes may miss - it is a round trip that has to
 complete. `--admin-probes-per-hour` sends a PKI-encrypted AdminMessage to a node at a chosen hop
@@ -516,7 +516,7 @@ nodes to administer strangers. That is deliberate - it is the case an operator h
 nonce exchange, and real config payloads span several packets. This measures whether the round trip
 is deliverable, not whether the whole session protocol completes.
 
-### 5.1c Presets past the shipped set
+### 5.4 Presets past the shipped set
 
 `EXTRA_LONG_TURBO` and `EXTRA_SHORT_TURBO` are **not in any firmware build.** They extend the
 vendored table's own 500 kHz rows one spreading factor past each end, so a future-mesh block can ask
@@ -541,7 +541,7 @@ costs, and CR8 then makes it slightly longer. Worth knowing before reading the b
 Also: **SF5 and SF6 need an SX126x or SX128x.** An SX127x cannot do them at all, so
 `EXTRA_SHORT_TURBO` is not a setting every board could take even if the firmware offered it.
 
-### 5.1c-2 The presets the firmware ships, and the range meshes actually run
+### 5.5 The presets the firmware ships, and the range meshes actually run
 
 A mesh runs **one preset at a time**, so `--preset` is a global and a preset comparison is between
 runs, never a mix within one.
@@ -571,7 +571,7 @@ to within **0.041 dB** and is what licenses deriving the rest the same way.
 - **Deployed meshes run `SHORT_FAST` through `LONG_MODERATE`**, with `LONG_FAST` the default and the
   middle. That is the range `P-preset` sweeps.
 - **Above about 30 nodes nothing slower than `LONG_MODERATE` is used**, and meshes that do use one
-  suffer for it. `LONG_SLOW` holds the channel for 21 s at a full payload; §5.1f's periodic profile
+  suffer for it. `LONG_SLOW` holds the channel for 21 s at a full payload; §5.8's periodic profile
   shows `LONG_MODERATE` already losing 100% of full payloads to a 10 s interferer.
 - **North America is heading for 500 kHz across the board** - `P-bw500` holds bandwidth there and
   varies spreading factor.
@@ -587,27 +587,34 @@ to within **0.041 dB** and is what licenses deriving the rest the same way.
 The wideLora (2.4 GHz) bandwidths in the same switch - 1625, 812.5, 406.25 kHz - are **not** here,
 because the vendored region table has no 2.4 GHz entry to run them against.
 
-**The overlap window is now derived from the preset, not a constant.** It was `MAX_AIRTIME_MS =
-20000.0`, justified by a comment claiming "LONG_SLOW at a full payload is about 6 s". It is **21.0 s**;
-6 s is what a 45 B payload costs, and a 0 B frame already costs 2.50 s. So 20 s was not a wide margin -
-it sat *under* LONG_SLOW's longest frame and far under `VERY_LONG_SLOW`'s 35.7 s, and a transmission
-still in flight past the window was dropped from the interferer scan. Over 8 h at 30 nodes, LONG_SLOW's
-longest frame was 19.80 s (about 1% of headroom, nothing over) but **`VERY_LONG_SLOW` put 130 of 5669
-transmissions past it** - the longest ones, and so the likeliest to overlap something.
+**The overlap window is now derived from the preset, not a constant.** It is a bound on how far back
+the interferer scan walks the transmission list - a guard on an optimisation, not a modelled quantity;
+nothing reads it to decide anything. See *The overlap window* in `TRANSPORT.md` for what it guards
+against and how it fails.
+
+It was `MAX_AIRTIME_MS = 20000.0`, justified by a comment claiming "LONG_SLOW at a full payload is
+about 6 s". It is **14.3 s**; 6 s is what a 45 B payload costs, and a 0 B frame already costs 2.0 s.
+So 20 s was not a wide margin - it sat *under* LONG_SLOW's longest frame and far under
+`VERY_LONG_SLOW`'s 28.6 s, and a transmission still in flight past the window was dropped from the
+interferer scan. Measured over 8 h at 30 nodes, **`VERY_LONG_SLOW` put 130 of 5669 transmissions past
+it** - the longest ones, and so the likeliest to overlap something. (That measurement was taken
+before 1.2.0 corrected airtime, so its absolute figures ran high; the shortfall it demonstrates is
+larger now, not smaller, because the window's floor did not move.)
 
 One constant cannot be right here: the span across presets is two orders of magnitude. `Mesh` now
 sizes its own window at one maximum-length frame plus a fifth, which fixes the slow end and makes the
 fast end much cheaper - a `SHORT_TURBO` delivery used to scan 20 s of history to find overlaps with a
-0.175 s frame:
+0.10 s frame:
 
 | preset | max frame | overlap window |
 | --- | --- | --- |
-| `SHORT_TURBO` | 0.18 s | 0.21 s |
-| `LONG_FAST` | 3.62 s | 4.35 s |
-| `LONG_MODERATE` | 11.67 s | 14.00 s |
-| `VERY_LONG_SLOW` | 35.67 s | 42.80 s |
+| `SHORT_TURBO` | 0.10 s | 0.12 s |
+| `LONG_FAST` | 2.12 s | 2.54 s |
+| `LONG_MODERATE` | 7.93 s | 9.52 s |
+| `LONG_SLOW` | 14.30 s | 17.15 s |
+| `VERY_LONG_SLOW` | 28.59 s | 34.31 s |
 
-### 5.1d The noise floor, and why there were no marginal links
+### 5.6 The noise floor, and why there were no marginal links
 
 Two questions worth answering together, because one bug caused both.
 
@@ -653,7 +660,7 @@ correction alone took Batumi from 4813 directed links to 3754.
 **Everything measured before this defaulted to `fixed`**, including all of round five, and is
 optimistic about weak-link delivery by the margin above. The turbo presets are the worst affected.
 
-### 5.1e Stretch: distance as its own variable
+### 5.7 Stretch: distance as its own variable
 
 `--stretch k` multiplies every distance in the mesh by `k`, about the centroid, after the points are
 drawn. `--area` cannot do this: changing the area redraws the placement, so an 8 km mesh and a 16 km
@@ -689,9 +696,9 @@ delivery curve. A third of links are already marginal at rest under the thermal 
 stretch 1.0). Letting sub-sensitivity pairs deliver probabilistically would move the balance from
 `lost_to_cliff` toward `marginal_now`, and it is a change to the vendored physics.
 
-### 5.1f Noise profiles: a floor that moves
+### 5.8 Noise profiles: a floor that moves
 
-`--noise-model` sets the static floor (§5.1d). `--noise-profile` varies it in time. All three are
+`--noise-model` sets the static floor (§5.6). `--noise-profile` varies it in time. All three are
 hashed from the seed rather than drawn from the RNG, so switching one on leaves every other draw in
 the run exactly where it was - the arms of a noise sweep differ in the field and in nothing else - and
 the field does not depend on the order the event loop happens to run in.
@@ -735,7 +742,7 @@ margin first.
 
 Transient excursions only ever raise the floor. A band quieter than nominal is the temporal
 field's business - its excursion can fall below zero on its own, and `saved_by_quiet_band` counts
-the packets that arrived because of it. **For lift, use ducting** (§5.1g): a floor-only model can
+the packets that arrived because of it. **For lift, use ducting** (§5.9): a floor-only model can
 improve a link that already exists but can never create one, because `neighbours` is thresholded
 on static RSSI, and lift that does not extend the graph is not the interesting half.
 
@@ -756,7 +763,7 @@ than contention-limited, and that is a different problem with a different fix. W
 never grows from the floor moving, because `neighbours` is built at the median and nothing is added
 to it. A quiet band makes an existing link likelier; only a duct adds a pair.
 
-### 5.1g Tropospheric ducting - `--duct-per-hour`
+### 5.9 Tropospheric ducting - `--duct-per-hour`
 
 Episodes when links far beyond normal range come alive: over water, under a temperature inversion, on
 a still evening, signal arrives 10-30 dB stronger than the path loss says it should. Kept separate
@@ -784,24 +791,7 @@ The interesting result is what happens **after**. A duct is learned: NodeDB entr
 One lift figure for the whole mesh, which is the simplification - a real duct has a geometry and
 favours paths along it, usually over water.
 
-### 5.2 Archive placement - `--place`
-
-| Value               | Where the archives go                                                   |
-| ------------------- | ----------------------------------------------------------------------- |
-| `spread`            | farthest-point across the area                                          |
-| `routers`           | on the highest-degree routers                                           |
-| `alternate-routers` | every other router by degree                                            |
-| `beside-router`     | a plain client one hop from each router                                 |
-| `random-clients`    | ordinary nodes at random - the control for every deliberate arrangement |
-| `hops-apart`        | targeting `--hops-apart` pairwise separation                            |
-
-**Known limitation:** `hops-apart` picks greedily from a high-degree start, which on a `chain` walks
-only a short way along it. On a 24 km chain with 8 archives it clusters them in the left third and
-strands 25 of 112 nodes with no archive in reach. A chain-aware placement that spreads along the
-principal axis does not exist yet, and testing sync quality on such a mesh would measure the placement
-instead.
-
-### 5.1h Batumi: what the only real snapshot is, and what it must not be asked
+### 5.10 Batumi: what the only real snapshot is, and what it must not be asked
 
 `--scenario batumi` is the one real mesh in the tree, and every geometry-dependent result rests on
 it. Four facts decide what a Batumi run can be quoted for. All are read straight from
@@ -825,6 +815,23 @@ file. The live-map path (`--scenario map --bbox`) is the route to more.
 ---
 
 ---
+
+### 5.11 Archive placement - `--place`
+
+| Value               | Where the archives go                                                   |
+| ------------------- | ----------------------------------------------------------------------- |
+| `spread`            | farthest-point across the area                                          |
+| `routers`           | on the highest-degree routers                                           |
+| `alternate-routers` | every other router by degree                                            |
+| `beside-router`     | a plain client one hop from each router                                 |
+| `random-clients`    | ordinary nodes at random - the control for every deliberate arrangement |
+| `hops-apart`        | targeting `--hops-apart` pairwise separation                            |
+
+**Known limitation:** `hops-apart` picks greedily from a high-degree start, which on a `chain` walks
+only a short way along it. On a 24 km chain with 8 archives it clusters them in the left third and
+strands 25 of 112 nodes with no archive in reach. A chain-aware placement that spreads along the
+principal axis does not exist yet, and testing sync quality on such a mesh would measure the placement
+instead.
 
 ## 6. Presets change reception, not just airtime
 
@@ -895,14 +902,14 @@ the last packet returns zero.
 - `per_node_share_of_unreachable_delivered` and `nodes_with_zero_delivered` - the tail, because the
   mean is dragged up by nodes that had little to recover
 
-### 7.1a The few nodes the hop histograms are printed for - `hops_away.typical_nodes`
+### 7.2 The few nodes the hop histograms are printed for - `hops_away.typical_nodes`
 
 `hops_away` carries a histogram per node, which at 60 to 500 nodes is why nobody reads it.
 `typical_nodes` picks five and labels each with what it stands for, ranked by **observed reach**:
 `worst`, `p10`, `median`, `p90`, `best`, each carrying `of_nodes` so one node is never mistaken for a
 population. Two labels landing on the same node on a small mesh are merged rather than printed twice.
 
-**Not the mean node**, deliberately. §7.3's standing instruction is to prefer the worst node to the
+**Not the mean node**, deliberately. §7.4's standing instruction is to prefer the worst node to the
 mean, and the node every archive argument is about is the one whose receptions stop above two hops
 while the topology offered six.
 
@@ -932,7 +939,7 @@ from the same number off a table with room in it.
 Mesh-wide aggregates of the same three quantities are in `hop_scaling`, which is the section to read
 for a trend and this one for a node.
 
-### 7.2 What counts as success
+### 7.3 What counts as success
 
 Four questions, four denominators. **They are not comparable to each other**, and the commonest
 misreading of this tool is treating one as a proxy for another. Each is a primary line on the text
@@ -984,20 +991,20 @@ is no client hydration path, so nothing measures a user asking a server for what
 only measured end-user gain from the archive is bystander pickup. Every other metric on this page is
 a delivery measurement. That one is inventory.
 
-### 7.3 Reading it
+### 7.4 Reading it
 
 Every per-node quantity is `min / p10 / median / mean / p90 / max`. **Prefer the worst node to the
 mean**: on a stretched mesh the result is bimodal - nodes near an archive gain a great deal, nodes past
 the last archive gain nothing - and a mean describes neither.
 
-### 7.4 The report and the charts
+### 7.5 The report and the charts
 
 Both are written by the run itself, into `reports/` and `figures/` beside the JSON, so an unattended
 run leaves a complete result and no post-processing step to forget. `--no-charts` skips only the
 charts; the JSON and the text report are written either way.
 
 The report is the per-portnum statistics with the archived class marked and listed first, then the
-four delivery figures of §7.2 as primary lines - text reach, the routing ceiling and its loss split,
+four delivery figures of §7.3 as primary lines - text reach, the routing ceiling and its loss split,
 DM success with its failure split and recipient-side hops and latency, and admin success per hop of
 separation with `failed_because` and what the successes cost in attempts - followed by what only an
 archive could have delivered, and the `silent_losses` gate. The two utilisation distributions get a
@@ -1008,7 +1015,7 @@ figure cannot be read against the wrong code.
 
 ---
 
-### 7.4a Reception over time - `--reception-bin-s`
+### 7.6 Reception over time - `--reception-bin-s`
 
 Every other delivery figure in the report is a whole-run total, and a total cannot tell a mesh that
 delivered steadily from one that delivered well for a day and then stopped. The sweeps run 72
@@ -1053,7 +1060,7 @@ number that is a subtraction of two totals. Channel utilisation is sampled rathe
 because it is a percentage at a moment - and sampled *during* the run because `AirTime`'s ring covers
 sixty seconds, so a single read at the end returns zero.
 
-### 7.5 The mesh map - `--mesh-map`
+### 7.7 The mesh map - `--mesh-map`
 
 An SVG of the mesh a run actually had, written beside the JSON. Hand-written, no plotting dependency,
 so it works wherever the simulator does. `diagram.py` does not replace it and is not replaced by it:
@@ -1070,7 +1077,7 @@ real thing, which needs four things the other has no concept of.
 
 **The one deliberate lie, and the map says so on its face.** Co-located nodes are fanned out onto a
 small circle around their true position, so they can be seen and their roles read. On Batumi that is
-43 of 92 nodes (§5.1h); plotted literally it is 92 nodes drawn as 55 dots with a third of the mesh
+43 of 92 nodes (§5.10); plotted literally it is 92 nodes drawn as 55 dots with a third of the mesh
 invisible. The footer names the count that was moved. A count badge on one dot would have been honest
 about position and useless about roles, which is most of what the map is for.
 
@@ -1085,7 +1092,7 @@ maps a round is the trap the results branch already avoids for raw JSON - but it
 than a policy: getting maps out of a sweep would need the sweep to name a path per cell. The file is
 named by seed, so one `--out` directory holds one map per seed.
 
-### 7.6 The digest, and the rolling page
+### 7.8 The digest, and the rolling page
 
 `collate.py` reduces a run to `summary.json` (the machine-readable digest) and `trend.md` (the page a
 person opens). `explorer.py` rolls every digest in the archive into one HTML page. Only the digests are
@@ -1171,7 +1178,7 @@ decides what a result rests on:
 
 | Komzpa module                                     | Called? | Where                                          |
 | ------------------------------------------------- | ------- | ---------------------------------------------- |
-| `lib/terrain.py`, `lib/srtm.py`                   | yes     | `--scenario`, via `sfpp/terrain.py` (§5.1h)    |
+| `lib/terrain.py`, `lib/srtm.py`                   | yes     | `--scenario`, via `sfpp/terrain.py` (§5.10)    |
 | `lib/clutter.py`, `lib/osm_clutter.py`            | yes     | same - and the larger of the two terms on Batumi |
 | `lib/phy.py`, `lib/radio_loss.py`, `lib/config.py` | yes     | the link budget and the PER curve, throughout  |
 | link calibration (in `radio_loss`)                | yes     | scenario-carried, refusable with `--no-link-calibration` |
@@ -1264,7 +1271,7 @@ depend on it is not evidence.
   permits. A run can and does exceed what is legal to transmit.
 - **No MQTT, no internet-connected nodes**, and so no packets arriving without RF provenance beyond
   the one place the traceroute guard tests for them.
-- **No terrain and no clutter _unless `--scenario` asks for them_** (§5.1h). Without it the world is
+- **No terrain and no clutter _unless `--scenario` asks for them_** (§5.10). Without it the world is
   flat and the link budget is distance alone, which is what every run before this assumed. With it,
   Komzpa's SRTM terrain and OSM land-cover code is called for real. Two things to know before
   quoting a terrain result: the packaged Batumi grid is 42 samples over a 16 km extent, which is

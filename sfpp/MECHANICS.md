@@ -490,12 +490,14 @@ range-limited, which is a different problem with a different fix.
 
 ### 6.3 The collision model
 
-Two transmissions overlap when `o.start < tx.end and o.end > tx.start`. `_overlapping(tx)` finds them
-by scanning backwards through `transmissions` bounded by `max_airtime_ms` - the airtime of a
-maximum-length frame at this preset (`MAX_PAYLOAD_BYTES`, 237) plus a fifth. That bound is **derived**
-rather than constant, because the span across presets is two orders of magnitude: a flat 20 s sat
-under VERY_LONG_SLOW's 28.6 s full payload, and anything still in flight past the window left the
-interferer scan - 130 of 5669 transmissions, the longest ones.
+Two transmissions overlap when `o.start < tx.end and o.end > tx.start`. That predicate is the whole
+collision criterion. `_overlapping(tx)` applies it while scanning backwards through `transmissions`,
+bounded by `max_airtime_ms` - the airtime of a maximum-length frame at this preset
+(`MAX_PAYLOAD_BYTES`, 237) plus a fifth. The bound decides only when the scan may stop, so it is a
+guard on that early exit and not a physical quantity: no decision reads it, and being generous costs
+nothing but time. It is **derived per preset** rather than constant, because the span is two orders of
+magnitude: a flat 20 s sat under VERY_LONG_SLOW's 28.6 s full payload, and anything still in flight
+past the window left the interferer scan - 130 of 5669 transmissions, the longest ones.
 
 The scan is bounded by *start* time and does not stop at the first transmission that has already
 ended: starts are monotonic, ends are not, because a long frame started earlier can still be on air
@@ -600,7 +602,7 @@ Under the historical fixed floor the threshold landed 5 dB into the curve's flat
 probabilistic band was 0.96 to 0.995 and **a link that worked a third of the time could not exist**.
 Under the thermal floor - the default - the threshold lands on the curve's knee instead, which is
 where such links come from. Everything measured before `--noise-model` existed is optimistic about
-weak-link delivery by that margin, and the turbo presets are the worst affected (README §5.1d).
+weak-link delivery by that margin, and the turbo presets are the worst affected (README §5.6).
 
 The limitation that remains: delivery probability is **zero below sensitivity**, because `neighbours`
 is thresholded there and such a pair is never offered a packet. So this model degrades a link until it

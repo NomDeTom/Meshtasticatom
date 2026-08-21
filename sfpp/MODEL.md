@@ -5,7 +5,9 @@ works from first principles, [README.md](README.md) is the operating manual, and
 [TRAPS.md](TRAPS.md) is the list of ways this tree has produced a confident wrong number; this is
 the fourth: why the arithmetic is what it is.
 
-## Airtime
+## 1. Cost and capacity
+
+### Airtime
 
 `sfpp/analytic/radio.py` computes LoRa time on air, and `validate.py` checks it against three
 independent sources. The reference calculator's stated formula, implemented in `validate.py` from
@@ -32,13 +34,31 @@ Meshtastic preset table lands exactly on the boundary, so the comparison's stric
 but it matches the reference calculator, and two sources should not disagree on a case either could
 hit.
 
-## Bytes per hour
+### Bytes per hour
 
 Channel occupancy is per *frame*, not per byte. A stream of 43-byte adverts buys far fewer payload
 bytes per second than the same airtime spent on full frames, so any bytes-per-hour figure is only
 meaningful beside the frame size that produced it.
 
-## Advertising against blind repetition
+### Misdecode rate
+
+An over-capacity sketch difference decodes to a wrong set that reproduces the same syndromes at
+roughly `1/c!` for capacity `c`. `test_pinsketch` asserts this empirically at `c = 2`, where it
+misdecodes on more than a fifth of over-capacity trials. Since the simulation uses the same `1/c!`
+model, agreement at `c = 2` is by construction; what matters is that it decays fast enough that the
+capacities actually in use are safe.
+
+### Adaptive sketch capacity
+
+A full-capacity sketch on every advert is what makes the steady state expensive, and the steady
+state is almost always `d = 0`. So a routine advert carries capacity 4 and the member count. When
+two sketches do not resolve, the count difference is a lower bound on the divergence, so one
+directed request buys a sketch sized to it. Capacity truncation is exact - the small sketch is a
+prefix of the large one - so nothing already sent is wasted.
+
+## 2. Advertising against repetition
+
+### Advertising against blind repetition
 
 The question the analytic model exists to answer: is reconciling cheaper than just sending things
 more than once?
@@ -61,7 +81,7 @@ f/λ  <  (k − 1 − recovery_fraction) · OBJECT / (N · ADVERT)
 with `k−1` because one copy is the original either way, and the recovery fraction subtracted
 because reconciliation still has to push whatever someone missed.
 
-### Why earshot decides it
+#### Why earshot decides it
 
 `recovery_fraction = 1 − (1 − miss_rate)^N`. A push is a broadcast, so what matters is whether
 *anyone* in earshot missed the object, not how many did. That saturates: at 20 nodes and a 15% miss
@@ -75,35 +95,13 @@ nodes.
 Push also has no requester to address, so duplicate suppression carries more weight than in the
 pull case. That is the risk push trades the second round trip for.
 
-### What the sketch buys
+#### What the sketch buys
 
 Repetition only ever reaches nodes that were listening at the time. Reconciliation recovers long
 after the fact, at a cost that does not grow with the recovery window - which is the property that
 earns the sketch its place, independent of the cost comparison above.
 
-## Misdecode rate
-
-An over-capacity sketch difference decodes to a wrong set that reproduces the same syndromes at
-roughly `1/c!` for capacity `c`. `test_pinsketch` asserts this empirically at `c = 2`, where it
-misdecodes on more than a fifth of over-capacity trials. Since the simulation uses the same `1/c!`
-model, agreement at `c = 2` is by construction; what matters is that it decays fast enough that the
-capacities actually in use are safe.
-
-## Chains
-
-A chain is per-server with local counters, exactly as in the set-reconciliation work - there is no
-official counter anywhere. What a chain adds is a parent link per object, so order is recoverable
-by walking, which is what makes catch-up serial.
-
-## Adaptive sketch capacity
-
-A full-capacity sketch on every advert is what makes the steady state expensive, and the steady
-state is almost always `d = 0`. So a routine advert carries capacity 4 and the member count. When
-two sketches do not resolve, the count difference is a lower bound on the divergence, so one
-directed request buys a sketch sized to it. Capacity truncation is exact - the small sketch is a
-prefix of the large one - so nothing already sent is wasted.
-
-## What advertising costs against what it saves
+### What advertising costs against what it saves
 
 SF++ already broadcasts `CANON_ANNOUNCE` on a cadence whether or not anything changed. An advert
 carrying a sketch is roughly four times that size, so in a steady state where nothing is ever
@@ -121,13 +119,19 @@ Fifty per cent channel utilisation is roughly thirty times the top of these curv
 appears on a log axis. That is the point: none of these strategies saturates the channel, and the
 differences between them are ratios rather than absolute bytes.
 
-## Enumeration against sketching
+### Enumeration against sketching
 
 Enumeration scales with what a node holds; a sketch scales with what two nodes differ by. At the
 frozen bucket size of 32 the two are nearly tied, which makes bucket size the parameter that
 decides whether the sketch is worth having at all.
 
-## Ground
+### Chains
+
+A chain is per-server with local counters, exactly as in the set-reconciliation work - there is no
+official counter anywhere. What a chain adds is a parent link per object, so order is recoverable
+by walking, which is what makes catch-up serial.
+
+## 3. Ground
 
 ### The indexed grid
 
@@ -227,7 +231,7 @@ A reflection also fixes the tile boundary, so adjacent tiles would each contribu
 Duplicates break `ClutterGrid.is_regular`, and an irregular grid scans every sample on every lookup
 - minutes per build rather than seconds (TRAPS 8). Dropping the repeated column loses nothing.
 
-## Offered load
+## 4. Offered load
 
 ### The congestion throttle
 
@@ -313,7 +317,7 @@ that way on a 2-hour Batumi run - rather than about delivery.
 DM outcomes are resolved against whether the target ever saw the message, so success is measured at
 the intended recipient rather than inferred from the flood.
 
-## The digest
+## 5. The digest
 
 `collate.py` turns a night's run JSONs into one report. What it counts and how it ranks is
 deliberate.
@@ -373,7 +377,7 @@ re-reading its prose would break the first time one was reworded. A run with 400
 warnings from one mirrored cell and one `inert` is not the same run as the reverse, and a flat list
 of 401 sentences reads identically either way.
 
-## The campaign
+## 6. The campaign
 
 ### The replay header
 

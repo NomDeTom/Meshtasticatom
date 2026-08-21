@@ -18,7 +18,9 @@ discard - so it must not be read as "2.7 and earlier". It reproduces distributio
 streams: the TX queue replaced a recursive retry closure, so a seed does not reproduce a
 pre-fold-in run packet for packet.
 
-## Roles
+## The mesh
+
+### Roles
 
 - **ROUTER** rebroadcasts early, drawing from the bottom of the contention window while everyone
   else waits behind a fixed router offset.
@@ -39,235 +41,7 @@ is read for here. The `no-mute` mix is adversarial rather than a census - CLIENT
 a real mesh quiet, a fifth of Baymesh does not rebroadcast at all, so removing it is the cruellest
 realistic change to a role mix.
 
-## Contention
-
-The contention window is sized from SNR so that distant nodes - the ones whose rebroadcast actually
-extends coverage - transmit first (`RadioInterface.h`). Both bounds moved: 2.5 lowered CWmax to 7,
-2.6 raised CWmin to 3 and put CWmax back, and 2.6 also narrowed the top of the SNR range from 15 dB
-to 10, which shifts every rebroadcast delay on a strong link.
-
-Slot draws are integer and half-open, matching Arduino `random(0, n)`. Under `legacy` the draw stays
-continuous, which removes a class of collision the firmware produces routinely: two nodes can only
-pick the same slot if slots are discrete.
-
-## The queue
-
-`MeshPacketQueue::CompareMeshPacketFunc`. 2.4 orders a max-heap by priority alone, ties to the
-lower id. 2.5 replaced it with a sorted insert that puts the late-transmit group last and, at equal
-priority, prefers a packet already on the mesh over one of ours.
-
-The queue is finite and overflow is its only drop: `setTransmitDelay` reschedules a blocked packet
-indefinitely, so congestion appears as a full queue and as latency rather than as a packet that
-evaporates. On overflow the firmware chooses what to lose - `replaceLowerPriorityPacket`.
-
-## Routing
-
-`TraceRouteModule::updateNextHops` (v2.7.13): a traceroute reply teaches a next hop for every node
-beyond the learner in the route, not just the neighbour. The corroboration guard - refusing to learn
-unless the byte the route names is the one that actually relayed the reply - is only in this tree.
-2.7 learns from the unauthenticated payload unconditionally, so it learns more, and some of what it
-learns is wrong.
-
-## The node database
-
-`MAX_NUM_NODES` is the hot store. Up to 2.5 the cap was a flat 100 for every board; 2.6 introduced
-the platform split with nRF52 at 80 and the ESP32-S3 flash tiers; this tree raised the compile-time
-default to 120 and dropped the separate nRF52 branch. The `nrf52840` key stands for "nRF52840 and
-generic ESP32", which 2.6 and 2.7 do not treat alike.
-
-Board sizes are derived from this tree's own variants: each `platformio.ini` declares
-`custom_meshtastic_hw_model_slug`, `custom_meshtastic_architecture` and
-`custom_meshtastic_partition_scheme`, and `mesh-pb-constants.h` turns those into `MAX_NUM_NODES`.
-Regenerate after a firmware bump. HELTEC_V3 is an 8 MB ESP32-S3 and so gets 200 slots, not the 120
-of the compile-time default.
-
-No declared hardware model maps to the 10-slot STM32WL tier - the stm32 variants here do not declare
-a slug, so they cannot be named in a census by one. The `constrained` mix reaches that tier
-directly, as a stress test rather than a deployment.
-
-`WARM_NODE_COUNT` keys on memory class rather than flash, so the flash-derived platform names here
-do not line up exactly: STM32WL is `MEM_CLASS_TINY` and has no warm tier at all, nRF52840 is a named
-case at 100, and a non-PSRAM ESP32-S3 takes the 150 of `MEM_CLASS_MEDIUM`. The 16 MB tier is taken
-as the PSRAM-equipped S3 that `MEM_CLASS_LARGE` describes - an assumption about the boards in that
-tier rather than something flash size determines, and `warm_num_nodes` overrides it.
-
-`TRAFFIC_MANAGEMENT_CACHE_SIZE` is the cold tier. A key seen on the wire is cached there and can
-answer the inbound-decrypt path, but it is never authoritative: nothing routes, resolves or
-attributes identity from it.
-
-## Signing
-
-An XEdDSA signature is 64 bytes and the protobuf field carrying it costs two more
-(`CryptoEngine.h`, `RadioInterface.h`). A frame is 255 bytes with a 16-byte header, so a Data
-payload signs only while it stays under 173 bytes - the gate `signedDataFits()` applies with the
-real encoder.
-
-## Repeat scaling
-
-From the `extra-repeats` branch's `RepeatScalingModule`. Cancelling a queued rebroadcast on the
-first heard copy costs delivery on the one class with no ACK behind it, so text tolerates a second
-copy first. The suppression thresholds are the module's own, and none of the three is validated.
-
-## The overlap window
-
-`MAX_AIRTIME_MS` bounds how far back the interferer scan looks. It was once a flat 20 s, justified
-by a claim that a full LONG_SLOW payload was "about 6 s". It is 14.3 s, and 6 s is roughly what a
-45-byte payload costs. Even 20 s sat under VERY_LONG_SLOW's 28.6 s, and a transmission still in
-flight past the window was dropped from the scan entirely: measured over 8 h at 30 nodes,
-VERY_LONG_SLOW put 130 of 5669 transmissions past it - the longest ones, and so the likeliest to
-overlap something.
-
-## Arduino arithmetic
-
-`arduino_map()` reproduces Arduino's `map()`, and two details decide the answer where Python's
-defaults would not. The parameters are `long`, so a float SNR or utilisation truncates toward zero
-on the way in - −5.7 dB enters as −5. C integer division also truncates toward zero where Python's
-`//` floors, and the two disagree for every negative numerator: `getCWsize(-25)` is 0 in the
-firmware and −1 under `//`.
-
-`getCWsize()` takes the result as a `uint8_t` without constraining it, so an SNR outside
-[SNR_MIN, SNR_MAX] extrapolates off the end of the window rather than saturating at it.
-
-## Packet fields
-
-`relay_index` is **not on the wire**. `relay_node` is one ambiguous byte; the index is the sending
-node's, kept for instrumentation so a cancellation can be attributed. Nothing in the transport
-reads it and no decision may - resolving a relay to a node is exactly the ambiguity
-`resolve_unique_last_byte` exists to model.
-
-`RouteDiscovery` carries two arrays, not one: `route` accumulates outbound and `route_back` on the
-way home (mesh.proto tags 1 and 3, `TraceRouteModule.cpp:377`). Conflating them meant that on an
-asymmetric mesh - which this transport models - a reply that did not retrace its request had its
-return-leg relays learned as forward hops.
-
-`highest_hop_limit` on a `SeenRecord` is what the upgrade path turns on: hearing the same packet
-again with more hops left than the copy already queued means an earlier relay took a shorter route,
-and 2.8 throws away the queued copy for the better one.
-
-Everything routing can do is bounded by a `NodeRecord` existing. A peer evicted from the hot store
-cannot be resolved from a relay byte, cannot hold a next hop, and does not count as online.
-
-A `QueueEntry`'s `tx_after` is an absolute deadline, not a delay: `MeshPacketQueue` sorts every
-deferred packet behind every ready one, and the late-rebroadcast window is nothing more than
-setting it.
-
-## Ambiguity and route health
-
-`NodeDB::resolveUniqueLastByte`. Before this tree a last-byte lookup took the first node it matched
-and nothing asked whether a second shared the byte, so hop preservation and next-hop emission were
-ambiguity-blind and got it wrong silently on a dense mesh.
-
-`RouteHealth` is RAM-only in the firmware too: the route lives in `NodeDB`, and this is the metadata
-that lets `getNextHop()` decay a dead hop back to flooding rather than spend a DM discovering it.
-
-## Hop scaling
-
-`HopScalingModule` is a sampled, capped, hash-collided estimate of how far the mesh reaches, and it
-emits a hop-limit recommendation from it. Every property costs accuracy against an exhaustive count,
-and each is why modelling it is worth anything:
-
-- identity is a 16-bit hash, so two nodes can share an entry
-- 128 entries of 4 bytes each, and it fills
-- only one node in `sampling_denominator` is admitted, chosen by hash
-- buckets are scaled by `filtering_denominator` before the recommendation walk
-- recency is a 13-bit hourly bitmap, not a count
-- on overflow it raises the denominator and drops nodes, warning that the answer may be skewed
-
-So the module's per-hop counts are an estimate and the transport can compute the truth; reporting
-both is what says how far apart they are.
-
-The recommendation is the first hop that reaches `target_affected_nodes` after scaling - 40 in the
-firmware - plus one more hop when the nodes it would add still leave the total inside a budget
-running from that target to `max_target_nodes`, scaled by how politely the mesh is behaving. Both
-figures are literals in the module and instance attributes here, so a run can ask what the mesh
-would do if the firmware aimed at more or fewer nodes. The ceiling follows the target unless set
-outright, keeping the firmware's 40:80 ratio.
-
-A node lowering its own hop limit on routine broadcasts is the module's whole purpose, and
-unconditional in the firmware wherever the module exists. It is separable here only so a sweep can
-hold the feedback loop open.
-
-## The warm tier
-
-A `WarmNodeEntry` is 40 bytes: node number, `last_heard`, and a Curve25519 public key. The role, a
-protected category and an XEdDSA-signed flag are packed into the low seven bits of `last_heard`,
-which is why warm recency is quantised to 128 seconds. That coarseness is load-bearing: the tier is
-LRU-ordered by that field, so two nodes heard inside one 128-second window are indistinguishable to
-eviction.
-
-`TrafficManagementModule`'s overflow cache of next-hop hints is much larger than the hot store and
-not bounded by it, so it can hold a route for a node the NodeDB has evicted or never admitted.
-
-`RepeatScalingModule` keeps a ring of eight `(sender, id)` duplicate counts, replaced round-robin -
-small enough to thrash on a busy mesh, which is why its size is modelled rather than a dict.
-
-## Sensing
-
-`sense_until` is the end of the last stretch this radio sensed the channel occupied, separate from
-`busy_until`, which is only our own transmission. It is what the energy detector saw, ours and
-everyone else's, and it exists so overlapping signals are charged once (TRAPS 5).
-
-## Identity on the wire
-
-`NodeDB::getLastByteOfNodeNum` puts all of a node number that fits in `relay_node`. A low byte of
-zero is sent as 0xFF, because 0 is the `NO_RELAY_NODE` sentinel - so one node number in 256 is not
-identified by its own last byte, and 0xFF answers for twice as many nodes as any other value.
-
-## The three tiers
-
-**Hot.** `NodeDB::updateFrom` notes that a peer was heard and how far away it is. `hops_away` stays
-`None` until a packet arrives with a usable hop count, matching `has_hops_away`: "never established"
-is a different answer from "zero hops", and next-hop resolution turns on the difference.
-
-`demoteOldestHotNodesToWarm` demotes the stalest unprotected record on overflow - protection
-outranks recency, and within a class the most-recently-heard survives. This is how a learned route
-dies without any expiry being involved.
-
-**Warm.** `WarmNodeStore::absorb` keeps an evicted node's identity, key and role in 40 bytes. The
-key is what the tier exists for - expensive to re-learn where the rest rebuilds from traffic in
-seconds - so a keyless candidate never displaces a keyed entry, and eviction takes the oldest
-keyless entry first. Routing does not survive demotion: `next_hop` and `hops_away` are hot-store
-fields, so a re-admitted node is flooded to until its route is learned again. A node lives in hot or
-warm, never both.
-
-**Cold.** A cache for the inbound-decrypt path, never authoritative. It can answer "do we hold a
-key for this node" and cannot be used to claim a node's identity.
-
-`copyPublicKey` reads hot then warm, both authoritative. A node's own record is in the hot store
-with its own key, so it can always verify a signature of its own - which is what it hears when its
-relay comes back.
-
-`NodeDB::getNumOnlineMeshNodes` is bounded by the store *and* by a two-hour window. The transport
-does not read it; the congestion coefficient does, which is what makes that coefficient bounded by
-the store rather than by mesh size.
-
-## Position
-
-`position3` is absolute altitude, not height above ground. Without terrain the ground is zero, so
-it is the flat position plus an antenna height, and 1.5 m over a kilometre is nothing a path-loss
-model can see. With terrain it is the number that matters: two nodes 3 km apart with 400 m of ridge
-between them are further apart than the map says.
-
-`direct_neighbours` stands in for `HopScalingModule::getLastPerHopCounts().perHop[0]` - the exact
-figure that sampled, capped estimator is trying to approximate.
-
-## Channel busy time
-
-A receiver has one energy detector and one channel. Two overlapping signals are one busy stretch to
-it, not two: it cannot count transmitters, and when a packet fails it learns only that an Rx
-failed - not why, and not how many were talking. Charging each overlapping transmission its full
-airtime attributes knowledge no radio has and lets the figure exceed 100% of wall-clock, which a
-channel cannot do (TRAPS 5).
-
-So only the part of a stretch not already covered is charged, and the ring accumulates the union.
-Callers charge at a transmission's *end*, which is the order deliveries fire in, so a running
-high-water mark is exactly the union rather than an approximation.
-
-`AirTime`'s second ring is our own transmissions only, per minute over the last hour - a different
-structure over a different window from channel utilisation, and the one the duty cycle is enforced
-against.
-
-## Placement
+### Placement
 
 `place_nodes` is Poisson-disc-ish: uniform, rejecting anything too close to an existing node, so
 stacked nodes cannot make the mesh look better connected than a real deployment.
@@ -293,56 +67,7 @@ Scaling points already drawn keeps node *k* the same node with the same neighbou
 arrangement and changes only how far apart they are. About the centroid rather than the origin so
 the mesh grows in place, and it consumes no randomness, so a stretch sweep is paired.
 
-## Noise
-
-`NoiseField` is hashed, not drawn, for two reasons learned from `--amplify-worst`: it consumes no
-randomness, so switching a profile on does not shift the stream the traffic generator shares; and
-it is order-independent, where a stateful AR(1) would hand out a different field depending on what
-the traffic happened to do, and a run would not reproduce.
-
-**Temporal** is a smooth field with a coherence time, sampled across the packet's own airtime and
-judged on the **worst** excursion it spans - a frame is decoded as one unit, so a single deep fade
-anywhere inside it corrupts enough coded symbols to fail it. A 14.3 s LONG_SLOW packet at τ=500 ms
-spans twenty-eight independent excursions and is judged on the deepest; a 100 ms SHORT_TURBO packet
-spans less than one. The length penalty that falls out is superlinear, which the vendored curve's
-flat 0.8 dB per 100 bytes is not.
-
-**Transient** is episodic and spatial: a window of raised floor over part of the map, standing in
-for an interferer switching on, a neighbour's non-LoRa gear, weather. Nothing extra is needed to
-make it bite the stretched links first - a fixed dB excursion removes the least margin first, so the
-marginal population is exactly who pays. Transient excursions are one-directional: the floor rises,
-and a quieter-than-nominal band is left to the temporal field, which can fall below zero on its own.
-
-**Periodic** is not a probability or an SNR penalty but a hard loss: a switching supply, a radar
-sweep, a pager transmitter. It does not degrade a link, it removes whatever was in the air. The
-length effect falls out of the geometry with no coefficient - the chance of being caught is
-`(airtime + pulse) / interval`, so at a 10 s interval a 175 ms SHORT_TURBO frame is hit under 4% of
-the time and an 11.7 s LONG_MODERATE frame cannot avoid it at all. That is a far harder length
-penalty than the PER curve's, and the one that decides whether a preset is usable near an
-interferer. It is mesh-wide, which is the simplification: one emitter every receiver hears, where a
-real one has a location and a radius - which the transient profile already models, and the two
-compose. Perfectly regular, with no jitter, because that is the adversarial case: a mesh cannot
-average it away, and a packet length that resonates with the interval fails every time.
-
-## Ducting
-
-Tropospheric ducting is kept apart from `NoiseField` because it is the propagation path improving,
-not the floor moving. Over water, under an inversion, on a still evening, signal that normally
-disappears into the ground arrives 10 to 30 dB stronger than the path loss says, and operators watch
-their node lists fill with names from a hundred kilometres away.
-
-**It is not a gift.** A duct hands the mesh far more audible neighbours, so more transmissions
-collide and contend; links that appear, get learned, get written into a NodeDB and a `next_hop`, and
-then vanish when the duct closes, leaving routes pointing at nodes that cannot be heard; and an
-apparent densification the congestion machinery reacts to, scaling intervals for a node count that
-is not really there. So the interesting result from a ducting run is rarely the extra reach - it is
-what the mesh does afterwards.
-
-The lift is one figure for the whole mesh: a duct is a property of the atmosphere over the region,
-not of a pair of nodes. A real duct has a geometry and favours paths along it, often over water;
-the uniform lift is the conservative direction here, because it densifies everywhere at once.
-
-## Siting and amplifiers
+### Siting and amplifiers
 
 **Not from the firmware, and not measured.** The firmware has no concept of siting - it knows
 `tx_power` and a GPS position, and `antenna_gain` appears nowhere in `src/` or the protobufs. Even
@@ -362,83 +87,46 @@ the whole point: a node heard far further than it hears relays into places whose
 reach it, and its rebroadcast cancels copies queued by nodes that could have carried the packet
 further. `cancelled_by_weaker_relay` is the counter that shows it.
 
-## The noise floor
+### Building a mesh
 
-`NOISE_LEVEL` used to be one constant for every preset, and the sensitivity table beside it is not:
-those figures are kTB + 6 dB NF, each landing exactly on its spreading factor's demodulator limit
-(SF7 −7.5 dB, SF11 −17.5, SF12 −20.0). A fixed floor therefore misstates SNR by 10·log₁₀(bw/anchor)
-- about 5 dB optimistic at 250 kHz and 8 at 500 kHz.
+**Boards, sitings and roles are drawn, not striped.** A mesh whose one STM32WL or one basement node
+sits on the only bridge is a case striping would never produce.
 
-That matters more than a few dB sounds, because the PER curve's p50 sits at −17.0 dB (CR5) to
-−19.4 (CR8), right on those limits. Under the fixed floor a LONG_FAST link at sensitivity computes
-SNR −12.25 and decodes 96% of the time; under a thermal floor it computes −17.5 and decodes 39%.
-The fixed floor is why this model had no marginal link at all: it puts every link the graph will use
-5 dB into the flat top of the curve.
+Router-like roles go to the head of the placement order; CLIENT_MUTE is drawn at random from the
+rest, because muting a node is a decision about power or noise rather than siting, and handing it to
+the worst-connected nodes would make it look free.
 
-`lib/config.py` now derives the floor from the preset's own bandwidth, and `--noise-model fixed`
-names the old constant explicitly as `mesh.VENDORED_FIXED_NOISE_DBM`. Without that, `fixed` would
-have quietly become a second copy of `thermal` - a comparison arm that runs but cannot differ,
-which is TRAPS #14 in a new place.
+`--router-placement` chooses what a router is: `degree` is what an operator does - the repeater goes
+on the hill; `inverse` is the adversarial control, the router in the basement with three neighbours,
+which is what happens when someone flashes ROUTER onto the node they already own; `random` separates
+the role's own effect from the siting that usually comes with it.
 
-### A threshold cannot outlive the floor it was measured against
+`--amplify-worst` is the field pathology: the node nobody can hear gets an amplifier bolted on,
+which fixes its outbound reach and nothing else. It is now heard by everyone and still hears almost
+nobody, so it relays into a mesh it cannot receive replies from and its rebroadcasts cancel copies
+queued by nodes that could have carried them further. Fitted after the links exist, because "hears
+worst" is a property of the mesh rather than of the node.
 
-A sensitivity figure and a noise floor are not independent numbers: the first is the second plus
-what the demodulator needs. Reading a sensitivity out of a table while a scenario supplies its own
-measured floor therefore double-counts the band, and in the optimistic direction. `effective_sensitivity`
-takes `max(datasheet, floor + required_snr_db(sf))`, so whichever of the two is worse decides:
+**Hop limits.** Operators do not all set the same one: a node in a dense middle reaches what it needs
+at 3 or 4 and leaves the default alone, while one on the edge raises it until the rest of the mesh
+answers, and field guidance tops out at 7. `centrality` reproduces that correlation and therefore
+confounds hop limit with position - a table of receptions by hop limit then measures siting under a
+hop-limit label. `random` breaks the correlation as a control, and is not how operators behave.
 
-| | LONG_FAST |
-| --- | --- |
-| datasheet sensitivity | −131.5 dBm |
-| kTB + 6 dB NF at 250 kHz, + SF11's −17.5 dB | −131.52 dBm |
-| Batumi's measured −110.5 dBm median, + SF11's −17.5 dB | **−128.0 dBm** |
+Hop preservation only fires between nodes that have favourited each other, which in the field means
+one operator running both ends of a spine. Every router-like node favouriting every other is the
+upper bound on how much relaying can be free.
 
-Under a thermal floor the two agree to 0.02 dB, which is why `--noise-model` barely moves the link
-graph. Under a measured floor the difference is 3.5 dB and the graph moves a long way: Batumi's
-directed link count went from 4813 to 3754 on this correction alone.
+**A scenario overrides all of it.** Real geometry decides where the nodes are and therefore how many
+there are: the place is the input, not a shape to fit a requested count into. Stretching it is
+refused rather than silently ignored - moving Batumi's nodes apart makes it somewhere else, and a
+result labelled `batumi` would no longer be about Batumi. Recorded roles beat anything derived from
+degree, and measured antenna heights beat any generated mix: a real snapshot knows which nodes are
+on a mast and which are on a windowsill, and that difference decides more links than the mixes do.
 
-### The floor moves, and so does everything derived from it
+## The channel
 
-`--noise-profile` (README §5.1f) gives the floor a spread. Every threshold derived from it is
-re-evaluated per frame against the receiver's own band:
-
-| what | function | what it decides |
-| --- | --- | --- |
-| decodability | `_sensitivity_at(rx, start, end)` | whether the reception is attempted at all |
-| energy detection | `_cad_floor_at(rx, start, end)` | whether the receiver hears the channel as busy, and whether an interferer counts against capture |
-| ducted audience | both | which sub-sensitivity pairs the lift actually reaches |
-
-An excursion used to arrive **only** as an RSSI penalty inside the PER curve, so it could fail a
-packet but never remove a link. Measured on a 25-node mesh at σ=6 dB, 19 directed links differ in
-existence between two instants, where none could before. The two losses are counted separately -
-`lost_to_noise_excursion` for a failed draw, `lost_to_noise_floor` for a threshold not cleared -
-because no coding rate rescues a packet the receiver never attempted.
-
-The direction is one-way: a moving floor never *adds* a pair, because `neighbours` is built at the
-median and nothing is appended to it. A quiet band makes an existing link likelier; only a duct
-creates one.
-
-`EXTRA_PRESETS` are not upstream and in no firmware build, and their sensitivity is **extrapolated**
-rather than derived: the vendored figures fall about 2.5 dB per spreading factor across the 500 kHz
-rows, and these continue that slope one step past each end. Treat them as indicative of a direction,
-not as a link budget. SF5 and SF6 also need an SX126x or SX128x, so `EXTRA_SHORT_TURBO` is not a
-setting every board could take even if the firmware offered it.
-
-## Loss knobs
-
-`extra_loss` is a flat loss floor on every reception, standing in for what the model does not carry
-- interference from outside the mesh, fading, a receiver busy elsewhere.
-
-`burst_loss` is bursty deafness: a node periodically unable to receive for a stretch, standing in
-for a blocked antenna, a neighbour keying up nearby, or a radio busy elsewhere. The two are
-different problems for a sketch: flat loss spreads divergence evenly across buckets, and a burst
-puts a whole bucket's worth into one.
-
-A noise excursion is attributed both ways off one draw - lost where the static floor would have
-delivered, and delivered through a quieter-than-nominal band where the static floor would have
-dropped - so neither attribution costs an extra random number.
-
-## Links
+### Links
 
 Per-pair asymmetry is drawn **once** for the life of a mesh and kept. A rebuild - after an amplifier
 is fitted, or to price a stretch - then draws nothing and moves nothing it was not asked to move.
@@ -456,7 +144,7 @@ grid: the nodes keep their sea-level default, every obstruction term returns 0.0
 computes exactly the budget it always did. With terrain there are two numbers - `ground_m` from the
 grid, and `antenna_height_m` above it, never absolute altitude.
 
-## The link budget
+### The link budget
 
 Three loss terms, three separate claims, kept apart so a result can price them apart: distance is
 geometry, terrain is a public elevation model, clutter is a land-cover raster. Both obstruction
@@ -502,7 +190,7 @@ being an approximation: at four tiles a tenth of the links run beyond 42 km and 
 60.6 km. Past the envelope the raw budget answers instead - only a physical path loss, but a
 physical path loss everywhere (TRAPS 4).
 
-## Link quality
+### Link quality
 
 Every directed link is graded twice.
 
@@ -530,7 +218,210 @@ pair is never offered a packet at all.
 Duct reach is precomputed from the widest lift any configured duct can produce, so a delivery
 filters a candidate set rather than scanning all *n* receivers per transmission.
 
+### Noise
+
+`NoiseField` is hashed, not drawn, for two reasons learned from `--amplify-worst`: it consumes no
+randomness, so switching a profile on does not shift the stream the traffic generator shares; and
+it is order-independent, where a stateful AR(1) would hand out a different field depending on what
+the traffic happened to do, and a run would not reproduce.
+
+**Temporal** is a smooth field with a coherence time, sampled across the packet's own airtime and
+judged on the **worst** excursion it spans - a frame is decoded as one unit, so a single deep fade
+anywhere inside it corrupts enough coded symbols to fail it. A 14.3 s LONG_SLOW packet at τ=500 ms
+spans twenty-eight independent excursions and is judged on the deepest; a 100 ms SHORT_TURBO packet
+spans less than one. The length penalty that falls out is superlinear, which the vendored curve's
+flat 0.8 dB per 100 bytes is not.
+
+**Transient** is episodic and spatial: a window of raised floor over part of the map, standing in
+for an interferer switching on, a neighbour's non-LoRa gear, weather. Nothing extra is needed to
+make it bite the stretched links first - a fixed dB excursion removes the least margin first, so the
+marginal population is exactly who pays. Transient excursions are one-directional: the floor rises,
+and a quieter-than-nominal band is left to the temporal field, which can fall below zero on its own.
+
+**Periodic** is not a probability or an SNR penalty but a hard loss: a switching supply, a radar
+sweep, a pager transmitter. It does not degrade a link, it removes whatever was in the air. The
+length effect falls out of the geometry with no coefficient - the chance of being caught is
+`(airtime + pulse) / interval`, so at a 10 s interval a 175 ms SHORT_TURBO frame is hit under 4% of
+the time and an 11.7 s LONG_MODERATE frame cannot avoid it at all. That is a far harder length
+penalty than the PER curve's, and the one that decides whether a preset is usable near an
+interferer. It is mesh-wide, which is the simplification: one emitter every receiver hears, where a
+real one has a location and a radius - which the transient profile already models, and the two
+compose. Perfectly regular, with no jitter, because that is the adversarial case: a mesh cannot
+average it away, and a packet length that resonates with the interval fails every time.
+
+### The noise floor
+
+`NOISE_LEVEL` used to be one constant for every preset, and the sensitivity table beside it is not:
+those figures are kTB + 6 dB NF, each landing exactly on its spreading factor's demodulator limit
+(SF7 −7.5 dB, SF11 −17.5, SF12 −20.0). A fixed floor therefore misstates SNR by 10·log₁₀(bw/anchor)
+- about 5 dB optimistic at 250 kHz and 8 at 500 kHz.
+
+That matters more than a few dB sounds, because the PER curve's p50 sits at −17.0 dB (CR5) to
+−19.4 (CR8), right on those limits. Under the fixed floor a LONG_FAST link at sensitivity computes
+SNR −12.25 and decodes 96% of the time; under a thermal floor it computes −17.5 and decodes 39%.
+The fixed floor is why this model had no marginal link at all: it puts every link the graph will use
+5 dB into the flat top of the curve.
+
+`lib/config.py` now derives the floor from the preset's own bandwidth, and `--noise-model fixed`
+names the old constant explicitly as `mesh.VENDORED_FIXED_NOISE_DBM`. Without that, `fixed` would
+have quietly become a second copy of `thermal` - a comparison arm that runs but cannot differ,
+which is TRAPS #14 in a new place.
+
+#### A threshold cannot outlive the floor it was measured against
+
+A sensitivity figure and a noise floor are not independent numbers: the first is the second plus
+what the demodulator needs. Reading a sensitivity out of a table while a scenario supplies its own
+measured floor therefore double-counts the band, and in the optimistic direction. `effective_sensitivity`
+takes `max(datasheet, floor + required_snr_db(sf))`, so whichever of the two is worse decides:
+
+| | LONG_FAST |
+| --- | --- |
+| datasheet sensitivity | −131.5 dBm |
+| kTB + 6 dB NF at 250 kHz, + SF11's −17.5 dB | −131.52 dBm |
+| Batumi's measured −110.5 dBm median, + SF11's −17.5 dB | **−128.0 dBm** |
+
+Under a thermal floor the two agree to 0.02 dB, which is why `--noise-model` barely moves the link
+graph. Under a measured floor the difference is 3.5 dB and the graph moves a long way: Batumi's
+directed link count went from 4813 to 3754 on this correction alone.
+
+#### The floor moves, and so does everything derived from it
+
+`--noise-profile` (README §5.8) gives the floor a spread. Every threshold derived from it is
+re-evaluated per frame against the receiver's own band:
+
+| what | function | what it decides |
+| --- | --- | --- |
+| decodability | `_sensitivity_at(rx, start, end)` | whether the reception is attempted at all |
+| energy detection | `_cad_floor_at(rx, start, end)` | whether the receiver hears the channel as busy, and whether an interferer counts against capture |
+| ducted audience | both | which sub-sensitivity pairs the lift actually reaches |
+
+An excursion used to arrive **only** as an RSSI penalty inside the PER curve, so it could fail a
+packet but never remove a link. Measured on a 25-node mesh at σ=6 dB, 19 directed links differ in
+existence between two instants, where none could before. The two losses are counted separately -
+`lost_to_noise_excursion` for a failed draw, `lost_to_noise_floor` for a threshold not cleared -
+because no coding rate rescues a packet the receiver never attempted.
+
+The direction is one-way: a moving floor never *adds* a pair, because `neighbours` is built at the
+median and nothing is appended to it. A quiet band makes an existing link likelier; only a duct
+creates one.
+
+`EXTRA_PRESETS` are not upstream and in no firmware build, and their sensitivity is **extrapolated**
+rather than derived: the vendored figures fall about 2.5 dB per spreading factor across the 500 kHz
+rows, and these continue that slope one step past each end. Treat them as indicative of a direction,
+not as a link budget. SF5 and SF6 also need an SX126x or SX128x, so `EXTRA_SHORT_TURBO` is not a
+setting every board could take even if the firmware offered it.
+
+### Ducting
+
+Tropospheric ducting is kept apart from `NoiseField` because it is the propagation path improving,
+not the floor moving. Over water, under an inversion, on a still evening, signal that normally
+disappears into the ground arrives 10 to 30 dB stronger than the path loss says, and operators watch
+their node lists fill with names from a hundred kilometres away.
+
+**It is not a gift.** A duct hands the mesh far more audible neighbours, so more transmissions
+collide and contend; links that appear, get learned, get written into a NodeDB and a `next_hop`, and
+then vanish when the duct closes, leaving routes pointing at nodes that cannot be heard; and an
+apparent densification the congestion machinery reacts to, scaling intervals for a node count that
+is not really there. So the interesting result from a ducting run is rarely the extra reach - it is
+what the mesh does afterwards.
+
+The lift is one figure for the whole mesh: a duct is a property of the atmosphere over the region,
+not of a pair of nodes. A real duct has a geometry and favours paths along it, often over water;
+the uniform lift is the conservative direction here, because it densifies everywhere at once.
+
+### Loss knobs
+
+`extra_loss` is a flat loss floor on every reception, standing in for what the model does not carry
+- interference from outside the mesh, fading, a receiver busy elsewhere.
+
+`burst_loss` is bursty deafness: a node periodically unable to receive for a stretch, standing in
+for a blocked antenna, a neighbour keying up nearby, or a radio busy elsewhere. The two are
+different problems for a sketch: flat loss spreads divergence evenly across buckets, and a burst
+puts a whole bucket's worth into one.
+
+A noise excursion is attributed both ways off one draw - lost where the static floor would have
+delivered, and delivered through a quieter-than-nominal band where the static floor would have
+dropped - so neither attribution costs an extra random number.
+
+## Getting on the air
+
+### Contention
+
+The contention window is sized from SNR so that distant nodes - the ones whose rebroadcast actually
+extends coverage - transmit first (`RadioInterface.h`). Both bounds moved: 2.5 lowered CWmax to 7,
+2.6 raised CWmin to 3 and put CWmax back, and 2.6 also narrowed the top of the SNR range from 15 dB
+to 10, which shifts every rebroadcast delay on a strong link.
+
+Slot draws are integer and half-open, matching Arduino `random(0, n)`. Under `legacy` the draw stays
+continuous, which removes a class of collision the firmware produces routinely: two nodes can only
+pick the same slot if slots are discrete.
+
+### Sensing
+
+`sense_until` is the end of the last stretch this radio sensed the channel occupied, separate from
+`busy_until`, which is only our own transmission. It is what the energy detector saw, ours and
+everyone else's, and it exists so overlapping signals are charged once (TRAPS 5).
+
+### Channel busy time
+
+A receiver has one energy detector and one channel. Two overlapping signals are one busy stretch to
+it, not two: it cannot count transmitters, and when a packet fails it learns only that an Rx
+failed - not why, and not how many were talking. Charging each overlapping transmission its full
+airtime attributes knowledge no radio has and lets the figure exceed 100% of wall-clock, which a
+channel cannot do (TRAPS 5).
+
+So only the part of a stretch not already covered is charged, and the ring accumulates the union.
+Callers charge at a transmission's *end*, which is the order deliveries fire in, so a running
+high-water mark is exactly the union rather than an approximation.
+
+`AirTime`'s second ring is our own transmissions only, per minute over the last hour - a different
+structure over a different window from channel utilisation, and the one the duty cycle is enforced
+against.
+
+### The queue
+
+`MeshPacketQueue::CompareMeshPacketFunc`. 2.4 orders a max-heap by priority alone, ties to the
+lower id. 2.5 replaced it with a sorted insert that puts the late-transmit group last and, at equal
+priority, prefers a packet already on the mesh over one of ours.
+
+The queue is finite and overflow is its only drop: `setTransmitDelay` reschedules a blocked packet
+indefinitely, so congestion appears as a full queue and as latency rather than as a packet that
+evaporates. On overflow the firmware chooses what to lose - `replaceLowerPriorityPacket`.
+
+### The queue's order
+
+`MeshPacketQueue::enqueue`. From 2.5 this is an upper-bound insert into a sorted list: the deferred
+group always sorts behind the ready one, the ready group is priority order, and at equal priority a
+packet already on the mesh sorts ahead of one we originated; within the deferred group it is
+deadline order. Keeping the groups apart is what makes the late-rebroadcast window work - a clamped
+packet goes to the back and stays there until its time comes.
+
+2.4 has no late group and no relayed-first tie-break: a max-heap ordered by priority alone, ties to
+the lower packet id. Pop order under that comparator is a total order, so a sorted insert reproduces
+the sequence the heap dequeues.
+
+`setTransmitDelay` tells a relayed packet from a composed one by the RSSI and SNR it arrived with: a
+locally generated packet has both at zero, and the radio's noise floor offset guarantees a received
+one never does.
+
+`clampToLateRebroadcastWindow` is what ROUTER_LATE does when it hears someone else relay: it will
+not cancel - that is the role's point - but it moves to the back of the window, so it only speaks if
+the mesh still needs it.
+
+### Arduino arithmetic
+
+`arduino_map()` reproduces Arduino's `map()`, and two details decide the answer where Python's
+defaults would not. The parameters are `long`, so a float SNR or utilisation truncates toward zero
+on the way in - −5.7 dB enters as −5. C integer division also truncates toward zero where Python's
+`//` floors, and the two disagree for every negative numerator: `getCWsize(-25)` is 0 in the
+firmware and −1 under `//`.
+
+`getCWsize()` takes the result as a `uint8_t` without constraining it, so an SNR outside
+[SNR_MIN, SNR_MAX] extrapolates off the end of the window rather than saturating at it.
+
 ## Reception
+
+### Reception
 
 A radio cannot hear while it is keying up. A router relays everything it hears, so it spends a
 large share of the time deaf, and the node beside it - same traffic, fewer relays - is the better
@@ -564,7 +455,46 @@ did until 2026-08-21 - lets a band fail packets without ever removing a link (TR
 Both are per reception, because the floor a packet met is a property of when and where it was heard
 rather than of the configuration.
 
-## Failure
+### The overlap window
+
+`Mesh.max_airtime_ms` is a bound on a search, not a quantity anything in the model measures. No
+decision reads it. A collision is decided by the overlap predicate - `o.start < tx.end and o.end >
+tx.start` - and then by `_survives_capture`; the window only says how far back `_recent` walks the
+transmission list looking for candidates before it gives up.
+
+That early exit is possible because `transmissions` is append-ordered by start time. Ends are not
+monotonic - a long frame started earlier can still be on air after a short one that started later
+has finished - so the scan cannot stop at the first transmission that has already ended, and its
+bound has to be at least the longest frame the preset can put on air. Below that the optimisation
+stops being safe, and it fails silently in three places at once: an in-flight frame goes missing, so
+`_survives_capture` sees an empty `audible` list and returns `True`, its transmitter drops out of
+`transmitting` so a node that was keying up is treated as listening, and `_channel_busy` reports a
+clear channel. Every one of those is a false negative. A window that is too *wide* costs only time.
+
+So it is derived per preset in `_set_airtime_window`, as one maximum-length frame
+(`MAX_PAYLOAD_BYTES`, 237 B) at the preset in use plus a fifth, and asserted greater than that frame
+for every preset in `test_mesh.py`:
+
+| preset | max frame | window |
+| --- | --- | --- |
+| `SHORT_TURBO` | 0.10 s | 0.12 s |
+| `LONG_FAST` | 2.12 s | 2.54 s |
+| `LONG_MODERATE` | 7.93 s | 9.52 s |
+| `LONG_SLOW` | 14.30 s | 17.15 s |
+| `VERY_LONG_SLOW` | 28.59 s | 34.31 s |
+
+`MAX_AIRTIME_MS` is now only the 40 s fallback for the interval before a `Mesh` has computed its
+own; no live scan reads it. It was once the whole of it - a flat 20 s, justified by a comment
+claiming a full LONG_SLOW payload was "about 6 s". It is 14.3 s; 6 s is roughly what a 45-byte
+payload costs, and a 0-byte frame already costs 2.0 s. So 20 s sat under LONG_SLOW's longest frame
+and well under VERY_LONG_SLOW's 28.6 s, and a transmission still in flight past it left the
+interferer scan entirely: measured over 8 h at 30 nodes, VERY_LONG_SLOW put 130 of 5669
+transmissions past the window - the longest ones, and so the likeliest to overlap something. One
+constant cannot serve a span of two orders of magnitude, and it was not only unsafe at the slow end
+but wasteful at the fast one, where SHORT_TURBO scanned 20 s of history to find overlaps with a
+0.10 s frame.
+
+### Failure
 
 `take_down` is not a deletion. Every other node keeps its NodeDB record and keeps believing what it
 last learned, including a next hop pointing through the dead node. Failure is not broadcast, so the
@@ -576,47 +506,17 @@ Partitioning scans both directions, because links are not reciprocal: `_build_li
 an asymmetry draw, so A can hear B without B hearing A, and scanning only outward would leave every
 inbound-only link intact and the mesh connected through them.
 
-## The queue's order
+## Routing
 
-`MeshPacketQueue::enqueue`. From 2.5 this is an upper-bound insert into a sorted list: the deferred
-group always sorts behind the ready one, the ready group is priority order, and at equal priority a
-packet already on the mesh sorts ahead of one we originated; within the deferred group it is
-deadline order. Keeping the groups apart is what makes the late-rebroadcast window work - a clamped
-packet goes to the back and stays there until its time comes.
+### Routing
 
-2.4 has no late group and no relayed-first tie-break: a max-heap ordered by priority alone, ties to
-the lower packet id. Pop order under that comparator is a total order, so a sorted insert reproduces
-the sequence the heap dequeues.
+`TraceRouteModule::updateNextHops` (v2.7.13): a traceroute reply teaches a next hop for every node
+beyond the learner in the route, not just the neighbour. The corroboration guard - refusing to learn
+unless the byte the route names is the one that actually relayed the reply - is only in this tree.
+2.7 learns from the unauthenticated payload unconditionally, so it learns more, and some of what it
+learns is wrong.
 
-`setTransmitDelay` tells a relayed packet from a composed one by the RSSI and SNR it arrived with: a
-locally generated packet has both at zero, and the radio's noise floor offset guarantees a received
-one never does.
-
-`clampToLateRebroadcastWindow` is what ROUTER_LATE does when it hears someone else relay: it will
-not cancel - that is the role's point - but it moves to the back of the window, so it only speaks if
-the mesh still needs it.
-
-## Resolving a relay byte
-
-`NodeDB::resolveLastByte` returns UNIQUE, AMBIGUOUS or NONE. `relay_node` and `next_hop` are one
-byte of a 32-bit node number, so on a mesh of any size they collide. Callers treat anything but
-UNIQUE as the safe branch - decrement the hop limit, flood instead of unicasting, learn nothing -
-and the two failures are kept apart because they say different things: AMBIGUOUS is a dense mesh,
-NONE is a mesh this node has not learned.
-
-Two gates decide the candidate set, and both shrink it well below "every node with this byte". The
-**candidate** gate is the hot store, minus ourselves and any ignored node: an evicted or never-heard
-peer is not a candidate. The **relevance** gate asks whether the peer is a plausible relay for this
-question - on the send path a direct neighbour heard within two hours, otherwise a direct
-neighbour, a favourite or a router-like node.
-
-So a smaller store makes the byte *less* ambiguous rather than more, which is the opposite of a
-birthday bound over the whole mesh. A large mesh costs knowledge, not resolution.
-
-Only this tree scans for a second candidate. Under 2.6 and 2.7 the lookup takes the first node it
-matches and the caller is never told it guessed.
-
-## Hops and routes
+### Hops and routes
 
 `Router::shouldDecrementHopLimit`: a hop between two favourited routers costs nothing, so a spine of
 them does not eat the sender's hop budget, and the first hop always pays. The two implementations
@@ -652,26 +552,82 @@ ages that hop out.
 A traceroute reply is what teaches anything - a node finding itself in the returned route learns a
 next hop for every node beyond it, not just its neighbour.
 
-## Signature policy
+### Hop policy on our own packets
 
-`Router::checkXeddsaReceivePolicy`. COMPATIBLE takes anything, STRICT only what it can verify, and
-BALANCED accepts unsigned traffic in general but drops an unsigned broadcast from a node it has
-already seen sign, when that payload would have fitted a signature.
+`Router.cpp:483` and the Portduino zero-hop list. The hop recommendation reaches routine device
+broadcasts and nothing else - position, telemetry, nodeinfo, neighbourinfo - and can only lower the
+limit, never raise it above what the operator configured. A text message is untouched, which bounds
+how far the feedback loop can reach.
 
-The size test is the sharp edge. It mirrors the sender's gate, so a payload big enough to push a
-signature over the frame is exempt from the downgrade rule - which is what an attacker inflates to
-evade it, and what would make an honest unsigned broadcast get dropped if a signable type grew past
-the budget.
+A zero-hop portnum is capped afterwards. Both paths reduce `hop_start` by the same amount as
+`hop_limit`, so `hops_away` computed downstream stays honest - changing only the limit would
+silently corrupt the very histogram the recommendation came from.
 
-`verifyFirstContactNodeInfo` is how a mesh bootstraps under STRICT at all: a signed NodeInfo carries
-the sender's own key and the node number is a CRC32 of that key, so the packet verifies against
-itself and nobody can claim another node's number with it. Without it, the NodeInfo that would teach
-the key is dropped for want of the key.
+The hop-scaling module runs `RUNS_PER_HOUR` times an hour and rolls once, so the recommendation
+moves on an hourly cadence however busy the mesh is. Each node's roll is offset, since nothing
+synchronises boot times.
 
-A policy rejection deliberately does not cancel a queued rebroadcast of the same packet: it is
-attacker-controlled input, and letting it cancel would hand anyone a way to silence a relay.
+### Hop scaling
 
-## Repeat scaling
+`HopScalingModule` is a sampled, capped, hash-collided estimate of how far the mesh reaches, and it
+emits a hop-limit recommendation from it. Every property costs accuracy against an exhaustive count,
+and each is why modelling it is worth anything:
+
+- identity is a 16-bit hash, so two nodes can share an entry
+- 128 entries of 4 bytes each, and it fills
+- only one node in `sampling_denominator` is admitted, chosen by hash
+- buckets are scaled by `filtering_denominator` before the recommendation walk
+- recency is a 13-bit hourly bitmap, not a count
+- on overflow it raises the denominator and drops nodes, warning that the answer may be skewed
+
+So the module's per-hop counts are an estimate and the transport can compute the truth; reporting
+both is what says how far apart they are.
+
+The recommendation is the first hop that reaches `target_affected_nodes` after scaling - 40 in the
+firmware - plus one more hop when the nodes it would add still leave the total inside a budget
+running from that target to `max_target_nodes`, scaled by how politely the mesh is behaving. Both
+figures are literals in the module and instance attributes here, so a run can ask what the mesh
+would do if the firmware aimed at more or fewer nodes. The ceiling follows the target unless set
+outright, keeping the firmware's 40:80 ratio.
+
+A node lowering its own hop limit on routine broadcasts is the module's whole purpose, and
+unconditional in the firmware wherever the module exists. It is separable here only so a sweep can
+hold the feedback loop open.
+
+### Resolving a relay byte
+
+`NodeDB::resolveLastByte` returns UNIQUE, AMBIGUOUS or NONE. `relay_node` and `next_hop` are one
+byte of a 32-bit node number, so on a mesh of any size they collide. Callers treat anything but
+UNIQUE as the safe branch - decrement the hop limit, flood instead of unicasting, learn nothing -
+and the two failures are kept apart because they say different things: AMBIGUOUS is a dense mesh,
+NONE is a mesh this node has not learned.
+
+Two gates decide the candidate set, and both shrink it well below "every node with this byte". The
+**candidate** gate is the hot store, minus ourselves and any ignored node: an evicted or never-heard
+peer is not a candidate. The **relevance** gate asks whether the peer is a plausible relay for this
+question - on the send path a direct neighbour heard within two hours, otherwise a direct
+neighbour, a favourite or a router-like node.
+
+So a smaller store makes the byte *less* ambiguous rather than more, which is the opposite of a
+birthday bound over the whole mesh. A large mesh costs knowledge, not resolution.
+
+Only this tree scans for a second candidate. Under 2.6 and 2.7 the lookup takes the first node it
+matches and the caller is never told it guessed.
+
+### Ambiguity and route health
+
+`NodeDB::resolveUniqueLastByte`. Before this tree a last-byte lookup took the first node it matched
+and nothing asked whether a second shared the byte, so hop preservation and next-hop emission were
+ambiguity-blind and got it wrong silently on a dense mesh.
+
+`RouteHealth` is RAM-only in the firmware too: the route lives in `NodeDB`, and this is the metadata
+that lets `getNextHop()` decay a dead hop back to flooding rather than spend a DM discovering it.
+
+### Repeat scaling
+
+From the `extra-repeats` branch's `RepeatScalingModule`. Cancelling a queued rebroadcast on the
+first heard copy costs delivery on the one class with no ACK behind it, so text tolerates a second
+copy first. The suppression thresholds are the module's own, and none of the three is validated.
 
 `meshTooBusyForExtraRepeats` is three unvalidated constants, any one of which forces a single copy:
 channel utilisation over 10%, our own transmit share of the last hour over 4%, or more than ten
@@ -687,7 +643,7 @@ not.
 shorter route, so it is swapped in. Relaying the copy with fewer hops left would strand everything
 beyond our own horizon.
 
-## Traceroute
+### Traceroute
 
 `alterReceivedProtobuf`: a relay writes itself into the route before passing it on, and
 `TraceRouteModule` picks the array by direction - `route` while the request travels out,
@@ -707,7 +663,7 @@ unlearnable. 2.7 has the learning without the guard, so a forged reply could poi
 `maybeSetNextHop` mirrors a traceroute hint into the overflow cache even for a target the hot store
 has no room for: a full known route is the highest-confidence source there is.
 
-## Replies and ACKs
+### Replies and ACKs
 
 `RoutingModule::getHopLimitForResponse`: a reply needs the hops the request used plus a margin,
 because the way back may differ - not the sender's whole budget. A request that arrived with a
@@ -722,22 +678,7 @@ gates: only a relayer that also carried the original teaches anything, and only 
 resolves to one node. Without the first the learned hop need never have touched this path; without
 the second every future DM aims at whichever node shares a last byte.
 
-## Hop policy on our own packets
-
-`Router.cpp:483` and the Portduino zero-hop list. The hop recommendation reaches routine device
-broadcasts and nothing else - position, telemetry, nodeinfo, neighbourinfo - and can only lower the
-limit, never raise it above what the operator configured. A text message is untouched, which bounds
-how far the feedback loop can reach.
-
-A zero-hop portnum is capped afterwards. Both paths reduce `hop_start` by the same amount as
-`hop_limit`, so `hops_away` computed downstream stays honest - changing only the limit would
-silently corrupt the very histogram the recommendation came from.
-
-The hop-scaling module runs `RUNS_PER_HOUR` times an hour and rolls once, so the recommendation
-moves on an hourly cadence however busy the mesh is. Each node's roll is offset, since nothing
-synchronises boot times.
-
-## Retry ladders
+### Retry ladders
 
 Two candidate mechanisms, neither in a release. The **coding-rate ladder** (branch `CRCRRCRRR`)
 sends a retry that already failed at a slower rate - base, then one step slower, then 4/8 - keyed by
@@ -745,44 +686,161 @@ sends a retry that already failed at a slower rate - base, then one step slower,
 one retry sooner when a route is not proven healthy, trading airtime for recovery latency and
 leaving a fresh, never-failed route on the unchanged path.
 
-## Building a mesh
+### Originating a packet
 
-**Boards, sitings and roles are drawn, not striped.** A mesh whose one STM32WL or one basement node
-sits on the only bridge is a case striping would never produce.
+`Router::send`: a node adds its own packet to the history first, so the copies it hears coming back
+are recognised as its own, and sets the next hop before it goes out.
 
-Router-like roles go to the head of the placement order; CLIENT_MUTE is drawn at random from the
-rest, because muting a node is a decision about power or noise rather than siting, and handing it to
-the worst-connected nodes would make it look free.
+`assume_key` skips the PKI gate for a peer whose key did not come from the hot store. It exists for
+the admin path and is firmware-authentic rather than a convenience: admin authorisation lives in
+`config.security.admin_key[3]` - three 32-byte keys in `SecurityConfig`, compared directly at
+`AdminModule.cpp:184` - which is separate persistent config, not NodeDB. It is provisioned out of
+band or baked in via USERPREFS, and it survives every eviction the hot store performs. Gating an
+admin session on NodeDB would measure eviction rather than whether the session completes.
 
-`--router-placement` chooses what a router is: `degree` is what an operator does - the repeater goes
-on the hill; `inverse` is the adversarial control, the router in the basement with three neighbours,
-which is what happens when someone flashes ROUTER onto the node they already own; `random` separates
-the role's own effect from the siting that usually comes with it.
+`pki` marks a DM that has to be encrypted to the destination's public key. Without a key in any tier
+the packet is never composed, which is what evicting a peer actually costs: not a worse route to it,
+but no conversation with it until its NodeInfo is heard again.
 
-`--amplify-worst` is the field pathology: the node nobody can hear gets an amplifier bolted on,
-which fixes its outbound reach and nothing else. It is now heard by everyone and still hears almost
-nobody, so it relays into a mesh it cannot receive replies from and its rebroadcasts cancel copies
-queued by nodes that could have carried them further. Fitted after the links exist, because "hears
-worst" is a property of the mesh rather than of the node.
+## The node database
 
-**Hop limits.** Operators do not all set the same one: a node in a dense middle reaches what it needs
-at 3 or 4 and leaves the default alone, while one on the edge raises it until the rest of the mesh
-answers, and field guidance tops out at 7. `centrality` reproduces that correlation and therefore
-confounds hop limit with position - a table of receptions by hop limit then measures siting under a
-hop-limit label. `random` breaks the correlation as a control, and is not how operators behave.
+### The node database
 
-Hop preservation only fires between nodes that have favourited each other, which in the field means
-one operator running both ends of a spine. Every router-like node favouriting every other is the
-upper bound on how much relaying can be free.
+`MAX_NUM_NODES` is the hot store. Up to 2.5 the cap was a flat 100 for every board; 2.6 introduced
+the platform split with nRF52 at 80 and the ESP32-S3 flash tiers; this tree raised the compile-time
+default to 120 and dropped the separate nRF52 branch. The `nrf52840` key stands for "nRF52840 and
+generic ESP32", which 2.6 and 2.7 do not treat alike.
 
-**A scenario overrides all of it.** Real geometry decides where the nodes are and therefore how many
-there are: the place is the input, not a shape to fit a requested count into. Stretching it is
-refused rather than silently ignored - moving Batumi's nodes apart makes it somewhere else, and a
-result labelled `batumi` would no longer be about Batumi. Recorded roles beat anything derived from
-degree, and measured antenna heights beat any generated mix: a real snapshot knows which nodes are
-on a mast and which are on a windowsill, and that difference decides more links than the mixes do.
+Board sizes are derived from this tree's own variants: each `platformio.ini` declares
+`custom_meshtastic_hw_model_slug`, `custom_meshtastic_architecture` and
+`custom_meshtastic_partition_scheme`, and `mesh-pb-constants.h` turns those into `MAX_NUM_NODES`.
+Regenerate after a firmware bump. HELTEC_V3 is an 8 MB ESP32-S3 and so gets 200 slots, not the 120
+of the compile-time default.
 
-## Reading adaptive behaviour
+No declared hardware model maps to the 10-slot STM32WL tier - the stm32 variants here do not declare
+a slug, so they cannot be named in a census by one. The `constrained` mix reaches that tier
+directly, as a stress test rather than a deployment.
+
+`WARM_NODE_COUNT` keys on memory class rather than flash, so the flash-derived platform names here
+do not line up exactly: STM32WL is `MEM_CLASS_TINY` and has no warm tier at all, nRF52840 is a named
+case at 100, and a non-PSRAM ESP32-S3 takes the 150 of `MEM_CLASS_MEDIUM`. The 16 MB tier is taken
+as the PSRAM-equipped S3 that `MEM_CLASS_LARGE` describes - an assumption about the boards in that
+tier rather than something flash size determines, and `warm_num_nodes` overrides it.
+
+`TRAFFIC_MANAGEMENT_CACHE_SIZE` is the cold tier. A key seen on the wire is cached there and can
+answer the inbound-decrypt path, but it is never authoritative: nothing routes, resolves or
+attributes identity from it.
+
+### The three tiers
+
+**Hot.** `NodeDB::updateFrom` notes that a peer was heard and how far away it is. `hops_away` stays
+`None` until a packet arrives with a usable hop count, matching `has_hops_away`: "never established"
+is a different answer from "zero hops", and next-hop resolution turns on the difference.
+
+`demoteOldestHotNodesToWarm` demotes the stalest unprotected record on overflow - protection
+outranks recency, and within a class the most-recently-heard survives. This is how a learned route
+dies without any expiry being involved.
+
+**Warm.** `WarmNodeStore::absorb` keeps an evicted node's identity, key and role in 40 bytes. The
+key is what the tier exists for - expensive to re-learn where the rest rebuilds from traffic in
+seconds - so a keyless candidate never displaces a keyed entry, and eviction takes the oldest
+keyless entry first. Routing does not survive demotion: `next_hop` and `hops_away` are hot-store
+fields, so a re-admitted node is flooded to until its route is learned again. A node lives in hot or
+warm, never both.
+
+**Cold.** A cache for the inbound-decrypt path, never authoritative. It can answer "do we hold a
+key for this node" and cannot be used to claim a node's identity.
+
+`copyPublicKey` reads hot then warm, both authoritative. A node's own record is in the hot store
+with its own key, so it can always verify a signature of its own - which is what it hears when its
+relay comes back.
+
+`NodeDB::getNumOnlineMeshNodes` is bounded by the store *and* by a two-hour window. The transport
+does not read it; the congestion coefficient does, which is what makes that coefficient bounded by
+the store rather than by mesh size.
+
+### The warm tier
+
+A `WarmNodeEntry` is 40 bytes: node number, `last_heard`, and a Curve25519 public key. The role, a
+protected category and an XEdDSA-signed flag are packed into the low seven bits of `last_heard`,
+which is why warm recency is quantised to 128 seconds. That coarseness is load-bearing: the tier is
+LRU-ordered by that field, so two nodes heard inside one 128-second window are indistinguishable to
+eviction.
+
+`TrafficManagementModule`'s overflow cache of next-hop hints is much larger than the hot store and
+not bounded by it, so it can hold a route for a node the NodeDB has evicted or never admitted.
+
+`RepeatScalingModule` keeps a ring of eight `(sender, id)` duplicate counts, replaced round-robin -
+small enough to thrash on a busy mesh, which is why its size is modelled rather than a dict.
+
+### Position
+
+`position3` is absolute altitude, not height above ground. Without terrain the ground is zero, so
+it is the flat position plus an antenna height, and 1.5 m over a kilometre is nothing a path-loss
+model can see. With terrain it is the number that matters: two nodes 3 km apart with 400 m of ridge
+between them are further apart than the map says.
+
+`direct_neighbours` stands in for `HopScalingModule::getLastPerHopCounts().perHop[0]` - the exact
+figure that sampled, capped estimator is trying to approximate.
+
+### Identity on the wire
+
+`NodeDB::getLastByteOfNodeNum` puts all of a node number that fits in `relay_node`. A low byte of
+zero is sent as 0xFF, because 0 is the `NO_RELAY_NODE` sentinel - so one node number in 256 is not
+identified by its own last byte, and 0xFF answers for twice as many nodes as any other value.
+
+### Packet fields
+
+`relay_index` is **not on the wire**. `relay_node` is one ambiguous byte; the index is the sending
+node's, kept for instrumentation so a cancellation can be attributed. Nothing in the transport
+reads it and no decision may - resolving a relay to a node is exactly the ambiguity
+`resolve_unique_last_byte` exists to model.
+
+`RouteDiscovery` carries two arrays, not one: `route` accumulates outbound and `route_back` on the
+way home (mesh.proto tags 1 and 3, `TraceRouteModule.cpp:377`). Conflating them meant that on an
+asymmetric mesh - which this transport models - a reply that did not retrace its request had its
+return-leg relays learned as forward hops.
+
+`highest_hop_limit` on a `SeenRecord` is what the upgrade path turns on: hearing the same packet
+again with more hops left than the copy already queued means an earlier relay took a shorter route,
+and 2.8 throws away the queued copy for the better one.
+
+Everything routing can do is bounded by a `NodeRecord` existing. A peer evicted from the hot store
+cannot be resolved from a relay byte, cannot hold a next hop, and does not count as online.
+
+A `QueueEntry`'s `tx_after` is an absolute deadline, not a delay: `MeshPacketQueue` sorts every
+deferred packet behind every ready one, and the late-rebroadcast window is nothing more than
+setting it.
+
+### Signing
+
+An XEdDSA signature is 64 bytes and the protobuf field carrying it costs two more
+(`CryptoEngine.h`, `RadioInterface.h`). A frame is 255 bytes with a 16-byte header, so a Data
+payload signs only while it stays under 173 bytes - the gate `signedDataFits()` applies with the
+real encoder.
+
+### Signature policy
+
+`Router::checkXeddsaReceivePolicy`. COMPATIBLE takes anything, STRICT only what it can verify, and
+BALANCED accepts unsigned traffic in general but drops an unsigned broadcast from a node it has
+already seen sign, when that payload would have fitted a signature.
+
+The size test is the sharp edge. It mirrors the sender's gate, so a payload big enough to push a
+signature over the frame is exempt from the downgrade rule - which is what an attacker inflates to
+evade it, and what would make an honest unsigned broadcast get dropped if a signable type grew past
+the budget.
+
+`verifyFirstContactNodeInfo` is how a mesh bootstraps under STRICT at all: a signed NodeInfo carries
+the sender's own key and the node number is a CRC32 of that key, so the packet verifies against
+itself and nobody can claim another node's number with it. Without it, the NodeInfo that would teach
+the key is dropped for want of the key.
+
+A policy rejection deliberately does not cancel a queued rebroadcast of the same packet: it is
+attacker-controlled input, and letting it cancel would hand anyone a way to silence a relay.
+
+## Reading it
+
+### Reading adaptive behaviour
 
 Every adaptive quantity is in a feedback loop - the hop recommendation feeds what gets sent, which
 feeds the histogram it came from; the congestion coefficient feeds how often a node sends, which
@@ -799,21 +857,6 @@ that neighbour as 1, so truth is shifted down to match rather than reported in u
 uses.
 
 The overlap window is derived per preset - one maximum-length frame plus a fifth - because the span
-across presets is two orders of magnitude, 0.175 s at SHORT_TURBO against 28.6 s at VERY_LONG_SLOW,
-and one number cannot be both correct at the slow end and cheap at the fast end.
-
-## Originating a packet
-
-`Router::send`: a node adds its own packet to the history first, so the copies it hears coming back
-are recognised as its own, and sets the next hop before it goes out.
-
-`assume_key` skips the PKI gate for a peer whose key did not come from the hot store. It exists for
-the admin path and is firmware-authentic rather than a convenience: admin authorisation lives in
-`config.security.admin_key[3]` - three 32-byte keys in `SecurityConfig`, compared directly at
-`AdminModule.cpp:184` - which is separate persistent config, not NodeDB. It is provisioned out of
-band or baked in via USERPREFS, and it survives every eviction the hot store performs. Gating an
-admin session on NodeDB would measure eviction rather than whether the session completes.
-
-`pki` marks a DM that has to be encrypted to the destination's public key. Without a key in any tier
-the packet is never composed, which is what evicting a peer actually costs: not a worse route to it,
-but no conversation with it until its NodeInfo is heard again.
+across presets is two orders of magnitude, 0.10 s at SHORT_TURBO against 28.6 s at VERY_LONG_SLOW,
+and one number cannot be both safe at the slow end and cheap at the fast end. It bounds a backward
+scan and nothing else; see *The overlap window* above.

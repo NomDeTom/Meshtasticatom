@@ -6,7 +6,7 @@ something has already gone wrong. This module reduces a whole run to two artefac
 the machine-readable digest the explorer rolls up across runs, and `trend.md`, the page a person
 actually opens.
 
-**Four measures of success, four denominators, not comparable to each other** (README §7.2). A
+**Four measures of success, four denominators, not comparable to each other** (README §7.3). A
 broadcast figure is the share of *all* nodes that heard it; a DM figure is whether it reached *the
 one* node addressed, with acknowledgements and retries; an admin figure is per session the operator
 wanted; held is over objects originated. DM success reading higher than broadcast reach does not
@@ -39,7 +39,7 @@ import statistics
 # Everything the digest carries per cell, by path into a campaign report. An absent metric
 # becomes None rather than raising, so mixed vintages still collate.
 METRICS = {
-    # --- the four successes. Different denominators; see the module docstring and README §7.2 ---
+    # --- the four successes. Different denominators; see the module docstring and README §7.3 ---
     "text": ("baseline", "text_reception_mean"),
     "dm": ("dm", "reception"),
     "admin": (
@@ -861,7 +861,7 @@ def markdown(summary):
         "## What moved a delivery measure",
         "",
         "Ranked by how far the arm moves whichever success it moves most. The four measures have "
-        "four denominators and are **not comparable to each other** (README §7.2) - `moved` names "
+        "four denominators and are **not comparable to each other** (README §7.3) - `moved` names "
         "which one this block travels in. `text` is the broadcast reach in the same cells, so an arm "
         "buying its measure while `text` falls is paying in the currency the mesh exists to spend.",
         "",
