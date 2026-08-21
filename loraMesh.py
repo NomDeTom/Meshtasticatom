@@ -854,6 +854,24 @@ def run_simulation(conf, node_config):
     print("Number of packets received:", nrReceived)
     print("Delay average (ms):", round(meanDelay, 2))
     print("Average Tx air utilization:", round(txAirUtilizationRate * 100, 2), "%")
+    # AirTime's two windows, reported separately because they answer different questions: what the
+    # channel sounded like, and how much of it was us. See docs/metrics.md.
+    chutil = results["nodeChannelUtilPercent"]
+    txutil = results["nodeUtilizationTxPercent"]
+    print(
+        "Channel utilization (60 s window, %):",
+        f"mean {round(chutil['mean'], 2)}, p90 {round(chutil['p90'], 2)}, max {round(chutil['max'], 2)}",
+    )
+    print(
+        "Own-TX utilization (1 hr window, %):",
+        f"mean {round(txutil['mean'], 2)}, max {round(txutil['max'], 2)}",
+    )
+    if conf.CHANNEL_UTIL_TX_GATE_ENABLED:
+        print(
+            "Sends deferred by the channel-utilization gate:", results["channelUtilDeferred"],
+            f"(mean wait {round(results['meanChannelUtilDeferralMsec'], 2)} ms,"
+            f" {results['channelUtilDropped']} still waiting at end of run)",
+        )
     print("Percentage of packets that collided:", round(collisionRate * 100, 2))
     print(
         "Percentage of addressed receivers reached:", round(nodeReach * 100, 2),

@@ -84,18 +84,37 @@ radio physics changed, not because the policy improved.
 
 ## Reading The Result
 
-For policy comparisons, start with these fields:
+`radio_policy_compare.py` prints one row per policy: `reach%`, `useful%`,
+`tx_air%`, `msgs`, `sent`, `rx`, `coll`, `phy_loss`, the CR mix, the DTP power
+mix, and mean CAD-detected/decodable receivers per transmission. Start with
+`reach%` and `useful%`, and read `coll`, `phy_loss` and `tx_air%` as the cost.
 
-- `Average percentage of nodes reached`: delivery reach per generated message.
+A single `loraMesh.py` run prints more, and these are the lines worth reading
+first:
+
+- `Percentage of addressed receivers reached`: deliveries over the receivers
+  those messages actually addressed - N−1 for a broadcast, 1 for a DM. See
+  [metrics.md](metrics.md); it is not "percentage of nodes".
 - `Percentage of received packets containing new message`: how much received
-  traffic was useful instead of rebroadcast duplicates.
-- `Average Tx air utilization`: local channel pressure caused by transmissions.
+  traffic was useful instead of a duplicate.
+- `Average Tx air utilization`: the run-long share of time this mesh's nodes
+  spent transmitting.
+- `Channel utilization (60 s window)`: what the air sounded like to each node,
+  own transmissions included. This is the figure the transmit gate reads.
+- `Own-TX utilization (1 hr window)`: the node's own transmissions only, which
+  is what a region's duty cycle binds against.
+- `Sends deferred by the channel-utilization gate`: how often a node held a
+  periodic message back because the channel was over 25%, and for how long.
 - `Number of collisions`: overlap pressure before packet-level PHY loss.
-- `Number of packets lost by PHY model`: weak-link packet loss after sensing.
 
 Good policy changes should improve reach or useful traffic without causing a
 large airtime or collision regression. A policy that only makes every packet
 more robust or louder is usually not a useful mesh policy.
+
+**Read reach and deferral together.** The transmit gate means a congested mesh
+offers less load rather than dropping more of it, so a policy that makes the air
+busier can show unchanged reach while the deferral count and mean wait climb.
+That is a real cost paid in latency, and it only appears in those two fields.
 
 ## Importing Map Locations
 
@@ -125,3 +144,12 @@ benchmarks, and map imports for exploratory placement checks.
 - Treat CI thresholds as guardrails, not proof of RF truth. A failed threshold
   means "inspect this change"; a passed threshold means "no regression in this
   fixed simulator scenario".
+- The `batumi` calibration is fitted, and `LINK_CALIBRATION_MAX_M` bounds where
+  it applies. Past that distance the raw link budget answers instead, so a run
+  whose interesting links are long is not being answered by the fit. See
+  [batumi_radio_calibration.md](batumi_radio_calibration.md) for what the fit
+  does and does not reproduce.
+- Reach and airtime are not comparable across modem presets unless the noise
+  floor moved with the bandwidth. It does by default now (`NOISE_LEVEL` is
+  derived per preset); a scenario that pins its own floor is comparing presets
+  against one band and should say so.

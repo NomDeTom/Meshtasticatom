@@ -68,6 +68,20 @@ However, it comes at the cost of usefulness, i.e., the amount of received packet
 
 ![](/img/usefulness_hops.png)
 
+## Transport simulator (`sfpp/`)
+
+`sfpp/` is a separate, faster simulator with its own event loop, built for large-mesh transport
+sweeps rather than for watching one scenario's schedule. It carries transcriptions of Meshtastic
+firmware source and can select the behaviour of releases 2.4 through 2.8 per run.
+
+| document | covers |
+| --- | --- |
+| [sfpp/MECHANICS.md](sfpp/MECHANICS.md) | the model from first principles - nodes, the link matrix, the event loop, collisions and where they cannot happen, and every firmware-authentic mechanism with the release it is tied to |
+| [sfpp/README.md](sfpp/README.md) | the operator's manual: profiles, sweeps, flags, outputs |
+| [sfpp/MODEL.md](sfpp/MODEL.md) | the physical and traffic model |
+| [sfpp/TRANSPORT.md](sfpp/TRANSPORT.md) | the transport layer under study |
+| [sfpp/TRAPS.md](sfpp/TRAPS.md) | mistakes this codebase has already made, so they are not made again |
+
 ## Interactive simulator
 The interactive simulator uses the [Linux native application of Meshtastic](https://meshtastic.org/docs/development/linux/), i.e. the real device software, while simulating some of the hardware interfaces, including the LoRa chip. Can also be used on a Windows or macOS host with Docker.
 

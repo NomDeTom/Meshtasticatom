@@ -70,19 +70,40 @@ to be deliberate. A full 237-byte payload is 14.3 s on LONG_SLOW and 28.6 s on V
 
 ## Slot time
 
-`get_current_slot_time()` is `RadioInterface::computeSlotTimeMsec`, unchanged between v2.7.15 and
+`get_current_slot_time(conf)` is `RadioInterface::computeSlotTimeMsec`, unchanged between v2.7.15 and
 2.8: CAD duration plus 0.2 ms propagation, 0.4 ms turnaround and 7 ms MAC processing, with the
 2.4 GHz CAD term from AN1200.22 behind the region's `wide_lora` flag.
 
+It takes the config rather than reading a module-level one. `lib/phy.py` used to bind
+`lib.config.CONFIG` at import, so every MAC delay was scaled by a slot time belonging to whichever
+config was bound last — and `sfpp.mesh.make_config` had to rebind that global to be heard at all,
+which leaked a scenario's calibration into anything else running in the same process.
+
+The 2.4 GHz CAD term is `(NUM_SYM_CAD_24GHZ + (2·SF + 3) / 32)`, and in the firmware that division
+is **integer**: `sf` is a `uint8_t`, and `2·14 + 3` is 31, so the second term is 0 for every legal
+spreading factor. Transcribed into Python it became true division, which made the 2.4 GHz slot time
+13% long at SF7 and 21% at SF12.
+
 ## Interference
 
-`INTERFERENCE_LEVEL` is the probability that the channel is already carrying non-Meshtastic traffic
-at any instant. It is drawn continuously - `random.random() < level` - in two places: `is_channel_active`,
-which is the CAD check every transmitter runs before it keys up, and `check_collision`, which is
-gated behind `COLLISION_DUE_TO_INTERFERENCE` and off by default.
+`INTERFERENCE_LEVEL` is the long-run share of time a foreign, non-Meshtastic transmitter holds a
+node's channel. It is one occupancy seen from two ends, not two draws: `lib/interference.py` builds a
+schedule of busy stretches per node — an alternating renewal process whose busy share is the level
+exactly at every value including both endpoints, with a holding time defaulting to one full frame on
+the configured preset.
 
-Until 2026-08 both drew `random.randrange(10) <= level * 10`. Both ends of that comparison are
-inclusive, so the level was quantized to tenths and floored at one:
+The same schedule answers both questions a run asks of it. `is_channel_active` asks whether the band
+is busy *now*, which is what CAD detects. A reception asks whether a busy stretch overlapped
+*destructively* — landing on the preamble, or covering enough payload to exhaust the coding gain,
+which are the two conditions the capture model already applies to a Meshtastic interferer. Charging
+any overlap at all would make a millisecond of foreign air worth more than a full co-channel frame.
+
+One schedule **per node**, because interference is local: the noise at a receiver is what destroys a
+frame and the noise at a transmitter is what its CAD detects, and on a mesh spanning kilometres those
+are different conditions.
+
+Two defects preceded this. Until 2026-08 both call sites drew `random.randrange(10) <= level * 10`.
+Both ends of that comparison are inclusive, so the level was quantized to tenths and floored at one:
 
 | configured | drawn |
 | --: | --: |
@@ -92,10 +113,23 @@ inclusive, so the level was quantized to tenths and floored at one:
 | 0.50 | 0.60 |
 
 The floor is the part that mattered. `is_channel_active` is not gated by any flag, so every default
-run - including every run configured with interference explicitly disabled - deferred about a tenth
-of its transmissions to a channel that nothing was using. The level is now validated as a
-probability in [0, 1] when set, so a level outside that range fails at configuration rather than
-silently saturating.
+run — including every run configured with interference explicitly disabled — deferred about a tenth of
+its transmissions to a channel that nothing was using.
+
+Replacing that with a continuous draw fixed the endpoints and left a deeper problem: an independent
+draw at each point of use is a probability with no holding time. A transmitter re-rolling its CAD
+found the channel clear within a few attempts however high the level, so interference could delay a
+transmission but never block one. And the two ends drew separately, so a transmitter could see clear
+air while, in the same instant, its frame was destroyed at a receiver by interference that was not a
+property of anything. The reception half was also behind a `COLLISION_DUE_TO_INTERFERENCE` flag,
+off by default, so the shipped configuration had a channel busy enough to wait for and never busy
+enough to break anything. That flag is gone: one occupancy, both ends.
+
+The default level of 0.05 now costs what it says. A LONG_FAST frame is 682 ms, so a 5% duty cycle of
+foreign traffic with comparable frames touches roughly a tenth of receptions.
+
+The level is validated as a probability in [0, 1] when set, so a level outside that range fails at
+configuration rather than silently saturating.
 
 ## Contention window
 
@@ -150,9 +184,18 @@ file's comment named the older tag - one reason the pin moved rather than the co
 
 ## The collision model
 
-Two models, selected by `CAPTURE_COLLISION_MODEL_ENABLED`. The legacy one is the default and is
-preserved unchanged: any timing overlap on the same SF and frequency destroys the weaker packet
-unless the two are more than 6 dB apart.
+Two models, selected by `CAPTURE_COLLISION_MODEL_ENABLED`. The legacy one is the default: a timing
+overlap on the same SF and frequency destroys the weaker packet unless the two are more than 6 dB
+apart.
+
+"Timing overlap" means the fresh packet's acquisition window does not clear the older packet's last
+byte. That window is `preamble_lock_window_ms` — `NPREAM − 5` symbols, 90.1 ms on LONG_FAST — and it
+is the same window the capture model uses. `timing_collision` used to compute it inline as
+`2^SF / BW · (NPREAM − 5)`, which is **seconds** because `bw` is in Hz, and compare it against
+`env.now` and `endTime`, which are milliseconds. The 90.1 ms window read as 0.09 ms, so the rule was
+inert and every overlap counted as a collision — 9–13% of overlapping arrivals across the presets,
+each of which also stopped being an interferer for later packets, because a collided packet is not
+appended to `packetsAtN` in the legacy path.
 
 The capture-aware model encodes the two effects the binary one misses, and are what matter on a
 crowded mesh:
@@ -183,3 +226,65 @@ Distance is floored at `PATH_LOSS_DISTANCE_FLOOR_M` before the logarithm. Random
 put two nodes on the same point, and a preset can raise the floor further as a near-field
 calibration: the Hata and 3GPP formulas are not meaningful at apartment scale, and map positions are
 coarse enough that two pins being close does not mean two antennas have 20 m of clear air.
+
+**Free space is the floor under every model.** Each of the seven is an empirical fit with a validity
+range — Okumura-Hata wants a base station 30–200 m up and a mobile 1–10 m up — and this simulator
+passes antenna height above local ground for *both*, usually 1.5 m. Asked far enough outside that
+range the 3GPP form's linear height terms dominate and it returns a negative loss, i.e. gain: 900 m of
+antenna height on a 60 km path produced **+2173 dBm** of RSSI. `free_space_path_loss()` bounds it. The
+bound is inert at the defaults, where every model is far above free space, and it catches the whole
+class.
+
+A consequence worth stating plainly: at `MODEL = 5` with 1.5 m antennas at both ends the exponent is
+4.49, and the raw budget produces **no link past about a kilometre** on real geometry. That is why
+the packaged Batumi scenario's fitted calibration is a replacement rather than a correction — see
+[batumi_radio_calibration.md](batumi_radio_calibration.md).
+
+## The noise floor, and the threshold derived from it
+
+The thermal floor is theory. kTB plus a receiver's noise figure is what a band would be with nothing
+in it — a lower bound, not a description — and a real receiver sits in whatever the band is doing.
+So `NOISE_LEVEL` is a **median**, and `NOISE_SIGMA_DB` gives it spread, correlated over
+`NOISE_TAU_MSEC` so the band drifts rather than flickering per packet, clamped below by kTB. Spread
+is 0 by default. `lib/noise.py` hashes values on `(seed, bucket)` rather than drawing from a stream,
+so a query cannot shift anything else in a run.
+
+`NOISE_LEVEL` defaults to `thermal_noise_floor(bw)` for the preset in use, which is kTB + 6 dB. It
+was one constant of −119.25 dBm for bandwidths spanning 15.6 kHz to 500 kHz — a 15 dB range in
+thermal noise — and that constant implies a **0.8 dB noise figure** at 250 kHz, so it was a figure
+back-derived from the sensitivity table rather than a band. A scenario that measured its own floor
+sets it explicitly.
+
+**A preset's sensitivity cannot outlive its noise floor.** Each entry in the preset table is kTB for
+its bandwidth, plus the noise figure, plus the modem's required SNR — checked against the SX1262
+per-spreading-factor table, and every row is internally consistent at a 6 dB noise figure. So the
+sensitivity is a statement *about* a thermal floor, and keeping it while raising the floor says the
+modem decodes below its own limit. `effective_sensitivity(conf, preset, noise_dbm)` takes whichever
+threshold is harder — the datasheet figure, or the band the receiver is in plus
+`required_snr_db(sf)` — and `effective_cad_threshold` keeps the preset table's own margin below it.
+
+Under the packaged Batumi median of −110.5 dBm that tightens LONG_FAST from −131.5 to −128.0 dBm.
+With spread configured, the same link is above threshold in a quiet band and below it in a noisy one,
+instead of being decided once:
+
+| the band | LONG_FAST threshold |
+| --- | --: |
+| quiet, −120 dBm | −131.5 — the datasheet figure binds |
+| Batumi median, −110.5 dBm | −128.0 |
+| noisy, −104 dBm | −121.5 |
+
+## Payload loss
+
+`PHY_LOSS_MODEL_ENABLED` adds a decode probability to a frame that was heard: a logistic curve in
+SNR whose half-way point is `required_snr_db(sf) + PHY_LOSS_P50_OFFSET_DB_BY_CR[cr]`.
+
+The offset is from the **modem's own demodulation limit**, not an absolute SNR. It was an absolute
+figure per coding rate — −17.0 dB for 4/5 and so on — but a curve's position is set by the spreading
+factor, which moves the limit 12.5 dB across the presets, while the coding rate only modulates it. So
+the model sat 10 dB clear of the edge on SHORT_TURBO and right on it at LONG_FAST: nearly inert on
+the fast presets, severe on the slow ones, and a preset sweep with `--phy-loss-model` measured that
+rather than the presets. The offsets reproduce the old absolute figures exactly at LONG_FAST, which is
+where they were tuned.
+
+One draw per (packet, receiver) is taken at construction and reused when the coding rate or transmit
+power changes, so a DCR or DTP comparison is paired rather than resampled.
