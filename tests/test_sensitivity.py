@@ -106,3 +106,61 @@ class AnElevatedNoiseFloorRaisesTheThreshold(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheSnrScaleIsConsistentAcrossPresets(unittest.TestCase):
+    """One noise constant across a 15 dB range of thermal noise put the payload curve in a
+    different place for every preset, so a preset sweep with --phy-loss-model measured that."""
+
+    def test_the_derived_floor_reproduces_each_presets_own_sensitivity(self):
+        for name in ("SHORT_TURBO", "SHORT_FAST", "MEDIUM_FAST", "LONG_FAST",
+                     "LONG_MODERATE", "LONG_SLOW"):
+            with self.subTest(preset=name):
+                conf = Config()
+                conf.MODEM_PRESET = name
+                snr_at_sensitivity = effective_sensitivity(conf) - conf.NOISE_LEVEL
+                required = required_snr_db(conf.current_preset["sf"])
+                # Within a tenth of a decibel, for every preset. It ranged +0.75 to -6.5 dB.
+                self.assertAlmostEqual(snr_at_sensitivity, required, delta=0.1)
+
+    def test_the_floor_follows_the_bandwidth(self):
+        narrow, wide = Config(), Config()
+        narrow.MODEM_PRESET = "LONG_MODERATE"   # 125 kHz
+        wide.MODEM_PRESET = "LONG_FAST"         # 250 kHz
+        self.assertAlmostEqual(wide.NOISE_LEVEL - narrow.NOISE_LEVEL, 3.01, places=2)
+
+    def test_a_scenario_can_still_state_its_own_floor(self):
+        conf = Config()
+        conf.NOISE_LEVEL = -110.5
+        self.assertEqual(conf.NOISE_LEVEL, -110.5)
+        conf.NOISE_LEVEL = None
+        self.assertAlmostEqual(conf.NOISE_LEVEL, thermal_noise_floor(conf.current_preset["bw"]))
+
+    def test_the_payload_curve_sits_the_same_distance_from_every_modem_limit(self):
+        """Anchored to the demodulation limit, so the same coding rate behaves the same way."""
+        from lib.radio_loss import payload_success_probability
+
+        probabilities = []
+        for name in ("SHORT_TURBO", "SHORT_FAST", "MEDIUM_FAST", "LONG_FAST"):
+            conf = Config()
+            conf.MODEM_PRESET = name
+            conf.PHY_LOSS_MODEL_ENABLED = True
+            preset = conf.current_preset
+            self.assertEqual(preset["cr"], 5)  # same coding rate, so the same curve
+            probabilities.append(
+                payload_success_probability(
+                    conf, effective_sensitivity(conf), preset["cr"], 40
+                )
+            )
+        self.assertLess(max(probabilities) - min(probabilities), 0.01)
+
+    def test_a_stronger_coding_rate_decodes_better_at_the_same_margin(self):
+        from lib.radio_loss import payload_success_probability
+
+        conf = Config()
+        conf.MODEM_PRESET = "LONG_FAST"
+        conf.PHY_LOSS_MODEL_ENABLED = True
+        edge = effective_sensitivity(conf)
+        slim = payload_success_probability(conf, edge, 5, 40)
+        robust = payload_success_probability(conf, edge, 8, 40)
+        self.assertGreater(robust, slim)

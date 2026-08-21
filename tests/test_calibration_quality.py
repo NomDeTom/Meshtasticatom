@@ -143,6 +143,46 @@ class TheRecordedDiagnosticsAreTheObservationsOwn(unittest.TestCase):
     def test_the_preset_says_it_is_not_a_propagation_model(self):
         self.assertTrue(self.diagnostics["is_level_match_not_propagation_model"])
 
+    def test_no_cause_is_asserted(self):
+        """Three hypotheses are recorded and none is settled. An earlier version named censoring."""
+        self.assertFalse(self.diagnostics["cause_settled"])
+
+    def test_the_background_rows_outweigh_a_third_of_the_fit(self):
+        """0.02 is a small number until it is multiplied by twenty-seven times as many rows."""
+        observations = self.diagnostics["observations"]
+        pairs = len(self.nodes) * (len(self.nodes) - 1)
+        effective = (pairs - observations) * 0.02
+        self.assertAlmostEqual(effective, self.diagnostics["background_effective_weight"], places=1)
+        # A third of the fit's total weight is synthetic.
+        self.assertGreater(effective / (effective + observations), 0.3)
+
+    def test_the_fit_does_not_reproduce_the_graph_it_was_fitted_to(self):
+        """The acceptance criterion a proven-link interpolator would have to meet, and does not."""
+        from lib.link_model import calculate_link_budget
+        from lib.phy import effective_sensitivity
+
+        sensitivity = effective_sensitivity(self.conf)
+        observed_pairs = {(i, j) for i, j, _ in self.observed}
+        reproduced = audible = 0
+        for i in self.nodes:
+            for j in self.nodes:
+                if i == j:
+                    continue
+                budget = calculate_link_budget(self.conf, self.nodes[i], self.nodes[j], 0.0)
+                if budget.rssi_dbm >= sensitivity:
+                    audible += 1
+                    if (i, j) in observed_pairs:
+                        reproduced += 1
+
+        self.assertEqual(reproduced, self.diagnostics["observed_links_reproduced"])
+        self.assertEqual(audible, self.diagnostics["audible_pairs_total"])
+        self.assertEqual(
+            audible - reproduced, self.diagnostics["unobserved_pairs_made_audible"]
+        )
+        # It loses most of the measured graph and invents an order of magnitude more.
+        self.assertLess(reproduced, len(self.observed) / 2)
+        self.assertGreater(audible - reproduced, 10 * reproduced)
+
 
 class TransmitPowerIsTransparent(unittest.TestCase):
     """The fix that does not need a re-fit: EIRP is applied outside the fitted surface."""

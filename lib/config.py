@@ -692,9 +692,15 @@ class Config:
         # it is a distribution with a median well above kTB+NF and several decibels of spread,
         # varying by site and by hour. NOISE_SIGMA_DB gives it that spread, correlated over
         # NOISE_TAU_MSEC so the band drifts rather than flickering per packet, and clamped below by
-        # the thermal floor. Zero reproduces a constant floor exactly, which is the default so no
-        # existing result moves until a scenario asks for the variation.
-        self.NOISE_LEVEL = -119.25  # some noise level in dB, based on SNR_MIN and minimum receiver sensitivity
+        # kTB. Zero reproduces a constant floor exactly, which is the default so no existing result
+        # moves until a scenario asks for the variation.
+        #
+        # None derives it from the preset's own bandwidth. It was one constant of -119.25 dBm for
+        # bandwidths spanning 15.6 kHz to 500 kHz - a 15 dB range in thermal noise - and that
+        # constant implies a 0.8 dB noise figure at 250 kHz, so it was a figure back-derived from
+        # the sensitivity table rather than a band. A scenario that measured its own floor sets it
+        # explicitly and overrides this.
+        self._noise_level = None
         self.NOISE_SIGMA_DB = 0.0
         self.NOISE_TAU_MSEC = 60_000.0
         self.GAMMA = 2.08  # PHY parameter
@@ -760,11 +766,21 @@ class Config:
         # this only adds a CR-dependent success probability after it.
         self.PHY_LOSS_MODEL_ENABLED = False
         self.PHY_LOSS_MODEL_NAME = "snr_payload_v1"
-        self.PHY_LOSS_SNR_P50_BY_CR = {
-            5: -17.0,
-            6: -17.8,
-            7: -18.6,
-            8: -19.4,
+        # Where the payload-loss curve's half-way point sits, as an offset from the modem's own
+        # demodulation limit for the spreading factor in use. It was an absolute SNR per coding
+        # rate - -17.0 dB for 4/5 and so on - but a curve's position is set by the spreading
+        # factor, which moves the limit by 12.5 dB across the presets, while the coding rate only
+        # modulates it. So the curve sat 10 dB clear of the edge on SHORT_TURBO and right on it at
+        # LONG_FAST: the model was nearly inert on the fast presets and severe on the slow ones,
+        # and a preset sweep with --phy-loss-model measured that rather than the presets.
+        #
+        # These offsets reproduce the old absolute figures exactly at LONG_FAST, which is what they
+        # were tuned on (SF11 needs -17.5 dB, so -17.0 is +0.5 dB above the limit).
+        self.PHY_LOSS_P50_OFFSET_DB_BY_CR = {
+            5: 0.5,
+            6: -0.3,
+            7: -1.1,
+            8: -1.9,
         }
         self.PHY_LOSS_SNR_TRANSITION_DB = 1.4
         self.PHY_LOSS_REFERENCE_PACKET_BYTES = 40
@@ -916,6 +932,25 @@ class Config:
             + profile["padding"]
             + slot * self.freq_slot_width(preset)
         )
+
+    @property
+    def NOISE_LEVEL(self):
+        """Median noise floor in dBm: the scenario's own figure, or kTB+NF for this bandwidth.
+
+        Deriving it keeps the SNR scale consistent across presets. With one constant, the SNR at
+        each preset's own sensitivity ranged from +0.75 dB to -6.5 dB against the modem's actual
+        requirement, so the payload-loss curve sat in a different place for every preset and a
+        preset sweep with --phy-loss-model was confounded by it.
+        """
+        if self._noise_level is not None:
+            return self._noise_level
+        from lib.phy import thermal_noise_floor
+
+        return thermal_noise_floor(self.current_preset["bw"])
+
+    @NOISE_LEVEL.setter
+    def NOISE_LEVEL(self, value):
+        self._noise_level = None if value is None else float(value)
 
     @property
     def INTERFERENCE_LEVEL(self):

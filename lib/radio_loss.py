@@ -56,8 +56,13 @@ def payload_success_probability(conf, rssi, cr, packet_len, noise_dbm=None):
     Sensitivity gates hearing elsewhere; CR helps a weak link but cannot go below that.
     """
     snr = estimate_snr(conf, rssi, noise_dbm)
-    p50_by_cr = conf.PHY_LOSS_SNR_P50_BY_CR
-    p50 = p50_by_cr.get(cr, p50_by_cr[5])
+    # The half-way point sits relative to the modem's demodulation limit for this spreading factor,
+    # not at an absolute SNR: the limit moves 12.5 dB across the presets and the curve has to move
+    # with it, or the model is inert on the fast ones and severe on the slow ones.
+    from lib.phy import required_snr_db
+
+    offsets = conf.PHY_LOSS_P50_OFFSET_DB_BY_CR
+    p50 = required_snr_db(conf.current_preset["sf"]) + offsets.get(cr, offsets[5])
 
     # Longer packets expose more coded symbols to fading/interference. The
     # penalty is deliberately gentle because collisions are modeled separately.

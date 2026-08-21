@@ -113,6 +113,24 @@ class TestDynamicTxPower(unittest.TestCase):
         self.assertIn("direct_relay_cap", decision.reason)
 
     def test_prior_hop_strength_is_not_absolute_snr(self):
+        """Strength is margin above the modem's own floor, not the SNR figure itself.
+
+        LoRa SNR is negative on clean packets, so a fixed threshold on the number would call every
+        link weak. -5 dB is 12.5 dB of margin at LONG_FAST, which is under the 20 dB the policy
+        wants before it turns anything down.
+        """
+        node = FakeNode(util=20.0)
+
+        decision = choose_dynamic_tx_power(
+            node,
+            FakePacket(tx_node_id=2, orig_tx_node_id=1, dest_id=7, prior_hop_snr=-5.0, base_power=30),
+        )
+
+        self.assertEqual(decision.tx_power_dbm, 30)
+        self.assertIn("max_power_direct_relay_without_strong_link", decision.reason)
+
+    def test_a_genuinely_strong_prior_hop_is_recognised(self):
+        """The other side of the same test: +6 dB reported is 23.5 dB of margin, which is strong."""
         node = FakeNode(util=20.0)
 
         decision = choose_dynamic_tx_power(
@@ -120,8 +138,8 @@ class TestDynamicTxPower(unittest.TestCase):
             FakePacket(tx_node_id=2, orig_tx_node_id=1, dest_id=7, prior_hop_snr=6.0, base_power=30),
         )
 
-        self.assertEqual(decision.tx_power_dbm, 30)
-        self.assertIn("max_power_direct_relay_without_strong_link", decision.reason)
+        self.assertLess(decision.tx_power_dbm, 30)
+        self.assertIn("direct_relay_cap", decision.reason)
 
     def test_final_retry_uses_max_power(self):
         node = FakeNode(util=0.0)

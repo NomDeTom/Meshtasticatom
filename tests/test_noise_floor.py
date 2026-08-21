@@ -141,3 +141,30 @@ class ItChangesLinkExistenceInARun(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ACorrelationTimeShorterThanAFrameIsRefused(unittest.TestCase):
+    """The threshold is sampled once per packet, so the band has to move slowly against a frame."""
+
+    def test_a_fast_band_with_spread_is_rejected(self):
+        from lib.noise import MIN_TAU_MSEC, build
+
+        conf = Config()
+        conf.NOISE_SIGMA_DB = 4.0
+        conf.NOISE_TAU_MSEC = MIN_TAU_MSEC / 10.0
+        with self.assertRaises(ValueError):
+            build(conf, 0)
+
+    def test_a_fast_band_with_no_spread_is_harmless(self):
+        """Nothing moves, so nothing can move during a frame."""
+        from lib.noise import build
+
+        conf = Config()
+        conf.NOISE_SIGMA_DB = 0.0
+        conf.NOISE_TAU_MSEC = 100.0
+        self.assertEqual(build(conf, 0).level_at(0.0), conf.NOISE_LEVEL)
+
+    def test_the_default_is_comfortably_above_the_floor(self):
+        from lib.noise import MIN_TAU_MSEC
+
+        self.assertGreaterEqual(Config().NOISE_TAU_MSEC, MIN_TAU_MSEC)

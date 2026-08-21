@@ -40,26 +40,35 @@ calibration_diagnostics:
   # What the 296 observations can and cannot support, measured from them rather than assumed.
   # Recomputed and asserted by tests/test_calibration_quality.py, so these cannot go stale.
   #
-  # Every feature the ridge fit uses correlates with the observed SNR at |r| <= 0.1. A propagation
-  # model's distance term is 20-40 dB per decade; these observations show 0.94 dB per decade, and
-  # a 10-25 km link reads BETTER on average than a 2-5 km one. So the fitted coefficients -
-  # -4.68 on log-distance, +4.24 on the lower endpoint's ground elevation, +-2.94 on the collinear
-  # urban/open pair - are fitting noise, which is why the model is non-monotone in distance inside
-  # its own envelope and why water_fraction and forest_fraction came out at exactly 0.0.
+  # THE MEASUREMENTS. Every feature the ridge fit uses correlates with the observed SNR at
+  # |r| <= 0.1, and the distance slope is 0.94 dB per decade where a propagation model is 20-40. A
+  # 10-25 km link reads better on average (-8.5 dB) than a 2-5 km one (-12.1 dB). The fit also does
+  # not reproduce the graph it was fitted to: 95 of the 296 observed links are audible in the model
+  # and 2095 pairs that were never observed are, with a mean error of -8.8 dB on the pairs it did
+  # see. So it is neither a propagation model nor a proven-link interpolator.
   #
-  # The likely cause is censoring rather than bad measurement: these are observed *neighbour*
-  # SNRs, so every row is a link that worked. There are no non-detections, the SNR distribution is
-  # truncated from below at the radio's reported floor (min -20.75 against a floor of -21.25), and
-  # selecting on success destroys the distance dependence. All 296 sit below free space, so nothing
-  # here is physically impossible - there is simply no distance signal left to fit.
+  # THREE HYPOTHESES, AND NO SETTLED CAUSE. An earlier version of this block named censoring as the
+  # likely cause. That was premature - it is now the second of three, and the first needs no fault
+  # in the measurements at all.
   #
-  # Consequence, measured: no log-distance exponent reproduces them. Fitting LPLD0 to the
-  # observations at a fixed exponent leaves 26-38 dB of RMS residual, loses a third of the observed
-  # links, and still makes 65-72% of all directed pairs into links. A link budget with 30 dB of
-  # unexplained scatter is not a link budget.
+  #  1. A moving noise floor. A real floor is a distribution with a median well above kTB and
+  #     several decibels of spread. The observations scatter by 8.11 dB, and on this geometry the
+  #     *path* only varies by 10-20 dB across the whole 0-23 km range under any plausible exponent -
+  #     so a band with 5-8 dB of spread, sampled once per pair over an unknown window, is enough to
+  #     bury the distance signal with nothing wrong with the data. Testable, and only with
+  #     timestamps: it predicts that observations taken close in time agree better than ones taken
+  #     far apart.
+  #  2. Censoring. Every row is a link that worked; there are no non-detections; the sample stops
+  #     near the modem's own floor (min -20.75). Selecting on success destroys distance dependence.
+  #  3. The background weight. training_background_weight 0.02 applies to every unobserved pair, and
+  #     there are 8076 of them - a total weight of 161 against the observations' 296, so the
+  #     synthetic -22 dB rows carry 35% of the fit's weight. That matches the measured -8.8 dB
+  #     pessimism on observed links, and would make the fit recoverable without new measurements.
   #
-  # So the packaged coefficients are kept as a level-matching surface that reproduces the existing
-  # archive, and NOT as a propagation model. Transmit power and antenna gain are applied outside it,
+  # All 296 lie below free space, so nothing here is physically impossible.
+  #
+  # WHAT THE COEFFICIENTS ARE USED AS. A level-matching surface that reproduces the existing
+  # archive, and NOT a propagation model. Transmit power and antenna gain are applied outside it,
   # decibel for decibel, so a power experiment is physical even though the surface is not.
   observations: 296
   snr_range_db: [-20.75, 6.75]
@@ -71,7 +80,16 @@ calibration_diagnostics:
     max_ground_elevation_100m: 0.099
   observations_above_free_space: 0
   log_distance_refit_rms_db: [26.5, 38.5]
+  # Does the fit reproduce the graph it was fitted to? Measured at the current tree.
+  observed_links_reproduced: 95
+  unobserved_pairs_made_audible: 2095
+  audible_pairs_total: 2190
+  observed_pair_snr_error_mean_db: -8.81
+  observed_pair_snr_error_rms_db: 12.32
+  # Effective weight of the synthetic background rows against the real observations.
+  background_effective_weight: 161.5
   is_level_match_not_propagation_model: true
+  cause_settled: false
 clutter_provenance:
   # What the packaged raster is, and what is wrong with it, recorded because it cannot be
   # regenerated from here: the exporter needs Overpass and this environment's network policy

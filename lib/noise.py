@@ -75,6 +75,15 @@ class NoiseFloor:
         return max(self.median_dbm, self.thermal_floor_dbm)
 
 
+# The reception threshold is evaluated once per packet, at construction. That is only sound while
+# the band moves slowly compared with a frame: a correlation time of tens of seconds against frames
+# of tens or hundreds of milliseconds. Below this the band would change materially *during* a frame
+# and the single sample would be wrong, so it is refused rather than silently approximated. Model
+# pulsed or bursty interference with lib/interference.py, which is evaluated over the frame's own
+# interval.
+MIN_TAU_MSEC = 10_000.0
+
+
 def build(conf, node_id):
     """One node's noise floor, from the run's config.
 
@@ -88,10 +97,18 @@ def build(conf, node_id):
     # bounding at kTB+NF would count it twice and raise the default floor by 5.2 dB. Which is worth
     # noting on its own: the default NOISE_LEVEL of -119.25 dBm implies a 0.8 dB noise figure at
     # 250 kHz, so it is not a measured band but a figure back-derived from the sensitivity table.
+    sigma = getattr(conf, "NOISE_SIGMA_DB", 0.0)
+    tau = getattr(conf, "NOISE_TAU_MSEC", 60_000.0)
+    if sigma > 0.0 and tau < MIN_TAU_MSEC:
+        raise ValueError(
+            f"NOISE_TAU_MSEC of {tau} is shorter than {MIN_TAU_MSEC:.0f} ms: the reception "
+            "threshold is sampled once per packet, so a band moving this fast would change during "
+            "a frame. Model fast interference with lib/interference.py instead."
+        )
     return NoiseFloor(
         conf.NOISE_LEVEL,
-        getattr(conf, "NOISE_SIGMA_DB", 0.0),
-        getattr(conf, "NOISE_TAU_MSEC", 60_000.0),
+        sigma,
+        tau,
         thermal_noise_floor(conf.current_preset["bw"], noise_figure_db=0.0),
         (conf.SEED ^ 0x4E4F4953) + node_id,
     )

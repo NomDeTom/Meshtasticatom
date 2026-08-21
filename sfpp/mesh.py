@@ -3002,6 +3002,26 @@ class Mesh:
         self.airtime_by_kind[key] = self.airtime_by_kind.get(key, 0.0) + duration
         self.at(tx.end, lambda: self._deliver(tx))
 
+    def _noise_excursion(self, node, start, end):
+        """How many dB above its median this node's band sits over this frame. Zero without a field."""
+        if self.noise is None:
+            return 0.0
+        return self.noise.excursion_db(node, self.nodes[node].position(), start, end)
+
+    def _sensitivity_at(self, node, start, end):
+        """The threshold this receiver actually has over this frame, band included."""
+        conf = self.conf
+        return _phy().effective_sensitivity(
+            conf, noise_dbm=conf.NOISE_LEVEL + self._noise_excursion(node, start, end)
+        )
+
+    def _cad_floor_at(self, node, start, end):
+        """Energy detection reaches below decodability by the preset table's own margin."""
+        conf = self.conf
+        return _phy().effective_cad_threshold(
+            conf, noise_dbm=conf.NOISE_LEVEL + self._noise_excursion(node, start, end)
+        )
+
     def _overlapping(self, tx):
         """Every other transmission sharing air with this one. All of them started before it ended."""
         return [
@@ -3017,7 +3037,6 @@ class Mesh:
     def _deliver(self, tx):
         """Decide, at end of transmission, who actually received it."""
         packet = tx.packet
-        sensitivity = _phy().effective_sensitivity(self.conf)
         interferers = self._overlapping(tx)
         self._prune()
 
@@ -3034,29 +3053,34 @@ class Mesh:
             audience = audience + [
                 j
                 for j in self.duct_reach[tx.tx_node]
-                if self.rssi[tx.tx_node][j] + lift >= sensitivity
+                if self.rssi[tx.tx_node][j] + lift >= self._sensitivity_at(j, tx.start, tx.end)
             ]
 
         # Charged for every packet a receiver could hear, decoded or not, because that is what
         # sizes our own contention window. A duct raises it for everyone. TRANSPORT.md.
-        cad_floor = sensitivity - 3
+        cad_floor = self._cad_floor_at(tx.tx_node, tx.start, tx.end)
         # The transmitter first: its own transmission occupied its channel too, and charging it here
         # rather than at start keeps every interval arriving in end order.
         self.nodes[tx.tx_node].sense_busy(tx.start, tx.end)
         for rx in audience:
-            if self.rssi[tx.tx_node][rx] + lift >= cad_floor:
+            if self.rssi[tx.tx_node][rx] + lift >= self._cad_floor_at(rx, tx.start, tx.end):
                 self.nodes[rx].sense_busy(tx.start, tx.end)
 
         for rx in audience:
             rssi = self.rssi[tx.tx_node][rx] + lift
-            if rssi < sensitivity:
+            # The band this receiver is in for this frame, not the mesh's median. A NoiseField
+            # excursion used to arrive only as an RSSI penalty inside the PER curve, so it could
+            # fail a packet but never take a link down - the same asymmetry the vendored path had.
+            if rssi < self._sensitivity_at(rx, tx.start, tx.end):
                 continue
             if not self.nodes[rx].online:
                 continue
             if rx in transmitting:
                 self.stats["lost_to_half_duplex"] += 1
                 continue
-            if not self._survives_capture(tx, rx, rssi, interferers, sensitivity, lift):
+            if not self._survives_capture(
+                tx, rx, rssi, interferers, self._cad_floor_at(rx, tx.start, tx.end), lift
+            ):
                 self.stats["lost_to_collision"] += 1
                 continue
             if self.noise is not None and self.noise.wiped(tx.start, tx.end):
@@ -3074,19 +3098,21 @@ class Mesh:
                 self.stats["lost_to_phy"] += 1
                 continue
             self.stats["receptions"] += 1
-            if lift and self.rssi[tx.tx_node][rx] < sensitivity:
+            if lift and self.rssi[tx.tx_node][rx] < self._sensitivity_at(rx, tx.start, tx.end):
                 # This pair is not a link at rest. Everything the mesh learns from this reception -
                 # the NodeDB entry, the relay byte, a next_hop - outlives the duct that carried it.
                 self.stats["ducted_receptions"] += 1
             self._receive(rx, packet, rssi)
 
-    def _survives_capture(self, tx, rx, rssi, interferers, sensitivity, lift=0.0):
+    def _survives_capture(self, tx, rx, rssi, interferers, cad_floor, lift=0.0):
         # Lifted too, being on the air at the same instant: leaving them out would deliver distant
-        # packets into a channel that had gone magically quiet.
+        # packets into a channel that had gone magically quiet. `cad_floor` is this receiver's own
+        # energy-detection threshold for this frame, band included - it used to be a mesh-wide
+        # sensitivity minus three.
         audible = [
             o
             for o in interferers
-            if o.tx_node != rx and self.rssi[o.tx_node][rx] + lift >= sensitivity - 3
+            if o.tx_node != rx and self.rssi[o.tx_node][rx] + lift >= cad_floor
         ]
         if not audible:
             return True
