@@ -286,8 +286,10 @@ that is why it survived. The mixing only shows up where ACKs or DMs exist.
 
 > **Assert** that a rate's numerator and denominator count the same population, and that a
 > percentage cannot exceed 100.
-> **Enforced**: `tests/test_metrics.py` counts the six populations apart - messages, ACKs, packet
-> ids, transmissions, relays, receiver opportunities - and `docs/metrics.md` names each one.
+> **Enforced**: `tests/test_metrics.py` keeps the populations apart one pair at a time - a rebroadcast
+> against a message, a retransmission against a first send, an ACK against a message, a broadcast's
+> receiver opportunities against a unicast's - and `docs/metrics.md` tabulates all nine counters with
+> the population each one counts.
 
 ## 16. Every macOS node ran out of node 0's state directory
 
