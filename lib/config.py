@@ -819,6 +819,13 @@ class Config:
         # for every role but TRACKER and SENSOR. NodeInfoModule is the impolite one.
         self.CHANNEL_UTIL_TX_GATE_POLITE = True
 
+        # PacketHistory's capacity, from mesh-pb-constants.h: max(MAX_NUM_NODES * 2, 100), which is
+        # 240 on the nRF52840 and generic ESP32 builds. It is bounded by size and evicts the oldest
+        # slot; there is no time expiry, and the simulator kept an unbounded dict, so a node here
+        # suppressed a duplicate of a message it heard an hour ago where a device would have
+        # forgotten it.
+        self.PACKET_HISTORY_MAX = 240
+
     @property
     def current_preset(self):
         """Returns the currently selected modem preset configuration"""

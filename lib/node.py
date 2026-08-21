@@ -229,11 +229,19 @@ class MeshNode:
         self.messages = data_tracking.messages
 
         self.nrPacketsSent = 0
+        # message id -> the time it was last heard. Bounded like PacketHistory, evicting the
+        # oldest: an unbounded history suppresses a duplicate of a message a device would long
+        # since have forgotten.
         self.timesReceived = {}
+        self.lastHeard = {}
         # message id -> an event a reliable send is waiting on, so an ACK ends the wait rather
         # than being noticed after the retransmission deadline has already elapsed.
         self.ackSignal = {}
-        self.isReceiving = []
+        # How many receptions are in flight. This was an append-only list of booleans whose end of
+        # reception cleared whichever True it found first, so a packet that collided at the start
+        # released a slot it never took - 941 of 8727 releases in a ten-minute thirty-node run
+        # found nothing outstanding, and the ones that found a live reception cleared it.
+        self.receptionsInFlight = 0
         self.isTransmitting = False
         self.usefulPackets = 0
         # Split out because an ACK is unicast and an application broadcast is not: mixing them
@@ -489,6 +497,21 @@ class MeshNode:
         return -1
     
 
+    def release_reception(self, packet):
+        """End of reception: give back the slot this packet took, if it took one."""
+        if packet.rxStartedAtN[self.nodeid]:
+            packet.rxStartedAtN[self.nodeid] = False
+            self.receptionsInFlight = max(0, self.receptionsInFlight - 1)
+
+    def _remember_packet(self, seq):
+        """Record this message id in a bounded history, evicting the oldest as PacketHistory does."""
+        self.lastHeard[seq] = self.env.now
+        limit = self.conf.PACKET_HISTORY_MAX
+        while len(self.lastHeard) > limit:
+            oldest = min(self.lastHeard, key=self.lastHeard.get)
+            del self.lastHeard[oldest]
+            self.timesReceived.pop(oldest, None)
+
     def was_seen_recently(self, packet, ownTransmit=False):
         if packet.seq not in self.timesReceived:
             # First time we know about this packet
@@ -501,6 +524,7 @@ class MeshNode:
                     self.usefulAppPackets += 1
         else:
             self.timesReceived[packet.seq] += 0 if ownTransmit else 1
+        self._remember_packet(packet.seq)
 
 
     def perhaps_cancel_dupe(self, packet):
@@ -638,8 +662,8 @@ class MeshNode:
             yield self.env.timeout(txTime)
 
             # wait when currently receiving or transmitting, or channel is active
-            while any(self.isReceiving) or self.isTransmitting or is_channel_active(self, self.env):
-                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} delaying tx: busy Tx-ing {self.isTransmitting=} or Rx-ing {any(self.isReceiving)=}, else channel busy!")
+            while self.receptionsInFlight or self.isTransmitting or is_channel_active(self, self.env):
+                logger.debug(f"{self.env.now:.3f} Node {self.nodeid} delaying tx: busy Tx-ing {self.isTransmitting=} or Rx-ing {self.receptionsInFlight=}, else channel busy!")
                 txTime = set_transmit_delay(self, packet)
                 yield self.env.timeout(txTime)
             logger.debug(f"{self.env.now:.3f} Node {self.nodeid} ends waiting for scheduled tx")
@@ -719,7 +743,8 @@ class MeshNode:
                     p.onAirToN[self.nodeid] = False
                     if not self.isTransmitting and not p.collidedAtN[self.nodeid]:
                         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started receiving packet {packet_log_id} for msg {p.seq} from {p.txNodeId}")
-                        self.isReceiving.append(True)
+                        p.rxStartedAtN[self.nodeid] = True
+                        self.receptionsInFlight += 1
                     elif self.isTransmitting:
                         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not lock packet {p.seq}.")
                         p.sensedByN[self.nodeid] = False
@@ -728,10 +753,7 @@ class MeshNode:
                     continue
 
                 if p.sensedByN[self.nodeid]:
-                    try:
-                        self.isReceiving[self.isReceiving.index(True)] = False
-                    except Exception:
-                        pass
+                    self.release_reception(p)
                     if p.collidedAtN[self.nodeid]:
                         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not decode packet {packet_log_id}.")
                         continue
@@ -752,16 +774,14 @@ class MeshNode:
                 elif not self.isTransmitting:
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} started receiving packet {packet_log_id} for msg {p.seq} from {p.txNodeId}")
                     p.onAirToN[self.nodeid] = False
-                    self.isReceiving.append(True)
+                    p.rxStartedAtN[self.nodeid] = True
+                    self.receptionsInFlight += 1
                 else:  # if you were currently transmitting, you could not have sensed it
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} was transmitting, so could not receive packet {packet_log_id} for msg {p.seq}")
                     p.sensedByN[self.nodeid] = False
                     p.onAirToN[self.nodeid] = False
             elif p.sensedByN[self.nodeid]:  # end of reception
-                try:
-                    self.isReceiving[self.isReceiving.index(True)] = False
-                except Exception:
-                    pass
+                self.release_reception(p)
                 # begin receiving packet fine, but a collision begins before we finish receiving.
                 if p.collidedAtN[self.nodeid]:
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not decode packet {packet_log_id}.")

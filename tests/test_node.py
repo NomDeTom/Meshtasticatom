@@ -223,6 +223,7 @@ class TestMeshNodeReceive(unittest.TestCase):
             "collidedAtN": [True],
             "phyLostAtN": [False],
             "receivedAtN": [False],
+            "rxStartedAtN": [False],
             "timeOnAir": 1.0,
             "seq": 1,
             "txNodeId": 7,

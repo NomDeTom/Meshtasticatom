@@ -54,6 +54,10 @@ class MeshPacket:
         self.collidedAtN = [False for _ in range(self.conf.NR_NODES)]
         self.collisionReasonAtN = [None for _ in range(self.conf.NR_NODES)]
         self.receivedAtN = [False for _ in range(self.conf.NR_NODES)]
+        # Whether this node actually began receiving, so end-of-reception releases the slot it took
+        # and not somebody else's. A packet that collided before the receiver locked on never took
+        # one, and used to release one anyway.
+        self.rxStartedAtN = [False for _ in range(self.conf.NR_NODES)]
         self.phyLostAtN = [False for _ in range(self.conf.NR_NODES)]
         self.onAirToN = [True for _ in range(self.conf.NR_NODES)]
         self.phyLossDrawAtN = [0.0 for _ in range(self.conf.NR_NODES)]
