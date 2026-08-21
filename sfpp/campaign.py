@@ -384,7 +384,7 @@ class Campaign:
         self.opts = opts
         self.seed = seed
         self.rng = random.Random(seed)
-        self.conf = M.make_config(preset=opts.preset, phy_loss=not opts.no_phy_loss, tx_power=getattr(opts, 'tx_power', None), noise_model=getattr(opts, 'noise_model', 'thermal'))
+        self.conf = M.make_config(preset=opts.preset, model=getattr(opts, 'path_loss_model', '3gpp-suburban'), phy_loss=not opts.no_phy_loss, tx_power=getattr(opts, 'tx_power', None), noise_model=getattr(opts, 'noise_model', 'thermal'))
         # Holding area fixed while node count moves measures density and calls it size, so the
         # side scales by sqrt(n/60) to keep nodes per square kilometre constant.
         self.area = (
@@ -1687,6 +1687,26 @@ class Campaign:
         self.final_audit_failures = 0 if self.opts.baseline else self._final_audit()
         return self._report(time.time() - started)
 
+    def _models_report(self):
+        """The resolved model stack, by name where one exists rather than by a bare integer."""
+        from lib.phy import path_loss_model_name
+
+        conf = self.conf
+        return {
+            "path_loss": path_loss_model_name(conf.MODEL),
+            "noise": getattr(self.opts, "noise_model", "thermal"),
+            "payload_loss": (
+                conf.PHY_LOSS_MODEL_NAME if conf.PHY_LOSS_MODEL_ENABLED else None
+            ),
+            "link_calibration": bool(
+                getattr(conf, "LINK_CALIBRATION_MODEL_ENABLED", False)
+            ),
+            "capture_collision": bool(
+                getattr(conf, "CAPTURE_COLLISION_MODEL_ENABLED", False)
+            ),
+            "asymmetric_links": bool(getattr(conf, "MODEL_ASYMMETRIC_LINKS", False)),
+        }
+
     def _report(self, wall_seconds):
         total = len(self.generator.text_order)
         depth_all = {}
@@ -1731,6 +1751,12 @@ class Campaign:
                 "topology": getattr(self.mesh, "topology", "uniform"),
                 "diameter": self.mesh.diameter(),
             },
+            # Which models produced this row. A JSON that does not name them cannot be compared with
+            # one measured under different physics, and every one of these has a weaker default.
+            "models": self._models_report(),
+            # Behaviour no release ships. Empty on an unmodified profile; non-empty means this run
+            # measured a proposal, and no reading of it is a statement about firmware.
+            "proposals": sorted(self.mesh.profile.engaged_proposals()),
             "link_quality": self.mesh.link_quality(),
             # The ground this was computed over, null on a flat run: a report that does not say
             # which geometry cannot be compared with one that does.
@@ -2516,6 +2542,9 @@ def _hot_store_size(opts):
 
 
 def build_parser():
+    # Local: the vendored tree is on the path only once sfpp.mesh has resolved it.
+    from lib.phy import PATH_LOSS_MODELS
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--hours", type=float, default=72.0)
     ap.add_argument("--nodes", type=int, default=60)
@@ -2945,6 +2974,14 @@ def build_parser():
         help="radius of a transient excursion as a fraction of the area's side, before its spread",
     )
     ap.add_argument(
+        "--path-loss-model",
+        default="3gpp-suburban",
+        choices=sorted(PATH_LOSS_MODELS),
+        help="path loss model. This was pinned to 3gpp-suburban with no way to change it; at 1.5 m "
+        "antennas its exponent is 4.49 and the raw budget gives no link past about a kilometre, "
+        "which is why a fitted scenario calibration replaces it rather than correcting it",
+    )
+    ap.add_argument(
         "--noise-model",
         default="thermal",
         choices=["thermal", "fixed"],
@@ -3191,6 +3228,10 @@ def main(argv=None):
 
 def summarise(report):
     base, traffic = report["baseline"], report["traffic"]
+    # Named first, because a proposal read as firmware is the misreading this exists to prevent.
+    if report.get("proposals"):
+        print(f"PROPOSED FEATURES ENGAGED: {', '.join(report['proposals'])}")
+        print("  no release ships these; this run is not a statement about firmware")
     print(
         f"seed {report['seed']}  {report['mesh']['nodes']} nodes  deg "
         f"{report['mesh']['mean_degree']:.1f}  util {traffic['channel_utilisation']:.0%}  "

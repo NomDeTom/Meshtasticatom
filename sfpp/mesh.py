@@ -72,6 +72,16 @@ SNR_BOUNDS = {
     "2.8": (-20.0, 10.0),
 }
 
+# Behaviour no release turns on. A run with any of these engaged is measuring a proposal, not
+# firmware, and `Profile.engaged_proposals` puts that in the report so it cannot be read as one.
+PROPOSALS = {
+    "extra_repeats": "the extra-repeats branch's RepeatScalingModule",
+    "early_flood_on_unverified": "M4, compiled out at NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED 0",
+    "coding_rate_ladder": "on a branch",
+    "exhaust_hops": "off in every profile, no release path",
+    "event_relay_hop_limit": "None in every profile",
+}
+
 # The earliest series whose profile carries each mechanism, and the release it shipped in. Read off
 # the tags in this repository rather than remembered; a value of None means it is only in this tree.
 FEATURE_TAG = {
@@ -518,6 +528,14 @@ class Profile:
         if self.version is None:
             return False
         return VERSIONS.index(self.version) >= VERSIONS.index(version)
+
+    def engaged_proposals(self):
+        """The PROPOSALS this profile has on. Empty on any unmodified release profile."""
+        return {
+            flag: PROPOSALS[flag]
+            for flag in PROPOSALS
+            if getattr(self, flag, None) not in (False, None)
+        }
 
     def _firmware(self, version):
         self.version = version
@@ -2010,15 +2028,22 @@ VENDORED_FIXED_NOISE_DBM = -119.25
 
 
 def make_config(
-    preset="LONG_FAST", model=5, phy_loss=True, tx_power=None, noise_model="thermal"
+    preset="LONG_FAST",
+    model="3gpp-suburban",
+    phy_loss=True,
+    tx_power=None,
+    noise_model="thermal",
 ):
     from lib.config import Config
+    from lib.phy import path_loss_model_id
 
     conf = Config()
     conf.MODEM_PRESETS = dict(conf.MODEM_PRESETS)
     conf.MODEM_PRESETS.update(EXTRA_PRESETS)
     conf.MODEM_PRESET = preset
-    conf.MODEL = model
+    # A name rather than the bare 5 this was pinned to. The choice sets the largest term in the link
+    # budget, so a run that cannot name it cannot be compared with one that can.
+    conf.MODEL = path_loss_model_id(model)
     conf.PHY_LOSS_MODEL_ENABLED = phy_loss
     # A per-preset thermal floor. The historical vendored constant was one figure for every preset,
     # which puts every usable link into the flat top of the PER curve - TRANSPORT.md.

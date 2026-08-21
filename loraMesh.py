@@ -48,7 +48,12 @@ from lib.terrain import (
     node_antenna_height,
     xy_to_latlon,
 )
-from lib.phy import estimate_path_loss
+from lib.phy import (
+    PATH_LOSS_MODELS,
+    estimate_path_loss,
+    path_loss_model_id,
+    path_loss_model_name,
+)
 
 conf = CONFIG
 logger = logging.getLogger(__name__)
@@ -208,6 +213,14 @@ def print_preset_list():
         )
 
 
+def print_path_loss_model_list(conf):
+    """Print path loss models. The default is load-bearing, so it is marked."""
+    print("Available path loss models:")
+    for name, model_id in PATH_LOSS_MODELS.items():
+        default_marker = " (default)" if model_id == conf.MODEL else ""
+        print(f"  {name}{default_marker}: MODEL={model_id}")
+
+
 def print_modem_preset_list(conf):
     """Print modem presets with the fields users need for comparable runs."""
     print("Available modem presets:")
@@ -234,6 +247,7 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""examples:
   loraMesh.py --list-presets
+  loraMesh.py --list-path-loss-models
   loraMesh.py --preset batumi --no-gui --simtime-seconds 60 --period-seconds 5
   loraMesh.py --preset batumi --no-gui --simtime-seconds 60 --period-seconds 5 --phy-loss-model --capture-collision-model
   loraMesh.py --from-map 'https://meshtastic.liamcottle.net/api/v1/nodes' --map-bbox 41.50,41.50,41.82,41.86 --map-limit 100 --no-gui
@@ -359,9 +373,15 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         help="disable land-cover clutter even when a grid is available",
     )
     parser.add_argument(
+        "--path-loss-model",
+        type=str,
+        choices=sorted(PATH_LOSS_MODELS),
+        help="path loss model, the largest term in the link budget (default: from config)",
+    )
+    parser.add_argument(
         "--phy-loss-model",
         action="store_true",
-        help="enable empirical SNR-to-payload-loss model",
+        help="enable empirical SNR-to-payload-loss model (the PER curve, not path loss)",
     )
     parser.add_argument(
         "--capture-collision-model",
@@ -422,6 +442,11 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         help="List Meshtastic modem presets and exit",
     )
     parser.add_argument(
+        "--list-path-loss-models",
+        action="store_true",
+        help="List path loss models and exit",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="enable verbose/debug output"
     )
 
@@ -431,7 +456,13 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         print_preset_list()
     if parsed_arguments.list_modem_presets:
         print_modem_preset_list(conf)
-    if parsed_arguments.list_presets or parsed_arguments.list_modem_presets:
+    if parsed_arguments.list_path_loss_models:
+        print_path_loss_model_list(conf)
+    if (
+        parsed_arguments.list_presets
+        or parsed_arguments.list_modem_presets
+        or parsed_arguments.list_path_loss_models
+    ):
         raise SystemExit(0)
 
     cli_defaults = get_cli_defaults(conf)
@@ -758,6 +789,8 @@ def parse_params(conf, args=None) -> [NodeConfig]:
         conf.CLUTTER_PROFILE_SAMPLES = cli_defaults["CLUTTER_PROFILE_SAMPLES"]
     conf.PHY_LOSS_MODEL_ENABLED = parsed_arguments.phy_loss_model
     conf.CAPTURE_COLLISION_MODEL_ENABLED = parsed_arguments.capture_collision_model
+    if parsed_arguments.path_loss_model:
+        conf.MODEL = path_loss_model_id(parsed_arguments.path_loss_model)
     restore_radio_calibration(conf, cli_defaults["RADIO_CALIBRATION"])
     if parsed_arguments.preset is not None:
         apply_preset_radio_calibration(conf, parsed_arguments.preset)
@@ -791,6 +824,9 @@ def parse_params(conf, args=None) -> [NodeConfig]:
             f"strong_margin={conf.DTP_STRONG_LINK_MARGIN_DB:g}dB",
             f"very_strong_margin={conf.DTP_VERY_STRONG_LINK_MARGIN_DB:g}dB",
         )
+    # First of the stack, because it is the largest term in the link budget and was the only one
+    # this banner did not name.
+    print("Path loss model:", path_loss_model_name(conf.MODEL))
     print("PHY loss model:", "enabled" if conf.PHY_LOSS_MODEL_ENABLED else "disabled")
     print("Capture collision model:", "enabled" if conf.CAPTURE_COLLISION_MODEL_ENABLED else "disabled")
     print("Terrain model:", "enabled" if conf.TERRAIN_ENABLED else "disabled")

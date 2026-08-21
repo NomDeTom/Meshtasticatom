@@ -218,9 +218,23 @@ normalizes both Hz- and MHz-scale inputs so that the predicate does not depend o
 
 ## Path loss
 
-Seven models, chosen by `MODEL`: log-distance (0), Okumura-Hata for four environment classes (1-4),
-and 3GPP suburban and urban macro (5-6). All take distance in metres and frequency in MHz and
-return loss in dB.
+Seven models, chosen by `MODEL` or by name through `--path-loss-model`. All take distance in metres
+and frequency in MHz and return loss in dB. `lib.phy.PATH_LOSS_MODELS` is the mapping, and
+`loraMesh.py --list-path-loss-models` prints it with the current default marked.
+
+| name | `MODEL` | |
+| --- | --- | --- |
+| `log-distance` | 0 | |
+| `hata-small-city` | 1 | Okumura-Hata, small and medium cities |
+| `hata-metro` | 2 | Okumura-Hata, metropolitan |
+| `hata-suburban` | 3 | Okumura-Hata, suburban |
+| `hata-rural` | 4 | Okumura-Hata, rural |
+| `3gpp-suburban` | 5 | **default** |
+| `3gpp-urban` | 6 | |
+
+A name resolves to exactly the integer the dispatch has always read, so naming one changes nothing
+about what it computes. An unknown name raises rather than falling back to the default - a typo that
+silently selected model 5 would turn a comparison arm into a duplicate of it.
 
 Distance is floored at `PATH_LOSS_DISTANCE_FLOOR_M` before the logarithm. Randomized movement can
 put two nodes on the same point, and a preset can raise the floor further as a near-field

@@ -43,7 +43,7 @@ class Config:
         MANAGED_FLOOD = 'MANAGED_FLOOD'
 
     def __init__(self):
-        self.MODEL = 5  # Path loss model to use (see README)
+        self.MODEL = 5  # Path loss model to use - see docs/radio_model.md, or lib.phy.PATH_LOSS_MODELS
 
         self.XSIZE = 15000  # horizontal size of the area to simulate in m
         self.YSIZE = 15000  # vertical size of the area to simulate in m

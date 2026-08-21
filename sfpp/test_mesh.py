@@ -2204,6 +2204,64 @@ class Propagation(unittest.TestCase):
         self.assertGreaterEqual(ducted["lost_to_collision"], calm["lost_to_collision"])
 
 
+class ModelSurfaceAndProposals(unittest.TestCase):
+    """What a run rests on has to be in the run's own output, not in a reader's memory."""
+
+    def test_proposals_are_exactly_the_flags_no_release_sets(self):
+        """A flag every profile leaves off is a proposal; one any profile turns on is firmware.
+
+        Checked both ways. One direction alone passes trivially - `legacy` turns everything off, so
+        a per-profile sweep that lets the last profile win marks almost every flag as never-on.
+        """
+        profiles = [M.Profile(name) for name in M.VERSIONS + ("legacy",)]
+        flags = [f for f in M.Profile.__slots__ if f not in ("name", "version")]
+        never_on = {
+            f
+            for f in flags
+            if all(getattr(p, f, None) in (False, None) for p in profiles)
+        }
+        self.assertEqual(
+            set(M.PROPOSALS),
+            never_on,
+            "PROPOSALS must name every flag no profile sets, and nothing else",
+        )
+
+    def test_every_proposal_states_why_it_is_one(self):
+        for flag, reason in M.PROPOSALS.items():
+            self.assertIn(flag, M.Profile.__slots__, flag)
+            self.assertTrue(reason.strip(), flag)
+
+    def test_a_release_profile_engages_no_proposals(self):
+        for name in M.VERSIONS + ("legacy",):
+            self.assertEqual(M.Profile(name).engaged_proposals(), {}, name)
+
+    def test_an_override_shows_up_as_engaged(self):
+        self.assertEqual(
+            sorted(M.Profile("2.8", extra_repeats=True).engaged_proposals()),
+            ["extra_repeats"],
+        )
+        # A hop limit is engaged by a value, not by True - None is the off state.
+        self.assertEqual(
+            sorted(M.Profile("2.8", event_relay_hop_limit=2).engaged_proposals()),
+            ["event_relay_hop_limit"],
+        )
+
+    def test_the_path_loss_model_is_selectable_and_named(self):
+        """It was pinned to 5 with no flag, so no run could say which physics produced it."""
+        from lib.phy import path_loss_model_name
+
+        conf = M.make_config(preset="LONG_FAST", model="hata-rural")
+        self.assertEqual(path_loss_model_name(conf.MODEL), "hata-rural")
+        self.assertEqual(
+            path_loss_model_name(M.make_config(preset="LONG_FAST").MODEL),
+            "3gpp-suburban",
+        )
+
+    def test_an_unknown_path_loss_model_is_refused(self):
+        with self.assertRaises(ValueError):
+            M.make_config(preset="LONG_FAST", model="hata-rual")
+
+
 class FirmwarePresets(unittest.TestCase):
     def test_the_derived_sensitivity_reproduces_the_vendored_table(self):
         """What licenses deriving the missing presets instead of extrapolating a slope."""
@@ -2577,6 +2635,8 @@ print(",".join(failed))
                 "--run",
                 # collate.py's, for the runtime comparison against the archive's own history.
                 "--history",
+                # check_oracle.py's, turning "no firmware reachable" into a failure - see §9.2.
+                "--require",
             }
         )
         self.assertEqual(

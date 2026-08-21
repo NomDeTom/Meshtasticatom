@@ -334,10 +334,47 @@ def airtime(conf, sf, cr, pl, bw):
     return (Tpream + Tpayload) * 1000
 
 
+# The path-loss models `estimate_path_loss` dispatches on, by name. The value is the integer
+# `conf.MODEL` has always carried, so naming one changes nothing about what it computes.
+PATH_LOSS_MODELS = {
+    "log-distance": 0,
+    "hata-small-city": 1,
+    "hata-metro": 2,
+    "hata-suburban": 3,
+    "hata-rural": 4,
+    "3gpp-suburban": 5,
+    "3gpp-urban": 6,
+}
+
+
+PATH_LOSS_MODEL_IDS = frozenset(PATH_LOSS_MODELS.values())
+
+
+def path_loss_model_id(model):
+    """The integer for a model named or given as an int. Raises rather than falling back."""
+    if isinstance(model, int) and not isinstance(model, bool):
+        if model not in PATH_LOSS_MODEL_IDS:
+            raise ValueError(f"unsupported path loss model: {model}")
+        return model
+    try:
+        return PATH_LOSS_MODELS[model]
+    except KeyError:
+        known = ", ".join(PATH_LOSS_MODELS)
+        raise ValueError(f"unknown path loss model {model!r}; known: {known}") from None
+
+
+def path_loss_model_name(model_id):
+    """The name for an integer, so a report can record which model produced it."""
+    for name, value in PATH_LOSS_MODELS.items():
+        if value == model_id:
+            return name
+    raise ValueError(f"unsupported path loss model: {model_id}")
+
+
 def estimate_path_loss(conf, dist, freq, txZ=None, rxZ=None, model=None):
     """Path loss in dB, over metres and MHz, by one of the models in docs/radio_model.md.
 
-    `model` is an integer in [0, 6]; heights and model default to the config's.
+    `model` is a name in PATH_LOSS_MODELS or its integer; heights and model default to the config's.
     """
     # Two nodes can land on one point, and log(0) is not a path loss. A preset can raise
     # the floor further as a near-field calibration - see docs/configuration.md.
@@ -348,6 +385,8 @@ def estimate_path_loss(conf, dist, freq, txZ=None, rxZ=None, model=None):
         rxZ = conf.HM
     if model is None:
         model = conf.MODEL
+    if not isinstance(model, int) or isinstance(model, bool):
+        model = path_loss_model_id(model)
 
     # Log-Distance model
     if model == 0:

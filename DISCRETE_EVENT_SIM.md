@@ -15,6 +15,7 @@ firmware, and a result is only about the version the part that produced it was w
 | `interactiveSim` daemon | **meshtasticd 2.7.26** | pinned in `lib/interactive.py`, recorded per run in `out/versions.yaml`. 2.8 has no published release image |
 | `requirements.txt` `meshtastic~=2.6.1` | the **Python client**, not firmware | drives `interactiveSim` and the nodedb reader |
 | `lib/dcr.py`, `lib/dtp.py` | **no firmware** | dynamic coding rate and dynamic TX power are proposals; no release has either, and both are off by default |
+| `sfpp` proposal flags | **no firmware** | `sfpp/mesh.py` `PROPOSALS` names the five, each with why it is one. A run with any engaged prints a banner and lists them under `proposals` in the report |
 
 The two simulators therefore answer different questions: the discrete-event model is 2.8 radio
 behaviour, and an interactive run is a real 2.7.26 daemon.
