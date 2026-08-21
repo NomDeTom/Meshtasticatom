@@ -781,10 +781,21 @@ class Config:
         #####################################################
         ####### ASYMMETRIC LINK SIMULATION VARIABLES ########
         #####################################################
-        # A random offset per direction, so A hearing B does not imply B hearing A.
+        # Shadowing on the path, reciprocal because the channel is, plus a per-node radio offset
+        # per direction, which is where real link asymmetry comes from. A hearing B still does not
+        # imply B hearing A, but for the reason it does in the field.
         self.MODEL_ASYMMETRIC_LINKS = True
-        self.MODEL_ASYMMETRIC_LINKS_MEAN = 0
-        self.MODEL_ASYMMETRIC_LINKS_STDDEV = 2
+        self.MODEL_SHADOWING_MEAN = 0
+        # Measured log-normal shadowing in outdoor UHF links runs 6-10 dB. This was 2 dB applied
+        # per direction, which made the mesh graph a near-perfect disc graph: the phenomena that
+        # depend on connectivity being lucky - one long link holding two clusters together, an
+        # isolated pocket, a route that works on Tuesday and not Wednesday - were absent by
+        # construction, and every reach distribution came out narrower than the real thing. A
+        # literature default, not a measurement of anywhere.
+        self.MODEL_SHADOWING_STDDEV = 6
+        # Transmit power tolerance, antenna variation and receiver noise figure, per node per
+        # direction.
+        self.MODEL_RADIO_ASYMMETRY_STDDEV = 2
 
         #################################################
         ####### MOVING NODE SIMULATION VARIABLES ########

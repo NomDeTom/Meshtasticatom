@@ -47,6 +47,24 @@ HISTORY = [
         "retransmission timing and channel utilisation, and no run in the archive was measured "
         "with the corrected figures.",
     ),
+    (
+        "1.3.0",
+        "The vendored physics review, which this transport calls for every link. Terrain "
+        "diffraction added TERRAIN_FRESNEL_CLEARANCE into the obstruction height and then computed "
+        "the knife-edge parameter from it, offsetting v by a constant 0.849 - a grazing path cost "
+        "12.91 dB against a true 6.03, and the loss stepped from 0 to 6.03 dB across the clearance "
+        "threshold. The clutter model charged its cheapest rate for any class it did not recognise, "
+        "resolved a 500 m cell by a fixed order so one pond made a city block read as water, and "
+        "applied a 4x coastal discount on a test that `open` - the exporter's default for an "
+        "unmapped cell - satisfied on a quarter of all pairs. Link asymmetry was one antisymmetric "
+        "draw with no shadowing at all, so link existence was a near-deterministic function of "
+        "geometry; shadowing is now a reciprocal 6 dB term on the path, with radio asymmetry kept "
+        "separate at 2 dB. The fitted link calibration is now refused beyond its own observed "
+        "envelope in the vendored budget as well as here.",
+        "INVALIDATES every earlier result over a scenario with terrain or clutter, which is every "
+        "matrix and design cell: Batumi's calibrated link count moves 1704 -> 3072 on the terrain "
+        "correction alone. Flat generated meshes move too, through the shadowing term.",
+    ),
 ]
 
 SIM_VERSION = HISTORY[-1][0]

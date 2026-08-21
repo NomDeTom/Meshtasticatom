@@ -2110,6 +2110,7 @@ class Mesh:
         self.ducting = ducting
         # Drawn on the first _build_links and kept, so a rebuild is deterministic. See _build_links.
         self._skew = None
+        self._shadow = None
         self._deaf_until = [0.0] * len(nodes)
         self._deaf_checked = [0.0] * len(nodes)
         self.now = 0.0
@@ -2254,15 +2255,26 @@ class Mesh:
 
         # Drawn ONCE for the life of the mesh, so a rebuild moves nothing it was not asked to
         # move and advances no shared stream. TRANSPORT.md.
+        #
+        # Two terms, because they are two different physical things. `_shadow` is shadowing on the
+        # path: reciprocal, because the channel between two antennas is the same channel either
+        # way, so it is drawn per unordered pair and added to both directions. `_skew` is radio
+        # asymmetry - transmit power tolerance, antenna variation, receiver noise figure - which is
+        # antisymmetric, one radio's advantage being the other's disadvantage.
         if self._skew is None:
             self._skew = [[0.0] * n for _ in range(n)]
+            self._shadow = [[0.0] * n for _ in range(n)]
             if conf.MODEL_ASYMMETRIC_LINKS:
                 for i in range(n):
                     for j in range(i + 1, n):
                         self._skew[i][j] = self.rng.gauss(
-                            conf.MODEL_ASYMMETRIC_LINKS_MEAN,
-                            conf.MODEL_ASYMMETRIC_LINKS_STDDEV,
+                            0.0, conf.MODEL_RADIO_ASYMMETRY_STDDEV
                         )
+                        shadow = self.rng.gauss(
+                            conf.MODEL_SHADOWING_MEAN, conf.MODEL_SHADOWING_STDDEV
+                        )
+                        self._shadow[i][j] = shadow
+                        self._shadow[j][i] = shadow
 
         # Between antennas, not between map pins: identical to the flat model without terrain,
         # and with it a ridge makes two nodes further apart than the map says. TRANSPORT.md.
@@ -2310,6 +2322,8 @@ class Mesh:
                 # i transmitting and j receiving, so i's transmit gain and j's receive gain. The
                 # per-pair skew on top is the link's own asymmetry, drawn once above and reused.
                 skew = self._skew[i][j]
+                # Shadowing lowers the received level, so it subtracts from the budget.
+                shadow = self._shadow[i][j]
                 in_envelope = calibration_max is None or d <= calibration_max
                 if calibrated and not in_envelope:
                     self.loss_terms["beyond_calibration"] += 1
@@ -2323,6 +2337,7 @@ class Mesh:
                             _CalNode(points[j], conf.GL + self.rx_gain[j], heights[j]),
                         ).rssi_dbm
                         + skew
+                        - shadow
                     )
                     self.rssi[j][i] = (
                         calculate_link_budget(
@@ -2331,10 +2346,11 @@ class Mesh:
                             _CalNode(points[i], conf.GL + self.rx_gain[i], heights[i]),
                         ).rssi_dbm
                         - skew
+                        - shadow
                     )
                 else:
-                    self.rssi[i][j] = base + self.tx_gain[i] + self.rx_gain[j] + skew
-                    self.rssi[j][i] = base + self.tx_gain[j] + self.rx_gain[i] - skew
+                    self.rssi[i][j] = base + self.tx_gain[i] + self.rx_gain[j] + skew - shadow
+                    self.rssi[j][i] = base + self.tx_gain[j] + self.rx_gain[i] - skew - shadow
 
         # The widest lift any configured duct can produce, so a delivery filters a candidate set
         # rather than scanning every receiver per transmission.

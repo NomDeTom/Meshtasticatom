@@ -218,7 +218,14 @@ for rt_i, routerType in enumerate(routerTypes):
             routerTypeConf.NR_NODES = nrNodes
             routerTypeConf.update_router_dependencies()
 
-            effectiveSeed = rt_i * 10000 + rep
+            # The repetition, not the repetition offset by the router-type index. Positions were
+            # already shared for an apples-to-apples comparison, but everything else the seed
+            # decides was not: setup_asymmetric_links draws from Random(conf.SEED), so router type
+            # 0 got the shadowing of seeds 0..R-1 and router type 1 got that of 10000..10000+R-1.
+            # A shadowing shuffle flips every link within its own standard deviation of
+            # sensitivity, so the two router types were compared on the same node coordinates and a
+            # different graph, with only the coordinates recorded as controlled.
+            effectiveSeed = rep
             routerTypeConf.SEED = effectiveSeed
             random.seed(effectiveSeed)
 

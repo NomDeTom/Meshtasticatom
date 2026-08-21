@@ -197,8 +197,13 @@ class MeshNode:
         self.nodeid = self.node_conf.node_id
 
         # set up internal RNGs
-        self.moveRng = random.Random(self.nodeid)
-        self.nodeRng = random.Random(self.nodeid)
+        # Each stream is seeded off the run's seed *and* the node id, so a seed sweep resamples
+        # what a node does rather than replaying one realisation of it. These were
+        # random.Random(self.nodeid): the mobility assignment - which nodes move, whether they have
+        # GPS, which of the three speeds they draw, and every step of the walk - was byte-identical
+        # at every seed, and so was each node's sequence of message gaps.
+        self.moveRng = random.Random(f"{self.conf.SEED}:{self.nodeid}:move")
+        self.nodeRng = random.Random(f"{self.conf.SEED}:{self.nodeid}:traffic")
         self.rebroadcastRng = random.Random(f"{self.conf.SEED}:{self.nodeid}:rebroadcast")
         # This node's own external channel occupancy, drawn once for the run: interference is local,
         # and the noise at a receiver is a different condition from the noise at a transmitter.
