@@ -1,7 +1,8 @@
 # Twenty-five ways this simulator produced a confident wrong number
 
-Companion to [README.md](README.md), which is the operating manual. This is the other half: not how
-to run the thing, but how it has lied. All twenty-five are fixed. They are written down because the
+Companion to [README.md](README.md), which is the operating manual, and to
+[MECHANICS.md](MECHANICS.md), which is how the thing works. This is the other half: not how to run
+it, but how it has lied. All twenty-five are fixed. They are written down because the
 **shapes** recur, and because someone extending this tree can assert against them rather than
 rediscover them one at a time.
 

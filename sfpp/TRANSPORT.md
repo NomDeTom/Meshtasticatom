@@ -1,8 +1,9 @@
 # The transport
 
-What `sfpp/mesh.py` models and where each rule comes from. [README.md](README.md) is the operating
-manual, [MODEL.md](MODEL.md) the arithmetic, [TRAPS.md](TRAPS.md) the defects; this is the firmware
-behaviour the simulation reproduces.
+What `sfpp/mesh.py` models and where each rule comes from. [MECHANICS.md](MECHANICS.md) is the
+mechanism from first principles, [README.md](README.md) the operating manual,
+[MODEL.md](MODEL.md) the arithmetic, [TRAPS.md](TRAPS.md) the defects; this is the firmware
+behaviour the simulation reproduces, rule by rule.
 
 Everything here is read off the firmware in this tree unless a release is named. `VERSIONS` runs
 2.4 to 2.8, each profile carrying the rules of that series' **final** release - 2.4 = v2.4.3,

@@ -2772,8 +2772,13 @@ class Mesh:
             yield t
 
     def _channel_busy(self, node):
-        """CAD: is anything audible at this node on the air right now?"""
-        threshold = _phy().effective_cad_threshold(self.conf) - self.lift_db(self.now)
+        """CAD: is anything audible at this node on the air right now?
+
+        Judged against the band this node is in *now*, the same threshold `_deliver` charges its
+        channel-busy time against. Reading the median here while reception read the band would let a
+        node hear a channel as clear and then fail to decode what was on it.
+        """
+        threshold = self._cad_floor_at(node, self.now, self.now) - self.lift_db(self.now)
         for t in self._recent(self.now - self.max_airtime_ms):
             if t.end <= self.now:
                 continue

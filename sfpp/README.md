@@ -9,10 +9,14 @@ thing.
 
 ---
 
-The companion documents: [MODEL.md](MODEL.md) for the arithmetic and the campaign's own
-definitions, [TRANSPORT.md](TRANSPORT.md) for the firmware behaviour the transport
-reproduces, and [TRAPS.md](TRAPS.md) for the ways this tree has produced a confident wrong
-number.
+The companion documents: [MECHANICS.md](MECHANICS.md) for how the simulator works from first
+principles - nodes, the link matrix, the event loop, collisions and where they cannot happen, and
+every firmware-authentic mechanism with the release it is pinned to; [MODEL.md](MODEL.md) for the
+arithmetic and the campaign's own definitions; [TRANSPORT.md](TRANSPORT.md) for the firmware
+behaviour the transport reproduces; and [TRAPS.md](TRAPS.md) for the ways this tree has produced a
+confident wrong number.
+
+**Start with MECHANICS.md** if you are reading a result and are not sure what produced it.
 
 ## 1. What it is, and what it is not
 

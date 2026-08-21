@@ -1,8 +1,9 @@
 # The model behind the numbers
 
-Derivations and mechanisms the code assumes. [README.md](README.md) is the operating manual and
+Derivations and mechanisms the code assumes. [MECHANICS.md](MECHANICS.md) is how the simulator
+works from first principles, [README.md](README.md) is the operating manual, and
 [TRAPS.md](TRAPS.md) is the list of ways this tree has produced a confident wrong number; this is
-the third: why the arithmetic is what it is.
+the fourth: why the arithmetic is what it is.
 
 ## Airtime
 

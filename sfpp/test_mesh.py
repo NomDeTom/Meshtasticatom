@@ -3097,3 +3097,113 @@ class BlockDescriptions(unittest.TestCase):
                 text, seen, f"{name} and {seen.get(text)} share an explanation"
             )
             seen[text] = name
+
+
+class MechanicsDocument(unittest.TestCase):
+    """MECHANICS.md states constants and firmware pins. A figure a reader trusts has to be checkable.
+
+    Only the values are checked, not the prose: a doc that names 240 slots or a 6 dB capture margin
+    is making a claim about this code, and the claim is what rots.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = (pathlib.Path(__file__).parent / "MECHANICS.md").read_text(
+            encoding="utf-8"
+        )
+
+    def test_every_constant_it_quotes_is_the_one_in_the_code(self):
+        for value, name in (
+            (M.CAPTURE_DB, "6 dB"),
+            (M.QUEUE_DEPTH, "16"),
+            (M.MAX_PAYLOAD_BYTES, "237"),
+            (M.MAX_RELAYERS, "3"),
+            (M.PROCESSING_TIME_MSEC, "4500 ms"),
+            (M.WARM_META_BITS, "7"),
+            (M.NUM_RELIABLE_RETX, "3"),
+            (M.NUM_RELIABLE_UNICAST_ATTEMPTS, "5"),
+            (M.HopScaling.CAPACITY, "128"),
+            (M.HopScaling.HOURS_TRACKED, "13"),
+            (M.ROUTE_HEALTH_MAX, "32"),
+            (M.ROUTE_FAILURE_THRESHOLD, "3"),
+        ):
+            with self.subTest(value=value):
+                self.assertIn(name, self.text)
+        # The two that are arithmetic rather than a literal.
+        self.assertEqual(M.WARM_TIME_QUANTUM_MS, 128_000.0)
+        self.assertIn("128-second", self.text)
+        self.assertEqual(M.packet_history_max(M.MAX_NUM_NODES), 240)
+        self.assertIn("240", self.text)
+        self.assertEqual(M.ROUTE_TTL_MSEC / 60_000.0, 30)
+        self.assertIn("30 minutes", self.text)
+        self.assertEqual(M.NUM_ONLINE_SECS / 3600, 2)
+        self.assertEqual(M.NEXTHOP_NEIGHBOR_FRESH_MSEC / 3_600_000.0, 2)
+
+    def test_the_platform_tables_it_prints_are_the_tables(self):
+        self.assertEqual(M.PLATFORM_HOT_STORE["stm32wl"], 10)
+        self.assertEqual(M.PLATFORM_HOT_STORE["nrf52840"], 120)
+        self.assertEqual(M.PLATFORM_HOT_STORE["esp32s3_16mb"], 250)
+        self.assertEqual(M.PLATFORM_WARM_STORE["stm32wl"], 0)
+        self.assertEqual(M.PLATFORM_WARM_STORE["nrf52840"], 100)
+        self.assertEqual(M.PLATFORM_WARM_STORE["esp32s3_16mb"], 2000)
+
+    def test_the_core_portnums_it_lists_are_the_set(self):
+        self.assertEqual(M.CORE_PORTNUMS, frozenset({1, 3, 4, 5, 67, 70}))
+        self.assertIn("1, 3, 4, 5, 67 and 70", self.text)
+
+    def test_it_names_the_release_that_owns_each_mechanism_it_pins(self):
+        """A section headed `2.8` has to be a mechanism FEATURE_TAG agrees starts at 2.8."""
+        for feature, series in (
+            ("warm_store", "2.8"),
+            ("signing", "2.8"),
+            ("hop_scaling", "2.8"),
+            ("opaque_relay", "2.8"),
+            ("route_cache", "2.8"),
+            ("next_hop_routing", "2.6"),
+            ("next_hop_learning", "2.7"),
+            ("preserve_hops", "2.7"),
+            ("role_aware_cancel", "2.7"),
+            ("late_window", "2.5"),
+            ("core_portnums_mode", "2.5"),
+        ):
+            with self.subTest(feature=feature):
+                self.assertEqual(M.FEATURE_TAG[feature][0], series)
+
+    def test_the_role_that_skips_the_offset_in_2_8_is_router_alone(self):
+        """MECHANICS.md 2.3 says so, and it is the largest behaviour difference between releases."""
+        self.assertEqual(M.Profile("2.8").early_rebroadcast, "router")
+        self.assertEqual(M.Profile("2.7").early_rebroadcast, "router_repeater_favourite_base")
+        self.assertEqual(M.Profile("2.6").early_rebroadcast, "router_repeater")
+
+    def test_the_unicast_budget_it_quotes_is_only_2_8s(self):
+        self.assertEqual(M.Profile("2.8").unicast_attempts, M.NUM_RELIABLE_UNICAST_ATTEMPTS)
+        self.assertEqual(M.Profile("2.7").unicast_attempts, M.NUM_RELIABLE_RETX)
+
+    def test_the_congestion_models_it_tabulates_are_the_ones_selected(self):
+        self.assertEqual(M.Profile("2.4").congestion_model, "flat")
+        self.assertEqual(M.Profile("2.6").congestion_model, "preset")
+        self.assertEqual(M.Profile("2.8").congestion_model, "sf_bw")
+
+    def test_the_batumi_envelope_it_quotes_is_derived_not_declared(self):
+        from lib.presets import preset_calibration_envelope_m
+
+        self.assertEqual(round(preset_calibration_envelope_m("batumi")), 23225)
+        self.assertIn("23,225 m", self.text)
+
+    def test_a_collision_it_says_is_impossible_is_impossible(self):
+        """The exclusions in 6.5 are the ones the code actually makes."""
+        mesh = small_mesh(nodes=8, seed=5, area=3000.0)
+        tx = M.Transmission(
+            M.Packet(1, 0, 1, 40), 0, mesh.now, mesh.now + 100.0, M.CLIENT
+        )
+        other = M.Transmission(
+            M.Packet(2, 1, 1, 40), 1, mesh.now, mesh.now + 100.0, M.CLIENT
+        )
+        floor = mesh._cad_floor_at(1, tx.start, tx.end)
+        # A transmission from the receiver itself is never an interferer: the half-duplex test has
+        # already removed that reception, and capture must not charge it twice.
+        self.assertTrue(
+            mesh._survives_capture(tx, 1, mesh.rssi[0][1], [other], floor)
+        )
+        # Nothing audible at all is never a collision.
+        self.assertTrue(mesh._survives_capture(tx, 1, mesh.rssi[0][1], [], floor))
