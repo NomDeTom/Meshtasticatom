@@ -1431,12 +1431,10 @@ class Campaign:
         self.admin_attempts = {h: 0 for h in range(1, max_hops + 1)}
         self.admin_delivered = {h: 0 for h in range(1, max_hops + 1)}
         self.admin_completed = {h: 0 for h in range(1, max_hops + 1)}
-        self.admin_no_key = {h: 0 for h in range(1, max_hops + 1)}
         # Why the session ended the way it did, counted once per session on its FINAL attempt. A
         # session that failed twice and worked on the third is a success, not two failures.
         self.admin_failure = {
-            h: {"no_key": 0, "request_lost": 0, "reply_lost": 0}
-            for h in range(1, max_hops + 1)
+            h: {"request_lost": 0, "reply_lost": 0} for h in range(1, max_hops + 1)
         }
         # Which attempt carried it. All in slot 1 means retries are dead weight; a tail means they
         # are doing the work, and that is the argument for the operator pressing it again.
@@ -1497,13 +1495,13 @@ class Campaign:
             destination=target,
             want_ack=True,
             pki=True,
-            assume_key=bool(getattr(self.opts, "admin_preloaded_keys", True)),
+            # Admin authorisation is config.security.admin_key[3] in SecurityConfig, separate
+            # from NodeDB, so an authorised operator's key is never the thing in question here.
+            assume_key=True,
         )
         if request is None:
-            # Only reachable with --no-admin-preloaded-keys: the packet was never composed, so
-            # this is a different failure from one the mesh dropped, and no retry fixes it.
-            self.admin_no_key[hops] += 1
-            self.admin_failure[hops]["no_key"] += 1
+            # Only an offline source reaches this, which is the operator's own radio and not a hop.
+            retry_or_fail("request_lost")
             return
         request_id = request.id
         started = self.mesh.now
@@ -1522,9 +1520,12 @@ class Campaign:
                 want_ack=True,
                 pki=True,
                 request_id=request_id,
-                assume_key=bool(getattr(self.opts, "admin_preloaded_keys", True)),
+                # The target has just decrypted a PKI packet from the source, so it holds that key
+                # whichever tier answered, and an admin response carries no passkey to check.
+                assume_key=True,
             )
             if reply is None:
+                # Only an offline target reaches this now, which is a lost reply and not a key.
                 retry_or_fail("reply_lost")
                 return
             reply_id = reply.id
@@ -1572,13 +1573,9 @@ class Campaign:
                 "completed_on_attempt": {
                     str(k): v for k, v in sorted(self.admin_on_attempt[hops].items())
                 },
-                # Once per failed session, on its last attempt. `no_key` means the packet was
-                # never composed, so no amount of retrying would have helped.
+                # Once per failed session, on its last attempt, by the leg that did not land.
                 "failed_because": dict(reasons),
                 "failed": sum(reasons.values()),
-                "keys_preloaded": bool(
-                    getattr(self.opts, "admin_preloaded_keys", True)
-                ),
             }
         return out
 
@@ -2679,15 +2676,6 @@ def build_parser():
         help="how many times an operator presses a configuration change before giving up. Not a "
         "firmware constant - the firmware has no retry loop here - so it is an assumption about the "
         "person. Each attempt gets the firmware's own 300 s outstanding-request window",
-    )
-    ap.add_argument(
-        "--no-admin-preloaded-keys",
-        dest="admin_preloaded_keys",
-        action="store_false",
-        help="gate admin sessions on the hot store's PKI keys. The default does not, and that is "
-        "firmware-authentic: admin authorisation is config.security.admin_key[3] in SecurityConfig, "
-        "separate from NodeDB and unaffected by its eviction, so a session's outcome is the session "
-        "timing rather than key availability. Pass this to measure the eviction question instead",
     )
     ap.add_argument(
         "--dm-per-hour",

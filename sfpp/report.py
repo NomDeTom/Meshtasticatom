@@ -198,9 +198,6 @@ def report_one(r, indent=""):
                 + (f" · needed a retry {retried}" if retried else "")
                 + (f" · failed: {why}" if why else "")
             )
-        first = admin.get(sorted(admin, key=int)[0]) if admin else None
-        if first and not first.get("keys_preloaded"):
-            a(f"{indent}  ADMIN assumption    keys NOT preloaded - no_key failures are reachable")
 
     s = r.get("sfpp")
     if s:

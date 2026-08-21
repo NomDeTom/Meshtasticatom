@@ -610,20 +610,24 @@ leg failing means the session failed, and a mesh whose text reach looks healthy 
 where nothing beyond two hops can be configured.
 
 Modelled as a PKI-encrypted DM with `want_ack` to a node at a chosen hop distance, and a reply on
-the same terms. PKI is what makes it different from a text: no key for the target means the packet
-is never composed at all, which is a real failure mode of an evicted peer and the one an operator
-hits first on a large mesh. That path is only reachable with `--no-admin-preloaded-keys`, and it is
-not a failure a retry can fix.
+the same terms. Neither leg is gated on a key store: the operator is authorised, which is
+SecurityConfig's business and not NodeDB's, and the target has just decrypted a packet from the
+source so it holds that key however far down the tiers it sat. An evicted peer would not lose it
+either - the warm tier keeps a key when the hot store drops the entry, in the firmware
+(`Router.cpp:1265`) and here alike. So a session fails on a leg or not at all.
 
 A **session** is one thing the operator wanted; an **attempt** is one request on the air. Rates are
 per session, because a change that took on the third press is a change that took;
 `attempts_per_session` is how much pressing that cost, and failure is attributed once per session on
 its last attempt, by cause.
 
-*Simplification:* the firmware's admin flow also carries a session key with its own expiry and a
-nonce exchange, and its multi-packet config payloads are larger than the single request modelled
-here. This measures whether the round trip is deliverable, not whether the whole session protocol
-completes.
+*Simplification:* one round trip is a read. A change is at least two, because a state-changing
+AdminMessage from a remote sender is refused without a valid `session_passkey`
+(`AdminModule.cpp:232`) and a passkey is only ever issued in a response: the operator fetches one
+with a get and then sends the set, inside the same 300 s the response leg has already been spending.
+Config payloads are the smaller simplification - one `set_config` fits a frame, while reading every
+channel is a round trip per index. This measures whether a round trip is deliverable, not whether
+the whole session protocol completes.
 
 ### Sampling
 

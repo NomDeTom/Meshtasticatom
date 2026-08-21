@@ -275,7 +275,6 @@ block sweep for mechanism and the cross for deployment advice.
 | `--admin-probes-per-hour` | 0.0             | attempt this many admin sessions per hour, spread over 1..N hops of separation. A session is a PKI DM out and a reply back, and **both legs must land** |
 | `--admin-max-hops`       | 5                | the largest separation admin sessions are attempted at |
 | `--admin-attempts`       | 3                | how many times an operator presses a change before giving up. **Not a firmware constant** - the firmware has no retry loop here - so it is an assumption about the person. Each attempt gets the firmware's own 300 s outstanding-request window (`AdminModule.h:109`) |
-| `--no-admin-preloaded-keys` | on | gate admin sessions on the hot store's PKI keys. The default does not, and that is **firmware-authentic**: admin authorisation is `config.security.admin_key[3]` in SecurityConfig (`AdminModule.cpp:184`), separate persistent config that NodeDB eviction cannot touch - so a session's outcome is its timing, not key availability. Pass this to measure the eviction question instead |
 | `--favourite-routers`    | off              | router-like nodes favourite each other, so relays between them keep their hop limit                                   |
 
 ### 4.2 Hop limits
@@ -524,31 +523,45 @@ Three things worth knowing before using these:
 ### 5.3 Can an operator actually administer this mesh?
 
 A configuration change is not a broadcast some nodes may miss - it is a round trip that has to
-complete. `--admin-probes-per-hour` sends a PKI-encrypted AdminMessage to a node at a chosen hop
-distance and has the target answer; **either leg failing means the session failed**. At 60 nodes,
-8 h, seed 5:
+complete. `--admin-probes-per-hour` sends a PKI-encrypted AdminMessage with `want_ack` to a node at
+a chosen hop distance and has the target answer; **either leg failing means the session failed**,
+and both have to land inside the firmware's 300 s outstanding-request window (`AdminModule.h:109`).
+A session is one thing the operator wanted, so a change pressed twice is one session and not two:
+the rates below are per session, over up to `--admin-attempts` presses. At 60 nodes, 8 h, seed 5,
+40 probes/hour:
 
-| hops | tried | no key | addressable | completed | overall | given key |
+| hops | sessions | attempts/session | took on the 1st press | completed | success | failed |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 54 | 21 | 33 | 17 | 31% | **52%** |
-| 2 | 65 | 31 | 34 | 13 | 20% | 38% |
-| 3 | 67 | 34 | 33 | 4 | 6% | 12% |
-| 4 | 71 | 40 | 31 | 8 | 11% | 26% |
-| 5 | 52 | 26 | 26 | 4 | 8% | 15% |
+| 1 | 78 | 1.06 | 74 | 78 | **100%** | - |
+| 2 | 89 | 1.19 | 75 | 87 | 98% | 2 request lost |
+| 3 | 74 | 1.32 | 53 | 72 | 97% | 2 request lost |
+| 4 | 56 | **1.70** | 31 | 46 | **82%** | 7 request, 3 reply |
+| 5 | 31 | 1.48 | 20 | 29 | 94% | 1 request, 1 reply |
 
-Two failures, and they want reading apart. **Roughly half of all attempts are never composed at
-all** - PKI needs the target's public key, and a node the source has never heard from, or has
-evicted, cannot be addressed however well connected it is. That is `no_key_for_target`, and it gets
-worse as the mesh outgrows the hot store. `success_given_key` removes it and leaves what the mesh's
-reach alone costs: even one hop away and holding the key, only about half of round trips complete.
+**What distance costs here is repetition, not failure.** Sessions still complete at four hops, but
+only 31 of 56 took on the first press and the mesh carried 95 requests for those 56 sessions. That
+is the operator's experience: the change takes, after being pressed again. Five hops reads better
+than four on 31 sessions - a sample that small moves several points on one outcome, and the
+`--admin-max-hops` tail always has the fewest, because few pairs sit that far apart.
 
-The probe picks targets by *topological* distance, not by what the source has heard of, so it asks
-nodes to administer strangers. That is deliberate - it is the case an operator hits - but it means
-`success_rate` is a floor and `success_given_key` the more comparable number across arms.
+**Key availability is not what is measured, and that is deliberate.** Admin authorisation is
+`config.security.admin_key[3]` in SecurityConfig (`AdminModule.cpp:184`), which NodeDB eviction
+cannot touch, so an authorised operator's key is never the thing in question: both legs compose and
+the outcome is timing. Nor would eviction take a key away if it were - a peer dropped from the hot
+store keeps its key in the warm tier, in the firmware (`Router.cpp:1265`) and here alike. The probe
+does pick targets by *topological* distance rather than by what the source has heard of, so it asks
+nodes to administer strangers; that is the case an operator hits, and it costs reach rather than
+addressability.
 
-**SIMPLIFICATION:** the firmware's admin flow also carries a session key with its own expiry and a
-nonce exchange, and real config payloads span several packets. This measures whether the round trip
-is deliverable, not whether the whole session protocol completes.
+**SIMPLIFICATION: this is one round trip, which is a read.** A *change* is at least two. A
+state-changing AdminMessage from a remote sender is refused without a valid `session_passkey`
+(`AdminModule.cpp:232`), and a passkey is only ever issued in a response, so the operator fetches
+one with a get and then sends the set. The 300 s is that passkey's own lifetime, counted from when
+the target issued it, and the target rotates it once it is older than 150 s - one global key per
+node, so another operator's request can invalidate a set already in flight. Read a success rate
+here as the deliverability of one round trip; a change costs roughly its square. Config payloads
+are the smaller simplification: one `set_config` fits a frame, while reading every channel is a
+round trip per index.
 
 ### 5.4 Presets past the shipped set
 
@@ -902,7 +915,7 @@ diameter column reads fragmented rather than a number.
 | `designated`   | the archive-sited nodes' own reception, with the archive off or on, plus held and the reconciled gain                                                                                                                 |
 | `observers`    | per-observer direct against overheard, and replay placement error                                                                                                                                                     |
 | `sfpp`         | held, union, adverts, objects moved, bytes and airtime by message type, decode failures, misdecodes, escalations, bystander pickups, **`silent_losses`**, the at-rest audit, drift telemetry, and the stretch metrics |
-| `admin`        | per hop of separation, and **per session rather than per request** - a change that took on the third press is a change that took: `sessions`, `requests_sent`, `attempts_per_session`, `request_delivered`, `session_completed`, `success_rate`, `completed_on_attempt` (everything in `1` means the retries are dead weight), and **`failed_because`** splitting `no_key` / `request_lost` / `reply_lost`, counted once per failed session on its final attempt. `keys_preloaded` records the assumption. Present only with `--admin-probes-per-hour` |
+| `admin`        | per hop of separation, and **per session rather than per request** - a change that took on the third press is a change that took: `sessions`, `requests_sent`, `attempts_per_session`, `request_delivered`, `session_completed`, `success_rate`, `completed_on_attempt` (everything in `1` means the retries are dead weight), and **`failed_because`** splitting `request_lost` / `reply_lost`, counted once per failed session on its final attempt. Present only with `--admin-probes-per-hour` |
 | `dm`           | direct messages, judged **at the node addressed** - `composed`, `delivered`, `reception`, `lost`, plus `no_key` and `no_addressable_peer` (nobody in the node list yet) and `reception_of_attempted` over all three outcomes. `hops` and `latency_ms` distributions at the recipient, and the population - `eligible_nodes` / `originating_nodes` / `emitting_nodes`. Present only with `--dm-per-hour` |
 | `models`       | the resolved model stack, by name: `path_loss` (`--path-loss-model`), `noise` (`--noise-model`), `payload_loss` (the PER curve's own name, null when off), and `link_calibration` / `capture_collision` / `asymmetric_links`. Every one of these has a weaker default, and a run that does not name them cannot be compared with one measured under different physics |
 | `proposals`    | behaviour **no release ships**, engaged on this run. Empty on an unmodified profile. `sfpp/mesh.py` `PROPOSALS` is the declared set and states why each is one; a non-empty list also prints a banner before the summary, because a proposal read as firmware is the misreading this exists to prevent |

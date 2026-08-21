@@ -2601,6 +2601,32 @@ print(",".join(failed))
             sum(v["originated"] for k, v in report["by_class"].items() if k != "all"),
         )
 
+    def test_an_admin_session_can_only_fail_on_a_leg(self):
+        """README §5.3 quoted a no-key table no arm could produce, and the arm has since gone.
+
+        Admin authorisation is SecurityConfig's, not NodeDB's, so neither leg is gated on a key
+        store and the only way to fail is a leg that did not land inside the window.
+        """
+        from .campaign import build_parser, run_once
+
+        opts = build_parser().parse_args(
+            ["--hours", "2", "--nodes", "24", "--no-charts", "--protocol", "none",
+             "--admin-probes-per-hour", "60"]
+        )
+        admin = run_once(opts, seed=5)["admin"]
+        self.assertTrue(admin, "probes were asked for, so the admin block must be there")
+        for hops, row in admin.items():
+            self.assertEqual(
+                sorted(row["failed_because"]),
+                ["reply_lost", "request_lost"],
+                f"{hops} hops: a failure cause other than a leg",
+            )
+            self.assertEqual(
+                row["session_completed"] + row["failed"],
+                row["sessions"],
+                f"{hops} hops: sessions must be completed or attributed, never neither",
+            )
+
     def test_every_command_line_flag_is_documented(self):
         """The README is the operating manual, so a flag it does not name cannot be found.
 
