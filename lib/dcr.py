@@ -58,15 +58,13 @@ def _node_queue_depth(node) -> int:
 
 
 def _current_channel_utilization_percent(node) -> float:
-    """Return rolling channel utilization including the active 10-second bucket."""
-    completed_util = node.channel_utilization_percent()
-    current_bucket_airtime = max(0.0, node.txAirUtilization - node.prevTxAirUtilization)
-    current_bucket_util = (
-        current_bucket_airtime
-        / (node.conf.CHANNEL_UTILIZATION_PERIODS * node.conf.TEN_SECONDS_INTERVAL)
-        * 100.0
-    )
-    return completed_util + current_bucket_util
+    """Return the node's rolling channel utilization.
+
+    One reader of one ring. This used to add a hand-rolled partial bucket on top of
+    channel_utilization_percent(), which already included the slot that bucket would be written to -
+    so the 60-second-old value was counted along with the current one.
+    """
+    return node.channel_utilization_percent()
 
 
 def classify_channel_pressure(node) -> tuple[str, float, int]:

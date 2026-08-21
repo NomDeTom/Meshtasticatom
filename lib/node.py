@@ -233,7 +233,6 @@ class MeshNode:
         # gives a reach figure whose denominator counts receivers the ACK never addressed.
         self.usefulAppPackets = 0
         self.txAirUtilization = 0
-        self.airUtilization = 0
         self.dcrTxByCr = {5: 0, 6: 0, 7: 0, 8: 0}
         self.dcrAirtimeByCr = {5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0}
         self.dtpTxByPower = {}
@@ -250,12 +249,24 @@ class MeshNode:
         self.lastBroadcastPosition = self.position.copy()
         self.lastBroadcastTime = 0
 
-        # track total transmit time for the last 6 buckets (each is 10s in firmware logic)
-        self.channelUtilization = [0] * self.conf.CHANNEL_UTILIZATION_PERIODS  # each entry is ms spent on air in that interval
-        self.channelUtilizationIndex = 0  # which "bucket" is current
-        self.prevTxAirUtilization = 0.0   # how much total tx air-time had been used at last sample
-
-        self.env.process(self.track_channel_utilization())
+        # AirTime's two rings, and they measure different things. channelUtilization is every
+        # millisecond of audible air over the last 60 s - ours and everyone else's, decoded or not,
+        # which is what src/airtime.h calls "% of the last 60s busy, all three types" and what the
+        # contention window is sized from. utilizationTx is our own transmissions over the last
+        # hour, which is what a duty cycle binds against. Charging own transmit time to the first
+        # ring and reading it where the firmware reads channel utilisation understated the figure by
+        # an order of magnitude: 3.8% mean where the audible air was 43%.
+        self.channelUtilization = [0.0] * self.conf.CHANNEL_UTILIZATION_PERIODS
+        self.channelUtilizationIndex = 0
+        self.channelUtilizationEpoch = 0.0
+        # A radio has one energy detector, so overlapping signals are one busy stretch. This is how
+        # far into the future the channel is already known busy; anything inside it is not charged
+        # again. Without it two overlapping receptions bill the node twice and the figure runs past
+        # 100% of wall-clock, which was measured at 117.5%.
+        self.senseUntil = 0.0
+        self.utilizationTx = [0.0] * self.conf.UTILIZATION_TX_PERIODS
+        self.utilizationTxIndex = 0
+        self.utilizationTxEpoch = 0.0
         if not self.is_repeater:  # repeaters don't generate messages themselves
             self.env.process(self.generate_message())
         self.env.process(self.receive(self.bc_pipe.get_output_conn()))
@@ -289,31 +300,79 @@ class MeshNode:
     def is_client_mute(self):
         return self.role == MESHTASTIC_ROLE.CLIENT_MUTE
 
-    def track_channel_utilization(self):
+    def _ring_add(self, ring, index, epoch, period_ms, now, ms):
+        """Add `ms` to the bucket `now` falls in, zeroing every bucket crossed since the last write.
+
+        AirTime::syncNow, as a ring indexed by uptime phase: crossing into a bucket clears it, so a
+        quiet stretch decays the window by real elapsed time rather than leaving stale airtime in it.
         """
-        Periodically compute how many seconds of airtime this node consumed
-        over the last 10-second block and store it in the ring buffer.
+        elapsed = int((now - epoch) // period_ms)
+        if elapsed > 0:
+            if elapsed >= len(ring):
+                ring = [0.0] * len(ring)
+                index = 0
+            else:
+                for _ in range(elapsed):
+                    index = (index + 1) % len(ring)
+                    ring[index] = 0.0
+            epoch += elapsed * period_ms
+        ring[index] += ms
+        return ring, index, epoch
+
+    def sense_busy(self, start, end):
+        """Charge the channel-busy time this radio could actually observe over [start, end].
+
+        The union of busy stretches, not their sum. Returns the millisecond charged.
         """
-        while True:
-            # Wait 10 seconds of simulated time
-            yield self.env.timeout(self.conf.TEN_SECONDS_INTERVAL)
+        charged = max(0.0, end - max(start, self.senseUntil))
+        if end > self.senseUntil:
+            self.senseUntil = end
+        # Unconditional, even at zero: the call is also how the ring is rolled forward, so a quiet
+        # stretch decays the window instead of leaving a stale bucket in it.
+        (
+            self.channelUtilization,
+            self.channelUtilizationIndex,
+            self.channelUtilizationEpoch,
+        ) = self._ring_add(
+            self.channelUtilization,
+            self.channelUtilizationIndex,
+            self.channelUtilizationEpoch,
+            self.conf.TEN_SECONDS_INTERVAL,
+            end,
+            charged,
+        )
+        return charged
 
-            curTotalAirtime = self.txAirUtilization  # total so far, in *milliseconds*
-            blockAirtimeMs = curTotalAirtime - self.prevTxAirUtilization
-
-            self.channelUtilization[self.channelUtilizationIndex] = blockAirtimeMs
-
-            self.prevTxAirUtilization = curTotalAirtime
-            self.channelUtilizationIndex = (self.channelUtilizationIndex + 1) % self.conf.CHANNEL_UTILIZATION_PERIODS
+    def log_tx_airtime(self, now, ms):
+        """AirTime's second ring: our own transmissions only, per minute over the last hour."""
+        (
+            self.utilizationTx,
+            self.utilizationTxIndex,
+            self.utilizationTxEpoch,
+        ) = self._ring_add(
+            self.utilizationTx,
+            self.utilizationTxIndex,
+            self.utilizationTxEpoch,
+            self.conf.ONE_MIN_INTERVAL,
+            now,
+            ms,
+        )
 
     def channel_utilization_percent(self) -> float:
+        """AirTime::channelUtilizationPercent - the share of the last 60 s the channel was busy.
+
+        Every millisecond of audible air, ours and everyone else's, decoded or not. Bounded by 100
+        because the charge is a union: this is the figure the contention window is sized from.
         """
-        Returns how much of the last 60 seconds (6 x 10s) this node spent transmitting, as a percent.
-        """
-        sumMs = sum(self.channelUtilization)
-        # 6 intervals, each 10 seconds = 60,000 ms total
-        # fraction = sum_ms / 60000, then multiply by 100 for percent
-        return (sumMs / (self.conf.CHANNEL_UTILIZATION_PERIODS * self.conf.TEN_SECONDS_INTERVAL)) * 100.0
+        self.sense_busy(self.env.now, self.env.now)  # roll the ring forward before reading it
+        window_ms = self.conf.CHANNEL_UTILIZATION_PERIODS * self.conf.TEN_SECONDS_INTERVAL
+        return (sum(self.channelUtilization) / window_ms) * 100.0
+
+    def utilization_tx_percent(self) -> float:
+        """AirTime::utilizationTXPercent - the share of the last hour we spent transmitting."""
+        self.log_tx_airtime(self.env.now, 0.0)
+        window_ms = self.conf.UTILIZATION_TX_PERIODS * self.conf.ONE_MIN_INTERVAL
+        return (sum(self.utilizationTx) / window_ms) * 100.0
 
     def move_node(self):
         while True:
@@ -563,7 +622,15 @@ class MeshNode:
                     elif collision == 0:
                         self.packetsAtN[rx_node_id].append(packet)
                 self.txAirUtilization += packet.timeOnAir
-                self.airUtilization += packet.timeOnAir
+                self.log_tx_airtime(packet.endTime, packet.timeOnAir)
+                # Every radio that could detect this transmission spends that stretch with a busy
+                # channel, whether or not it decodes the frame - energy detection does not care.
+                # Charged from here, once, rather than in each receiver's own path: a receiver below
+                # the demodulation threshold never reaches that path, and a receiver that collided
+                # reached it twice.
+                self.sense_busy(packet.startTime, packet.endTime)
+                for rx_node_id in packet.detected_node_ids:
+                    self.nodes[rx_node_id].sense_busy(packet.startTime, packet.endTime)
                 self.dcrTxByCr[packet.cr] = self.dcrTxByCr.get(packet.cr, 0) + 1
                 self.dcrAirtimeByCr[packet.cr] = self.dcrAirtimeByCr.get(packet.cr, 0.0) + packet.timeOnAir
                 self.dtpTxByPower[packet.txpow] = self.dtpTxByPower.get(packet.txpow, 0) + 1
@@ -607,7 +674,6 @@ class MeshNode:
                         self.isReceiving[self.isReceiving.index(True)] = False
                     except Exception:
                         pass
-                    self.airUtilization += p.timeOnAir
                     if p.collidedAtN[self.nodeid]:
                         logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not decode packet {packet_log_id}.")
                         continue
@@ -638,7 +704,6 @@ class MeshNode:
                     self.isReceiving[self.isReceiving.index(True)] = False
                 except Exception:
                     pass
-                self.airUtilization += p.timeOnAir
                 # begin receiving packet fine, but a collision begins before we finish receiving.
                 if p.collidedAtN[self.nodeid]:
                     logger.debug(f"{self.env.now:.3f} Node {self.nodeid} could not decode packet {packet_log_id}.")

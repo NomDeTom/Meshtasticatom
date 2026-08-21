@@ -18,12 +18,15 @@ class FakeEnv:
 
 
 class FakeNode:
-    def __init__(self, is_router=False, air_utilization=0.0):
+    def __init__(self, is_router=False, channel_util_percent=0.0):
         self.conf = Config()
         self.env = FakeEnv()
         self.nodeid = 0
         self.is_router = is_router
-        self.airUtilization = air_utilization
+        self._channel_util_percent = channel_util_percent
+
+    def channel_utilization_percent(self):
+        return self._channel_util_percent
 
 
 def slots_drawn(node, delay, offset=0.0):
@@ -66,14 +69,14 @@ class TestWeightedDelayBounds(unittest.TestCase):
 
 class TestUnweightedDelayBounds(unittest.TestCase):
     def test_an_idle_channel_draws_the_smallest_window(self):
-        node = FakeNode(air_utilization=0.0)
+        node = FakeNode(channel_util_percent=0.0)
         random.seed(3)
         slots = {slots_drawn(node, get_tx_delay_msec(node)) for _ in range(4000)}
         self.assertEqual(min(slots), 0)
         self.assertEqual(max(slots), 2**CWmin - 1)
 
     def test_a_saturated_channel_draws_the_largest(self):
-        node = FakeNode(air_utilization=FakeEnv.now)
+        node = FakeNode(channel_util_percent=100.0)
         random.seed(3)
         slots = {slots_drawn(node, get_tx_delay_msec(node)) for _ in range(20000)}
         self.assertEqual(max(slots), 2**CWmax - 1)

@@ -48,7 +48,6 @@ class FakeNode:
         self.transmitter = FakeTransmitter(queue_depth)
         self.dcrAirtimeByCr = {5: 0.0, 6: 0.0, 7: 0.0, 8: 0.0}
         self.txAirUtilization = 0.0
-        self.prevTxAirUtilization = 0.0
 
     def channel_utilization_percent(self):
         return self._util
@@ -91,14 +90,20 @@ class TestDynamicCodingRate(unittest.TestCase):
 
         self.assertEqual(decision.cr, CR_SLIM)
 
-    def test_current_bucket_airtime_contributes_to_busy_pressure(self):
+    def test_own_transmit_airtime_does_not_inflate_channel_pressure(self):
+        """Pressure comes from the one 60 s ring of audible air, not from our own transmit total.
+
+        This used to add a hand-rolled partial bucket - own transmit airtime since the last
+        sample - on top of a figure that already covered that bucket, so six seconds of our own
+        transmissions read as a busy channel on an otherwise idle one.
+        """
         node = FakeNode(util=0.0)
         node.txAirUtilization = 6000.0
 
         decision = choose_dynamic_coding_rate(node, FakePacket())
 
         self.assertEqual(decision.cr, CR_SLIM)
-        self.assertIn("channel_busy", decision.reason)
+        self.assertIn("channel_idle", decision.reason)
 
     def test_direct_origin_packet_can_stay_compact_cr(self):
         node = FakeNode(util=0.0)

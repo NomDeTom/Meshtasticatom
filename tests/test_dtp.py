@@ -54,7 +54,6 @@ class FakeNode:
         self._util = util
         self.transmitter = FakeTransmitter(queue_depth)
         self.txAirUtilization = 0.0
-        self.prevTxAirUtilization = 0.0
 
     def channel_utilization_percent(self):
         return self._util

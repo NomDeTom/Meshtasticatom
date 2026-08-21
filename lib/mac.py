@@ -47,9 +47,10 @@ def get_tx_delay_msec_weighted(node, rssi):  # from RadioInterface::getTxDelayMs
 
 
 def get_tx_delay_msec(node):  # from RadioInterface::getTxDelayMsec
-    # channelUtilizationPercent is actually computed based on the last CHANNEL_UTILIZATION_PERIODS, summing
-    # the utilization of those periods. At this pin the macro is 6, with SECONDS_PER_PERIOD 3600
-    channelUtil = node.airUtilization / node.env.now * 100
+    # AirTime::channelUtilizationPercent: the share of the last 60 s the channel was busy, all three
+    # log types. This was a lifetime mean of every sensed packet's full airtime divided by env.now -
+    # unbounded, measured at 117.5% of wall-clock, and fed straight into an exponent.
+    channelUtil = node.channel_utilization_percent()
     CWsize = int(channelUtil * (CWmax - CWmin) / 100 + CWmin)
     CW = random.randrange(0, 2 ** CWsize)
     logger.debug(f'{node.env.now:.3f} Current channel utilization is {channelUtil}, so picked {CWsize=} and {CW=}')
@@ -60,7 +61,7 @@ def get_retransmission_msec(node, packet):  # from RadioInterface::getRetransmis
     # Retransmission timeout has to follow the physical airtime of the packet
     # that was actually sent. With DCR disabled this is still the preset CR.
     packetAirtime = int(airtime(node.conf, packet.sf, packet.cr, packet.packetLen, packet.bw))
-    channelUtil = node.airUtilization / node.env.now * 100
+    channelUtil = node.channel_utilization_percent()
     CWsize = int(channelUtil * (CWmax - CWmin) / 100 + CWmin)
     return 2 * packetAirtime + (2 ** CWsize + 2 * CWmax + 2 ** (int((CWmax + CWmin) / 2))) * get_current_slot_time(node.conf) + PROCESSING_TIME_MSEC
 

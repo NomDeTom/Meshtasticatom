@@ -151,6 +151,23 @@ class SimulationResults:
         else:
             self.results["usefulness"] = np.nan
 
+        # A channel cannot be busy more than all the time. The figure that used to drive the
+        # contention window broke this at 117.5%; reporting it makes the invariant assertable.
+        chutil = sorted(n.channel_utilization_percent() for n in nodes)
+        if chutil:
+            self.results["nodeChannelUtilPercent"] = {
+                "mean": float(np.mean(chutil)),
+                "p90": chutil[min(len(chutil) - 1, int(0.9 * len(chutil)))],
+                "max": chutil[-1],
+            }
+            self.results["nodeUtilizationTxPercent"] = {
+                "mean": float(np.mean([n.utilization_tx_percent() for n in nodes])),
+                "max": max(n.utilization_tx_percent() for n in nodes),
+            }
+        else:
+            self.results["nodeChannelUtilPercent"] = {"mean": np.nan, "p90": np.nan, "max": np.nan}
+            self.results["nodeUtilizationTxPercent"] = {"mean": np.nan, "max": np.nan}
+
         self.results["delayDropped"] = sum(n.droppedByDelay for n in nodes)
         self.results["dcrTxByCr"] = {
             cr: sum(getattr(n, "dcrTxByCr", {}).get(cr, 0) for n in nodes)

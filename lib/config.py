@@ -794,8 +794,11 @@ class Config:
         self.SMART_POSITION_DISTANCE_THRESHOLD = 100
         # 30s minimum time in firmware
         self.SMART_POSITION_DISTANCE_MIN_TIME = 30 * self.ONE_SECOND_INTERVAL
-        # This mirrors the firmware's approach to monitoring channel utilization
+        # This mirrors the firmware's approach to monitoring channel utilization: six 10 s buckets
+        # of audible air for channel utilisation, sixty 1-minute buckets of our own transmissions
+        # for the TX figure a duty cycle binds against. Two windows, as AirTime has.
         self.CHANNEL_UTILIZATION_PERIODS = 6
+        self.UTILIZATION_TX_PERIODS = 60
 
     @property
     def current_preset(self):
