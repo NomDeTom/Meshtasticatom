@@ -2,7 +2,7 @@ import unittest
 
 from lib.config import Config
 from lib.dcr import CR_NORMAL, CR_RESCUE, CR_SLIM, choose_dynamic_coding_rate
-from lib.packet import NODENUM_BROADCAST
+from lib.packet import NODENUM_BROADCAST, MeshPacket
 
 
 class FakePacket:
@@ -10,7 +10,7 @@ class FakePacket:
         self,
         cr=5,
         is_ack=False,
-        retransmissions=3,
+        retransmissions=None,
         tx_node_id=0,
         orig_tx_node_id=0,
         hop_limit=3,
@@ -23,6 +23,13 @@ class FakePacket:
         self.origTxNodeId = orig_tx_node_id
         self.hopLimit = hop_limit
         self.destId = dest_id
+        # The budget a real packet to this destination starts with, so `attempt` here means what it
+        # means in a run: a broadcast gets two retries and an acknowledged unicast four.
+        self.maxRetransmissions = MeshPacket.reliable_attempts(Config(), dest_id) - 1
+        # None means an untouched budget, i.e. the first send. Spelling it as a number would mean
+        # a different attempt for a broadcast than for a DM, now that the two budgets differ.
+        if retransmissions is None:
+            self.retransmissions = self.maxRetransmissions
 
     def airtime_for_cr(self, cr):
         return {5: 100.0, 6: 120.0, 7: 140.0, 8: 160.0}[cr]
@@ -69,7 +76,11 @@ class TestDynamicCodingRate(unittest.TestCase):
     def test_idle_user_retry_gets_normal_cr(self):
         node = FakeNode(util=0.0)
 
-        decision = choose_dynamic_coding_rate(node, FakePacket(retransmissions=2))
+        # A DM, because a reliable broadcast only gets two retries and both of them are "final":
+        # a non-final retry exists on the five-attempt unicast budget and nowhere else.
+        decision = choose_dynamic_coding_rate(
+            node, FakePacket(dest_id=7, retransmissions=3, orig_tx_node_id=0, tx_node_id=0)
+        )
 
         self.assertEqual(decision.cr, CR_NORMAL)
 
@@ -84,7 +95,7 @@ class TestDynamicCodingRate(unittest.TestCase):
         node = FakeNode(util=0.0)
         node.txAirUtilization = 6000.0
 
-        decision = choose_dynamic_coding_rate(node, FakePacket(retransmissions=2))
+        decision = choose_dynamic_coding_rate(node, FakePacket())
 
         self.assertEqual(decision.cr, CR_SLIM)
         self.assertIn("channel_busy", decision.reason)
@@ -116,7 +127,8 @@ class TestDynamicCodingRate(unittest.TestCase):
         node = FakeNode(util=12.0)
         node.conf.REGION = node.conf.regions["US"]
 
-        decision = choose_dynamic_coding_rate(node, FakePacket(retransmissions=2))
+        # One retry left of a broadcast's two, so this is a retry rather than a first send.
+        decision = choose_dynamic_coding_rate(node, FakePacket(retransmissions=1))
 
         self.assertEqual(decision.cr, CR_SLIM)
         self.assertIn("channel_busy", decision.reason)

@@ -15,7 +15,7 @@ class FakePacket:
         self,
         cr=5,
         is_ack=False,
-        retransmissions=3,
+        retransmissions=None,
         tx_node_id=0,
         orig_tx_node_id=0,
         hop_limit=3,
@@ -33,6 +33,12 @@ class FakePacket:
         self.destId = dest_id
         self.priorHopRssi = prior_hop_rssi
         self.priorHopSnr = prior_hop_snr
+        # The budget a real packet to this destination starts with - see tests/test_dcr.py.
+        self.maxRetransmissions = MeshPacket.reliable_attempts(Config(), dest_id) - 1
+        # None means an untouched budget, i.e. the first send. Spelling it as a number would mean
+        # a different attempt for a broadcast than for a DM, now that the two budgets differ.
+        if retransmissions is None:
+            self.retransmissions = self.maxRetransmissions
         self.baseTxPower = base_power
 
 

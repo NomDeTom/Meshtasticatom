@@ -57,7 +57,11 @@ class Config:
         ### Meshtastic specific ###
         self.hopLimit = 3  # default 3
         self.router = False  # set role of each node as router (True) or normal client (False)
-        self.maxRetransmission = 3  # default 3 -- not configurable by Meshtastic
+        # Total sends including the first, from NextHopRouter.h - the firmware carries two
+        # figures, not one: NUM_RELIABLE_RETX for a reliable broadcast and
+        # NUM_RELIABLE_UNICAST_ATTEMPTS for an acknowledged unicast from the originator.
+        self.RELIABLE_BROADCAST_ATTEMPTS = 3
+        self.RELIABLE_UNICAST_ATTEMPTS = 5
         ### End of Meshtastic specific ###
 
         self.ONE_SECOND_INTERVAL = 1000

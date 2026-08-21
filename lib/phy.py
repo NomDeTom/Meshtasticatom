@@ -21,9 +21,10 @@ def get_current_slot_time(conf): # from RadioInterface::computeSlotTimeMsec
     symbol_time = (2.0 ** conf.current_preset["sf"]) / firmware_bw
 
     if conf.REGION['wide_lora']:
-        # TODO: currently wide_lora isn't fully implemented
-        # currently only 2.4GHz LoRa
-        return (NUM_SYM_CAD_24GHZ + (2 * conf.current_preset['sf'] + 3) / 32) * symbol_time + sum_prop_turnaround_mac_time
+        # currently only 2.4GHz LoRa. `(2 * sf + 3) / 32` is integer division in the firmware, where
+        # sf is a uint8_t - so the term is 0 for every legal spreading factor, 2*14+3 being 31.
+        # True division here made the 2.4 GHz slot time 13% long at SF7 and 21% at SF12.
+        return (NUM_SYM_CAD_24GHZ + (2 * conf.current_preset['sf'] + 3) // 32) * symbol_time + sum_prop_turnaround_mac_time
     else:
         return max(2.25, NUM_SYM_CAD + 0.5) * symbol_time + sum_prop_turnaround_mac_time
 
@@ -138,12 +139,21 @@ def power_collision(p1, p2, rx_nodeId):
     return (p2,)
 
 
+def preamble_lock_window_ms(conf, packet):
+    """Approximate the fragile LoRa preamble/header acquisition interval."""
+    symbols = max(1, conf.NPREAM - 5)
+    return symbols * (2 ** packet.sf) / packet.bw * 1000
+
+
 def timing_collision(conf, env, p1, p2):
-    """ assuming p1 is the freshly arrived packet, check if the packet collides 
-        or not (when only the first n - 5 preamble symbols overlap)
+    """Whether the fresh packet `p1` loses its preamble to `p2`, still on air.
+
+    `p1` survives if its acquisition window clears `p2`'s last byte. That window is
+    `preamble_lock_window_ms`, the same one the capture model uses - it was computed inline here in
+    seconds and compared against milliseconds, which collapsed a 90 ms LONG_FAST window to 0.09 ms
+    and made every overlap a collision.
     """
-    Tpreamb = 2 ** p1.sf / (1.0 * p1.bw) * (conf.NPREAM - 5)
-    p1_cs = env.now + Tpreamb
+    p1_cs = env.now + preamble_lock_window_ms(conf, p1)
     if p1_cs < p2.endTime:  # p1 collided with p2 and lost
         return True
     return False
@@ -155,12 +165,6 @@ def intervals_overlap(start1, end1, start2, end2):
 
 def overlap_ms(p1, p2):
     return max(0.0, min(p1.endTime, p2.endTime) - max(p1.startTime, p2.startTime))
-
-
-def preamble_lock_window_ms(conf, packet):
-    """Approximate the fragile LoRa preamble/header acquisition interval."""
-    symbols = max(1, conf.NPREAM - 5)
-    return symbols * (2 ** packet.sf) / packet.bw * 1000
 
 
 def overlaps_preamble_lock(conf, victim, interferer):

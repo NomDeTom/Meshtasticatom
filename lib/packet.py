@@ -80,10 +80,19 @@ class MeshPacket:
         self.endTime = 0
         self.refresh_link_budgets()
 
-        # Routing
-        self.retransmissions = self.conf.maxRetransmission
+        # Routing. A reliable broadcast gets fewer attempts than an acknowledged unicast, which
+        # is what the firmware's two constants say; retransmissions counts the ones still left.
+        self.maxRetransmissions = max(0, self.reliable_attempts(conf, destId) - 1)
+        self.retransmissions = self.maxRetransmissions
         self.ackReceived = False
         self.hopLimit = self.tx_node.hopLimit
+
+    @staticmethod
+    def reliable_attempts(conf, destId):
+        """Total sends including the first, for a packet addressed to `destId`."""
+        if destId == NODENUM_BROADCAST:
+            return conf.RELIABLE_BROADCAST_ATTEMPTS
+        return conf.RELIABLE_UNICAST_ATTEMPTS
 
     def refresh_link_budgets(self):
         """Recompute receiver-side RF state for the current TX power.

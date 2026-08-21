@@ -99,7 +99,7 @@ def _base_packet_score(packet) -> tuple[int, list[str]]:
 
 
 def _retry_score(node, packet, pressure: str, util: float) -> tuple[int, list[str]]:
-    attempt = max(0, node.conf.maxRetransmission - packet.retransmissions)
+    attempt = max(0, getattr(packet, "maxRetransmissions", 0) - packet.retransmissions)
     if attempt == 0:
         return 0, []
 

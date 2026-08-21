@@ -245,32 +245,39 @@ class TestDiscreteEventSim(unittest.TestCase):
 
         # Known-good numbers. A failure here means a change moved the simulation: decide
         # whether that was the bug or the fix before updating them.
-        self.assertEqual(appMessages, 179, "expected number of application messages created")
+        #
+        # Moved by the preamble-lock window fix: it was computed in seconds and compared against
+        # milliseconds, so every overlap counted as a timing collision. Collisions fall (220 -> 206),
+        # which lets more packets through (2466 -> 2508), which produces more rebroadcasts
+        # (786 -> 801) and returns implicit ACKs sooner - so two more application messages get
+        # generated, the generator being gated on the retransmission timer. The reliable-broadcast
+        # budget also went from three retries to the firmware's two.
+        self.assertEqual(appMessages, 181, "expected number of application messages created")
         sent = results['sent']
         potentialReceivers = results['potentialReceivers']
-        self.assertEqual(sent, 786, "expected number of packets sent")
-        self.assertEqual(potentialReceivers, 7074, "expected number of potential receivers")
+        self.assertEqual(sent, 801, "expected number of packets sent")
+        self.assertEqual(potentialReceivers, 7209, "expected number of potential receivers")
 
         nrCollisions = results['nrCollisions']
-        self.assertEqual(nrCollisions, 220, "expected number of collisions")
+        self.assertEqual(nrCollisions, 206, "expected number of collisions")
         nrSensed = results['nrSensed']
-        self.assertEqual(nrSensed, 2686, "expected number of packets sensed")
+        self.assertEqual(nrSensed, 2721, "expected number of packets sensed")
 
         nrReceived = results['nrReceived']
-        self.assertEqual(nrReceived, 2466, "expected number of packets received")
+        self.assertEqual(nrReceived, 2508, "expected number of packets received")
         meanDelay = results['meanDelay']
-        self.assertEqual(round(meanDelay, 2), 3887.28, "expected rounded delay average")
+        self.assertEqual(round(meanDelay, 2), 4051.24, "expected rounded delay average")
         txAirUtilizationRate = results['txAirUtilizationRate']
-        self.assertEqual(round(txAirUtilizationRate * 100, 2), 2.98, "expected rounded average tx air utilization")
+        self.assertEqual(round(txAirUtilizationRate * 100, 2), 3.03, "expected rounded average tx air utilization")
 
         nodeReach = results['nodeReach']
-        self.assertEqual(round(nodeReach*100, 2), 80.45, "expected rounded percentage of nodes reached")
+        self.assertEqual(round(nodeReach*100, 2), 80.54, "expected rounded percentage of nodes reached")
 
         usefulness = results['usefulness']
-        self.assertEqual(round(usefulness*100, 2), 52.55, "expected rounded 'usefulness' percentage")
+        self.assertEqual(round(usefulness*100, 2), 52.31, "expected rounded 'usefulness' percentage")
 
         delayDropped = results['delayDropped']
-        self.assertEqual(delayDropped, 1091, "expected number of packets dropped")
+        self.assertEqual(delayDropped, 1098, "expected number of packets dropped")
         # default config has both asymmetric links and movement enabled
         noLinkRate = results['noLinkRate']
         self.assertEqual(round(noLinkRate * 100, 2), 55.56, "expected rounded percentage of 'no' links")

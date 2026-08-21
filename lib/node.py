@@ -486,7 +486,7 @@ class MeshNode:
                     yield self.env.timeout(retransmissionMsec)
 
                     ackReceived = False  # check whether you received an ACK on the transmitted message
-                    minRetransmissions = self.conf.maxRetransmission
+                    minRetransmissions = p.maxRetransmissions
                     for packetSent in self.packets:
                         if packetSent.origTxNodeId == self.nodeid and packetSent.seq == p.seq:
                             if packetSent.retransmissions < minRetransmissions:

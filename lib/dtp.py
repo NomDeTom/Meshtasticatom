@@ -41,7 +41,9 @@ def _apply_drop(conf, base_power_dbm: int, drop_db: int) -> int:
 
 
 def _retry_attempt(node, packet) -> int:
-    return max(0, node.conf.maxRetransmission - packet.retransmissions)
+    # The packet's own budget, not a mesh-wide constant: a broadcast and a unicast do not get
+    # the same number of attempts.
+    return max(0, getattr(packet, "maxRetransmissions", 0) - packet.retransmissions)
 
 
 def _prior_hop_margin_db(conf, packet) -> float | None:
