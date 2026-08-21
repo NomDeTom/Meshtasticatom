@@ -24,6 +24,7 @@ behaviour, and an interactive run is a real 2.7.26 daemon.
 
 | document | covers |
 | --- | --- |
+| [docs/pipeline.md](docs/pipeline.md) | the eight stages a run is assembled from, starting with how a real mesh gets captured, the choice at each, and what each choice costs. Start here if you are deciding how to configure a run rather than looking up one mechanism |
 | [docs/radio_model.md](docs/radio_model.md) | airtime and its reference vectors, slot time, the contention window, the collision models, path loss, regions and frequency slots |
 | [docs/configuration.md](docs/configuration.md) | the models behind the settings - the firmware behaviours that are on by default (reliable-send budgets, the transmit gate, bounded duplicate suppression, the noise band, foreign channel occupancy) and the optional ones that are off (dynamic coding rate, dynamic TX power, terrain, clutter, empirical payload loss, link calibration) |
 | [docs/metrics.md](docs/metrics.md) | the populations a run counts, what reach and usefulness mean, and the two channel-occupancy windows |
