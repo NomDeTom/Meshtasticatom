@@ -25,7 +25,6 @@ class TestCaptureCollisionModel(unittest.TestCase):
         conf = Config()
         conf.NR_NODES = 1
         conf.CAPTURE_COLLISION_MODEL_ENABLED = True
-        conf.COLLISION_DUE_TO_INTERFERENCE = False
         return conf
 
     def test_equal_power_preamble_overlap_loses_both_packets(self):

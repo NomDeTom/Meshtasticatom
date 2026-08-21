@@ -77,8 +77,15 @@ class Config:
         self.PERIOD = 100 * self.ONE_SECOND_INTERVAL  # mean period of generating a new message with exponential distribution in ms
         self.PACKETLENGTH = 40  # payload in bytes
         self.SIMTIME = 30 * self.ONE_MIN_INTERVAL  # duration of one simulation in ms
-        self.INTERFERENCE_LEVEL = 0.05  # chance that at a given moment there is already a LoRa packet being sent on your channel, outside of the Meshtastic traffic. Given in a ratio from 0 to 1.
-        self.COLLISION_DUE_TO_INTERFERENCE = False
+        # Long-run share of time a foreign, non-Meshtastic transmitter holds a node's channel, in
+        # [0, 1]. One control: the interferer both defers this node's CAD and jams frames arriving
+        # at it, because those are the same occupancy seen from the two ends. It used to be two -
+        # an ungated draw for CAD and COLLISION_DUE_TO_INTERFERENCE for reception - which made a
+        # channel that was busy enough to wait for but never busy enough to break anything.
+        self.INTERFERENCE_LEVEL = 0.05
+        # Mean length of one busy stretch. None derives it from a full frame on the configured
+        # preset, a foreign LoRa packet being the likeliest occupant of a LoRa channel.
+        self.INTERFERENCE_MEAN_BUSY_MS = None
         self.CAPTURE_COLLISION_MODEL_ENABLED = False
         self.COLLISION_CAPTURE_THRESHOLD_DB = 6.0
         self.COLLISION_PAYLOAD_OVERLAP_LOSS_FRACTION = 0.15

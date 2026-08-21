@@ -312,7 +312,7 @@ for rt_i, routerType in enumerate(routerTypes):
                 "MODEL": routerTypeConf.MODEL,
                 "NR_NODES": routerTypeConf.NR_NODES,
                 "INTERFERENCE_LEVEL": routerTypeConf.INTERFERENCE_LEVEL,
-                "COLLISION_DUE_TO_INTERFERENCE": routerTypeConf.COLLISION_DUE_TO_INTERFERENCE,
+                "INTERFERENCE_MEAN_BUSY_MS": routerTypeConf.INTERFERENCE_MEAN_BUSY_MS,
                 "XSIZE": routerTypeConf.XSIZE,
                 "YSIZE": routerTypeConf.YSIZE,
                 "MINDIST": routerTypeConf.MINDIST,

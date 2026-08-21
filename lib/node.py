@@ -12,6 +12,7 @@ from lib.dcr import choose_dynamic_coding_rate
 from lib.discrete_event_sim_components import SimulationState, SimulationDataTracking
 from lib.dtp import choose_dynamic_tx_power
 from lib.geo import valid_lat_lon
+from lib.interference import build as interference_for
 from lib.link_model import calculate_link_budget
 from lib.mac import set_transmit_delay, get_retransmission_msec
 from lib.phy import check_collision, is_channel_active, airtime
@@ -199,6 +200,9 @@ class MeshNode:
         self.moveRng = random.Random(self.nodeid)
         self.nodeRng = random.Random(self.nodeid)
         self.rebroadcastRng = random.Random(f"{self.conf.SEED}:{self.nodeid}:rebroadcast")
+        # This node's own external channel occupancy, drawn once for the run: interference is local,
+        # and the noise at a receiver is a different condition from the noise at a transmitter.
+        self.interference = interference_for(self.conf, self.conf.SEED, self.nodeid)
 
         # require the user to specify a node configuration now, including position
         self.position = self.node_conf.position # explicitly use position in node_conf

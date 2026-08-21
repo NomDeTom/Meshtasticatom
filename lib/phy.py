@@ -29,15 +29,44 @@ def get_current_slot_time(conf): # from RadioInterface::computeSlotTimeMsec
         return max(2.25, NUM_SYM_CAD + 0.5) * symbol_time + sum_prop_turnaround_mac_time
 
 
+def _jammed_by_interference(conf, packet, rx_nodeId):
+    """Whether a foreign transmitter held this receiver's channel destructively.
+
+    The receiver's own channel, not a fresh coin flip: the same schedule its CAD consults, so a
+    transmitter cannot see a clear channel while its frame is destroyed by interference that, a
+    moment ago, did not exist.
+
+    Destructively, not merely at the same time: an overlap costs the frame if it lands on the
+    preamble, or if it covers enough of the payload to exhaust the coding gain. Those are the same
+    two conditions the capture model applies to a Meshtastic interferer, and applying "any overlap
+    at all" here instead would make one millisecond of foreign air worth more than a full
+    co-channel frame.
+    """
+    nodes = getattr(packet, "nodes", None)
+    if not nodes:
+        return False
+    interference = getattr(nodes[rx_nodeId], "interference", None)
+    if interference is None:
+        return False
+
+    lock_end = min(packet.endTime, packet.startTime + preamble_lock_window_ms(conf, packet))
+    if interference.overlaps(packet.startTime, lock_end):
+        return True
+    covered = interference.overlap_ms(packet.startTime, packet.endTime)
+    on_air = packet.endTime - packet.startTime
+    if on_air <= 0:
+        return False
+    return covered / on_air >= conf.COLLISION_PAYLOAD_OVERLAP_LOSS_FRACTION
+
+
 def check_collision(conf, env, packet, rx_nodeId, packetsAtN):
     if conf.CAPTURE_COLLISION_MODEL_ENABLED:
         return check_capture_collision(conf, packet, rx_nodeId, packetsAtN)
 
     # Check for collisions at rx_node
     col = 0
-    if conf.COLLISION_DUE_TO_INTERFERENCE:
-        if random.random() < conf.INTERFERENCE_LEVEL:
-            packet.collidedAtN[rx_nodeId] = True
+    if _jammed_by_interference(conf, packet, rx_nodeId):
+        packet.collidedAtN[rx_nodeId] = True
 
     if packetsAtN[rx_nodeId]:
         for other in packetsAtN[rx_nodeId]:
@@ -62,7 +91,7 @@ def check_capture_collision(conf, packet, rx_nodeId, packetsAtN):
     Off by default; the legacy binary model is preserved. See docs/radio_model.md.
     """
     col = 0
-    if conf.COLLISION_DUE_TO_INTERFERENCE and random.random() < conf.INTERFERENCE_LEVEL:
+    if _jammed_by_interference(conf, packet, rx_nodeId):
         mark_collision(packet, rx_nodeId, "external_interference")
         col = 1
 
@@ -216,9 +245,14 @@ def _packet_was_decodable_at_rx(packet, rx_nodeId):
 
 
 def is_channel_active(node, env):
-    # A continuous draw, so INTERFERENCE_LEVEL means what it says at every value. `randrange(10)
-    # <= level * 10` was inclusive at both ends: it never fell below 10%, even at a level of zero.
-    if random.random() < node.conf.INTERFERENCE_LEVEL:
+    """CAD: is this node's channel occupied right now, by anyone?
+
+    The external interferer is a schedule with a holding time, so a busy stretch actually blocks
+    rather than being re-rolled away on the next attempt - and it is the same schedule a reception
+    at this node is judged against.
+    """
+    interference = getattr(node, "interference", None)
+    if interference is not None and interference.is_busy(env.now):
         return True
     for p in node.packets:
         if p.detectedByN[node.nodeid]:
