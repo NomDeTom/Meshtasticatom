@@ -170,6 +170,16 @@ def load_preset_terrain_grid(name):
         )
 
 
+def preset_calibration_diagnostics(name):
+    """What the packaged fit's own observations can support, measured from them.
+
+    A reader deciding whether to trust a link set needs to know the fit is a level-matching surface
+    over features that do not correlate with the observations, not a propagation model.
+    """
+    raw = load_preset_raw(name)
+    return raw.get("calibration_diagnostics", {}) if isinstance(raw, dict) else {}
+
+
 def preset_clutter_provenance(name):
     """What the packaged clutter raster is, and what is known to be wrong with it.
 

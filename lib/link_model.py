@@ -104,7 +104,20 @@ def calculate_link_budget(conf, tx_node, rx_node, offset_db=0.0, tx_power_dbm=No
     tx_power = conf.PTX if tx_power_dbm is None else tx_power_dbm
     raw_rssi = tx_power + _antenna_gain(tx_node) + _antenna_gain(rx_node) - raw_path_loss
     raw_snr = raw_rssi - conf.NOISE_LEVEL
-    features = _link_calibration_features(conf, tx_point, rx_point, raw_snr, terrain_loss, clutter_loss)
+
+    # The fitted transform sees the budget at a *reference* EIRP, and the difference between the
+    # actual EIRP and that reference is added back afterwards, decibel for decibel.
+    #
+    # Transmit power enters the fit only through `raw_snr_clip`, whose coefficient on the packaged
+    # Batumi model is 0.279 and whose feature is clipped at +10 dB. So a 12 dB cut at the power
+    # amplifier arrived at the receiver as 2.1 dB on average, and as exactly 0.0 dB for 30% of
+    # pairs sitting in the clip - which is `--policies dtp` and every antenna-gain experiment
+    # measuring almost nothing on the one scenario with real geometry. Power is not a feature of
+    # the path; it belongs outside anything fitted over path shape.
+    reference_eirp = conf.PTX + 2 * conf.GL
+    actual_eirp = tx_power + _antenna_gain(tx_node) + _antenna_gain(rx_node)
+    reference_snr = reference_eirp - raw_path_loss - conf.NOISE_LEVEL
+    features = _link_calibration_features(conf, tx_point, rx_point, reference_snr, terrain_loss, clutter_loss)
     # Only inside the distances the fit was trained over. A ridge fit extrapolates without
     # complaint, and this one's ground-elevation terms are large, positive and unbounded, so past
     # its evidence two high nodes gain more from elevation than distance takes away and it invents
@@ -114,7 +127,10 @@ def calculate_link_budget(conf, tx_node, rx_node, offset_db=0.0, tx_power_dbm=No
     if envelope is not None and distance_m > envelope:
         rssi = raw_rssi
     else:
-        rssi = apply_link_calibration(conf, raw_rssi, features)
+        reference_rssi = reference_eirp - raw_path_loss
+        rssi = apply_link_calibration(conf, reference_rssi, features) + (
+            actual_eirp - reference_eirp
+        )
 
     return LinkBudget(
         distance_m=distance_m,

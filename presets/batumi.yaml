@@ -36,6 +36,42 @@ radio_calibration:
       water_fraction: 0.0
       forest_fraction: 0.0
       endpoint_urban_count: -1.642182
+calibration_diagnostics:
+  # What the 296 observations can and cannot support, measured from them rather than assumed.
+  # Recomputed and asserted by tests/test_calibration_quality.py, so these cannot go stale.
+  #
+  # Every feature the ridge fit uses correlates with the observed SNR at |r| <= 0.1. A propagation
+  # model's distance term is 20-40 dB per decade; these observations show 0.94 dB per decade, and
+  # a 10-25 km link reads BETTER on average than a 2-5 km one. So the fitted coefficients -
+  # -4.68 on log-distance, +4.24 on the lower endpoint's ground elevation, +-2.94 on the collinear
+  # urban/open pair - are fitting noise, which is why the model is non-monotone in distance inside
+  # its own envelope and why water_fraction and forest_fraction came out at exactly 0.0.
+  #
+  # The likely cause is censoring rather than bad measurement: these are observed *neighbour*
+  # SNRs, so every row is a link that worked. There are no non-detections, the SNR distribution is
+  # truncated from below at the radio's reported floor (min -20.75 against a floor of -21.25), and
+  # selecting on success destroys the distance dependence. All 296 sit below free space, so nothing
+  # here is physically impossible - there is simply no distance signal left to fit.
+  #
+  # Consequence, measured: no log-distance exponent reproduces them. Fitting LPLD0 to the
+  # observations at a fixed exponent leaves 26-38 dB of RMS residual, loses a third of the observed
+  # links, and still makes 65-72% of all directed pairs into links. A link budget with 30 dB of
+  # unexplained scatter is not a link budget.
+  #
+  # So the packaged coefficients are kept as a level-matching surface that reproduces the existing
+  # archive, and NOT as a propagation model. Transmit power and antenna gain are applied outside it,
+  # decibel for decibel, so a power experiment is physical even though the surface is not.
+  observations: 296
+  snr_range_db: [-20.75, 6.75]
+  snr_mean_db: -9.53
+  correlations_with_observed_snr:
+    log10_distance_km: -0.094
+    terrain_loss_db: -0.011
+    clutter_loss_db: 0.079
+    max_ground_elevation_100m: 0.099
+  observations_above_free_space: 0
+  log_distance_refit_rms_db: [26.5, 38.5]
+  is_level_match_not_propagation_model: true
 clutter_provenance:
   # What the packaged raster is, and what is wrong with it, recorded because it cannot be
   # regenerated from here: the exporter needs Overpass and this environment's network policy
