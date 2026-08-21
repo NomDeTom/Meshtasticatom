@@ -4729,13 +4729,14 @@ def build(
 
     # Recorded roles beat anything derived from degree. Applied over whichever guess ran, and
     # before the version filter, so an old-profile node still downgrades correctly.
-    if scenario is not None and scenario.roles:
-        for node, role in zip(nodes, scenario.roles):
-            if role:
-                node.role = role
-    if scenario is not None and scenario.hop_limits:
-        # Per-node hop limits from the snapshot outrank --hop-spread for the same reason.
-        mesh.node_hop_limit = [int(h) for h in scenario.hop_limits]
+    recorded_roles = scenario.applied("roles") if scenario is not None else []
+    for node, role in zip(nodes, recorded_roles):
+        if role:
+            node.role = role
+    # Per-node hop limits from the snapshot outrank --hop-spread for the same reason.
+    recorded_limits = scenario.applied("hop-limits") if scenario is not None else []
+    if recorded_limits:
+        mesh.node_hop_limit = [int(h) for h in recorded_limits]
 
     # A role exists only from the release that introduced it - ROUTER_LATE v2.5.18, CLIENT_BASE
     # v2.7.9 - so a node on an older profile cannot be configured into one and runs as CLIENT.

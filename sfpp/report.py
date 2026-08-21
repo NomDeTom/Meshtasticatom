@@ -54,11 +54,20 @@ def sparkline(dist, width=22):
 def scenario_line(r):
     m, o = r["mesh"], r["opts"]
     diam = m.get("diameter")
+    ground = r.get("ground") or {}
+    unlocked = ground.get("unlocked") or []
+    locked = [name for name in (ground.get("locks") or []) if name not in unlocked]
+    # A snapshot that pins its own limits makes "spread 3-7" a false claim about the run.
+    hops = "recorded" if "hop-limits" in locked else (
+        "spread 3-7" if o.get("hop_spread") else o.get("hop_limit")
+    )
     return (
         f"{o.get('topology','uniform')} · {m['nodes']} nodes · {m['area_km']:.1f} km · "
         f"degree {m['mean_degree']:.1f} · diameter {diam if diam is not None else 'FRAGMENTED'} · "
-        f"{o.get('preset','LONG_FAST')} · hop {'spread 3-7' if o.get('hop_spread') else o.get('hop_limit')} · "
+        f"{o.get('preset','LONG_FAST')} · hop {hops} · "
         f"protocol {o.get('protocol','sr')} · {o.get('servers',0)} archives"
+        + (" · roles recorded" if "roles" in locked else "")
+        + (f" · UNLOCKED {','.join(unlocked)}" if unlocked else "")
     )
 
 

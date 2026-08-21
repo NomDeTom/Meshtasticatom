@@ -2601,6 +2601,35 @@ print(",".join(failed))
             sum(v["originated"] for k, v in report["by_class"].items() if k != "all"),
         )
 
+    def test_a_real_snapshot_locks_its_roles_until_the_run_unlocks_them(self):
+        """A swept --role-mix on Batumi was a column of identical rows and nothing recorded why.
+
+        The lock is the snapshot doing its job; the silence was the defect. Both states are now in
+        report["ground"], so a cell cannot be quoted as Batumi when its roles are not Batumi's.
+        """
+        from .campaign import build_parser, run_once
+
+        base = ["--scenario", "batumi", "--protocol", "none", "--hours", "1", "--no-charts"]
+        parser = build_parser()
+        locked = run_once(parser.parse_args(base + ["--role-mix", "all-routers"]), seed=11)
+        self.assertEqual(locked["ground"]["locks"], ["roles", "hop-limits"])
+        self.assertEqual(locked["ground"]["unlocked"], [])
+
+        freed = run_once(
+            parser.parse_args(
+                base + ["--role-mix", "all-routers", "--unlock-scenario", "roles"]
+            ),
+            seed=11,
+        )
+        self.assertEqual(freed["ground"]["unlocked"], ["roles"])
+        self.assertGreater(
+            freed["mesh"]["routers"],
+            locked["mesh"]["routers"],
+            "unlocking roles must let --role-mix reach the mesh",
+        )
+        # One unlock releases one lock: the recorded hop limits still outrank the flags.
+        self.assertEqual(sorted(freed["by_hop_limit"]), sorted(locked["by_hop_limit"]))
+
     def test_an_admin_session_can_only_fail_on_a_leg(self):
         """README §5.3 quoted a no-key table no arm could produce, and the arm has since gone.
 

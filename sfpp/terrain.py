@@ -323,6 +323,9 @@ class Scenario:
     # Set when the geometry is a real mesh rather than points under a generated one. A run over real
     # geometry must not also be told a node count or an area; the place decides both.
     fixed_geometry: bool = False
+    # What --unlock-scenario released, so a recorded attribute stops outranking the flags. Held
+    # rather than deleted: the snapshot's own values still belong in the report.
+    unlocked: tuple = ()
 
     def __len__(self):
         return len(self.points)
@@ -344,6 +347,20 @@ class Scenario:
             return 0.0
         return max(max(abs(x), abs(y)) for x, y in self.points)
 
+    @property
+    def locks(self):
+        """Attributes this snapshot carries that outrank the command line unless unlocked."""
+        return tuple(
+            name
+            for name, values in (("roles", self.roles), ("hop-limits", self.hop_limits))
+            if values
+        )
+
+    def applied(self, lock):
+        """The snapshot's values for `lock`, or nothing when the run unlocked it."""
+        values = {"roles": self.roles, "hop-limits": self.hop_limits}[lock]
+        return [] if lock in self.unlocked else values
+
     def summary(self):
         """What went into the run, for the JSON. Every claim a result rests on, in one dict."""
         elevations = [z for _, _, z in (self.terrain_rows or [])]
@@ -358,6 +375,10 @@ class Scenario:
             "link_calibration": bool(
                 self.calibration.get("link_calibration_model", {}).get("coefficients")
             ),
+            # What the snapshot decides for itself, and what this run took back. A cell with
+            # anything in `unlocked` is not the recorded mesh and must not be quoted as it.
+            "locks": list(self.locks),
+            "unlocked": list(self.unlocked),
         }
         if elevations:
             out["ground_elevation_m"] = {
@@ -650,6 +671,7 @@ def mirror(scenario, copies, gap_m=1500.0):
         clutter_file=path,
         calibration=scenario.calibration,
         fixed_geometry=True,
+        unlocked=scenario.unlocked,
     )
 
 

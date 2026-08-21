@@ -400,6 +400,15 @@ class Campaign:
             limit=getattr(opts, "scenario_limit", None),
             offline=getattr(opts, "offline", False),
         )
+        if self.scenario is not None:
+            asked = set(getattr(opts, "unlock_scenario", None) or [])
+            if "all" in asked:
+                asked = {"roles", "hop-limits"}
+            # Only what this snapshot actually locks, so the record cannot claim to have released
+            # something the place never decided.
+            self.scenario.unlocked = tuple(
+                lock for lock in self.scenario.locks if lock in asked
+            )
         mirror = int(getattr(opts, "mirror", 1) or 1)
         if mirror > 1 and self.scenario is not None:
             self.scenario = TR.mirror(self.scenario, mirror)
@@ -2859,6 +2868,18 @@ def build_parser():
         "(flat, rolling, ridge, valleys, coastal, alpine) puts terrain under a generated mesh; "
         "a preset name (batumi) is a real mesh over real ground and decides its own node count; "
         "`map` cuts --bbox out of the public map. Omit for the flat world",
+    )
+    ap.add_argument(
+        "--unlock-scenario",
+        action="append",
+        choices=("roles", "hop-limits", "all"),
+        default=[],
+        help="stop a real snapshot's recorded attributes outranking the command line, so an arm "
+        "over them moves instead of reproducing the baseline. `roles` releases the recorded roles "
+        "and mute flags to --role-mix and the role fractions; `hop-limits` releases the per-node "
+        "limits to --hop-spread, --hop-limit and --hop-assign; `all` releases both. Repeatable. "
+        "Recorded in report['ground']['unlocked'] because an unlocked run is a counterfactual on "
+        "that geometry and not the mesh the snapshot describes",
     )
     ap.add_argument(
         "--mirror",

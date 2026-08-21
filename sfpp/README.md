@@ -356,6 +356,7 @@ assumed without saying so.
 | `--bbox`                  | -       | `min_lat,min_lon,max_lat,max_lon`. Required by `--scenario map`                                     |
 | `--scenario-limit`        | -       | keep at most this many nodes from a `map` fetch                                                     |
 | `--mirror`                | 1       | tile a real scenario into this many mirrored copies, ground and all. Reflected, not repeated: a translated copy lands on terrain the grid never surveyed and gets a featureless plateau. Seam-spanning pairs are outside a fitted scenario's training range |
+| `--unlock-scenario`       | -       | release a real snapshot's recorded attributes to the command line: `roles` (roles and mute flags), `hop-limits` (the per-node limits), `all` for both. Repeatable. Without it those flags are inert on `batumi` - see §5.10. Recorded in `report["ground"]["unlocked"]`, because an unlocked run is a counterfactual on that geometry rather than the mesh the snapshot describes |
 | `--no-terrain`            | off     | keep the scenario's geometry and flatten its ground. **The paired run that prices terrain on its own** |
 | `--no-clutter`            | off     | ignore the land-cover raster, keeping terrain                                                       |
 | `--no-link-calibration`   | off     | drop the fitted RSSI correction - a ridge fit over one city's observed links, so a run asking what the ground alone does should say so |
@@ -849,7 +850,17 @@ it. Four facts decide what a Batumi run can be quoted for. All are read straight
 | **92 nodes, 55 unique coordinates** | 43 of them share a position with another; the three largest stacks hold 14, 13 and 10. Stacked nodes are separated by `path_loss_distance_floor_m: 780` and the fitted model, not by their geometry |
 | **4 routers** | `--place routers` and `--place beside-router` cap here, and `alternate-routers` at 2. Above the cap a `--servers` sweep silently repeats the capped row - read `servers_placed`, never the requested count |
 | **296 observed links, longest 23.2 km** | The fitted budget's envelope. Its ground-elevation terms are positive and unbounded against a log-distance penalty, so past the observed range two hilltop nodes gain more from elevation than distance takes away and the fit invents a link. `pairs_beyond_calibration` counts what fell back to the raw budget |
-| **Its own roles, hop limits and node count** | The snapshot supplies them, so `--nodes`, `--role-mix` and `--router-fraction` are inert here and `--stretch` is refused outright |
+| **Its own roles, hop limits and node count** | The snapshot supplies them, so `--nodes`, `--role-mix`, `--router-fraction`, `--role-placement`, `--hop-spread`, `--hop-limit` and `--hop-assign` are **inert here** unless released by `--unlock-scenario`, and `--stretch` is refused outright |
+
+**What is locked, and taking it back.** The snapshot's roles, mute flags and per-node hop limits
+outrank the command line, so an arm over them reproduces the baseline cell for cell rather than
+failing - a swept `--role-mix` on Batumi is a column of identical rows. `report["ground"]["locks"]`
+names what this place decides for itself, on every run. `--unlock-scenario roles`, `hop-limits` or
+`all` releases those attributes to the flags, and what was released is recorded in
+`report["ground"]["unlocked"]` and printed on the run's own scenario line as `UNLOCKED roles`. Read
+an unlocked cell as a counterfactual on Batumi's geometry and never as Batumi: its roles are no
+longer the ones the mesh has. The lock is also why the scenario line reads `hop recorded` rather
+than `hop spread 3-7` on a locked run - the spread the flag asked for is not what ran.
 
 `--mirror` tiles it into reflected copies to ask what a bigger mesh of the same place does. Every
 seam-spanning pair is outside the calibration envelope by construction, so at `--mirror 4` most of

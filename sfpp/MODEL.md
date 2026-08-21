@@ -190,6 +190,14 @@ thermal floor is the better answer for a generated mesh and the wrong one for a 
 SNRs were fitted against a measured floor. An explicit `--noise-model` still wins, being applied
 afterwards.
 
+A real snapshot also records what its nodes *are*: roles, mute flags and per-node hop limits. Those
+outrank the command line, because a mesh's own configuration is data and a flag is a guess about it.
+The cost is that an arm over `--role-mix` or `--hop-spread` reproduces the baseline cell for cell, so
+`scenario.locks` names what the place decides on every run and `--unlock-scenario` releases it,
+recording what it released in `scenario.unlocked` and on the run's own scenario line. Neither state
+is the safe default to leave unsaid: a locked run whose flag did nothing and an unlocked run that is
+no longer the recorded mesh are both misreadable, and only the record separates them.
+
 ### The fit's envelope
 
 `preset_scenario` records how far the fit was actually trained from the observations themselves. A
