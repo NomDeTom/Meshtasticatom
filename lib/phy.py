@@ -344,7 +344,17 @@ def estimate_path_loss(conf, dist, freq, txZ=None, rxZ=None, model=None):
     else:
         raise ValueError(f"unsupported path loss model: {model}")
 
-    return Lpl
+    # No propagation model may beat free space. Every model here is an empirical fit with a
+    # validity range - Okumura-Hata wants a base station 30-200 m up and a mobile 1-10 m up, and
+    # this simulator passes antenna heights above local ground for both, usually 1.5 m. Asked far
+    # enough outside that range the 3GPP form's linear height terms dominate and it returns a
+    # negative loss, i.e. gain: 900 m of antenna height produced +2173 dBm of RSSI.
+    return max(Lpl, free_space_path_loss(dist, freq))
+
+
+def free_space_path_loss(dist, freq):
+    """Friis free-space loss in dB, over metres and Hz. The floor under every other model."""
+    return 20.0 * math.log10(max(dist, 1e-9)) + 20.0 * math.log10(freq) - 147.55221677811665
 
 
 def zero_link_budget(conf, dist, tx_gain=None, rx_gain=None):

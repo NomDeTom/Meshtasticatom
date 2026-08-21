@@ -701,6 +701,10 @@ class Config:
         self.LINK_CALIBRATION_COEFFICIENTS = {}
         self.LINK_CALIBRATION_SNR_MIN_DB = None
         self.LINK_CALIBRATION_SNR_MAX_DB = None
+        # How far the fit has support: past its longest observed link a linear model answers
+        # confidently and wrongly, so beyond this the raw budget answers instead. None means no
+        # envelope is known, which is not the same as the fit being valid everywhere.
+        self.LINK_CALIBRATION_MAX_M = None
         self.NPREAM = 16   # number of preamble symbols from RadioInterface.h
         ### End of PHY parameters ###
 

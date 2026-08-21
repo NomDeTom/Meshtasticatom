@@ -76,3 +76,40 @@ class TestPhy(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FreeSpaceIsTheFloor(unittest.TestCase):
+    """No empirical propagation model may beat free space, however far outside its range it is asked."""
+
+    def test_the_published_friis_constant(self):
+        from lib.phy import free_space_path_loss
+
+        # 1 km at 900 MHz: 20log10(1000) + 20log10(900e6) - 147.552 = 91.5 dB.
+        self.assertAlmostEqual(free_space_path_loss(1000.0, 900e6), 91.53, places=2)
+        # Doubling the distance costs 6 dB, as it must.
+        self.assertAlmostEqual(
+            free_space_path_loss(2000.0, 900e6) - free_space_path_loss(1000.0, 900e6), 6.02, places=2
+        )
+
+    def test_an_absurd_antenna_height_cannot_produce_gain(self):
+        from lib.phy import estimate_path_loss, free_space_path_loss
+
+        conf = Config()
+        # 900 m passed as an antenna height above ground is far outside the 3GPP form's validity,
+        # and its linear height terms used to dominate and return a negative loss: 900 m produced
+        # +2173 dBm of RSSI on a 60 km path.
+        loss = estimate_path_loss(conf, 60000.0, conf.FREQ, 900.0, 900.0)
+        self.assertGreater(loss, 0.0)
+        self.assertGreaterEqual(loss, free_space_path_loss(60000.0, conf.FREQ) - 1e-9)
+
+    def test_the_floor_is_inert_at_the_defaults(self):
+        """It guards the absurd cases without moving any number a normal run produces."""
+        from lib.phy import estimate_path_loss, free_space_path_loss
+
+        conf = Config()
+        for distance in (100.0, 1000.0, 5000.0, 20000.0):
+            with self.subTest(distance=distance):
+                self.assertGreater(
+                    estimate_path_loss(conf, distance, conf.FREQ),
+                    free_space_path_loss(distance, conf.FREQ),
+                )

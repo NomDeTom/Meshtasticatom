@@ -6,6 +6,7 @@ or other runtime inputs.
 """
 
 import csv
+import math
 from pathlib import Path
 
 import yaml
@@ -35,6 +36,7 @@ RADIO_CALIBRATION_FIELDS = (
     "LINK_CALIBRATION_COEFFICIENTS",
     "LINK_CALIBRATION_SNR_MIN_DB",
     "LINK_CALIBRATION_SNR_MAX_DB",
+    "LINK_CALIBRATION_MAX_M",
 )
 
 
@@ -101,6 +103,10 @@ def apply_preset_radio_calibration(conf, name):
             if source_name in calibration:
                 setattr(conf, config_name, float(calibration[source_name]))
 
+    # The envelope comes from the observations, not from the coefficient block: a fit's support is
+    # a property of the data it saw.
+    conf.LINK_CALIBRATION_MAX_M = preset_calibration_envelope_m(name)
+
     link_model = calibration.get("link_calibration_model", {}) if calibration else {}
     conf.LINK_CALIBRATION_MODEL_ENABLED = bool(link_model)
     conf.LINK_CALIBRATION_COEFFICIENTS = {
@@ -113,6 +119,28 @@ def apply_preset_radio_calibration(conf, name):
         conf.LINK_CALIBRATION_SNR_MIN_DB = float(link_model["snr_min_db"])
     if "snr_max_db" in link_model:
         conf.LINK_CALIBRATION_SNR_MAX_DB = float(link_model["snr_max_db"])
+
+
+def preset_calibration_envelope_m(name):
+    """The longest link the fit was actually trained on, from its own observations.
+
+    Derived rather than declared, so it cannot disagree with the observation list beside it.
+    """
+    raw = load_preset_raw(name)
+    if not isinstance(raw, dict):
+        return None
+    nodes = raw.get("nodes") or {}
+    points = {}
+    for index, node in enumerate(nodes.values()):
+        points[index] = (float(node["x"]), float(node["y"]))
+
+    lengths = []
+    for observation in raw.get("calibration_observations") or []:
+        source, target = observation.get("from"), observation.get("to")
+        if source in points and target in points:
+            (x0, y0), (x1, y1) = points[source], points[target]
+            lengths.append(math.dist((x0, y0), (x1, y1)))
+    return max(lengths) if lengths else None
 
 
 def preset_origin(name):

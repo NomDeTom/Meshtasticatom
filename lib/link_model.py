@@ -29,6 +29,11 @@ class LinkBudget:
     features: dict
 
     @property
+    def calibration_applied(self):
+        """Whether the fitted transform answered for this pair, or the raw budget did."""
+        return self.rssi_dbm != self.raw_rssi_dbm
+
+    @property
     def path_loss_db(self):
         return self.base_path_loss_db + self.terrain_loss_db + self.clutter_loss_db + self.offset_db
 
@@ -100,7 +105,16 @@ def calculate_link_budget(conf, tx_node, rx_node, offset_db=0.0, tx_power_dbm=No
     raw_rssi = tx_power + _antenna_gain(tx_node) + _antenna_gain(rx_node) - raw_path_loss
     raw_snr = raw_rssi - conf.NOISE_LEVEL
     features = _link_calibration_features(conf, tx_point, rx_point, raw_snr, terrain_loss, clutter_loss)
-    rssi = apply_link_calibration(conf, raw_rssi, features)
+    # Only inside the distances the fit was trained over. A ridge fit extrapolates without
+    # complaint, and this one's ground-elevation terms are large, positive and unbounded, so past
+    # its evidence two high nodes gain more from elevation than distance takes away and it invents
+    # a link. sfpp guarded this from the start; the vendored path did not, so `loraMesh.py --preset
+    # batumi` and an sfpp scenario over the same preset were two different link models.
+    envelope = getattr(conf, "LINK_CALIBRATION_MAX_M", None)
+    if envelope is not None and distance_m > envelope:
+        rssi = raw_rssi
+    else:
+        rssi = apply_link_calibration(conf, raw_rssi, features)
 
     return LinkBudget(
         distance_m=distance_m,
