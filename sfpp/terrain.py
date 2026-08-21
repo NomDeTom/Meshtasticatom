@@ -40,6 +40,7 @@ again to ask what that term alone was worth.
 import csv
 import heapq
 import json
+import itertools
 import math
 import os
 import sys
@@ -68,10 +69,15 @@ class IndexedTerrainGrid:
     # build went into ring widening. It earns its keep on an SRTM tile, not a preset.
     SCAN_BELOW = 512
 
+    # The vendored grid carries one so a recycled address cannot revive another grid's cache
+    # entries; this one is used through the same caches and needs it for the same reason.
+    _cache_token_counter = itertools.count(1)
+
     def __init__(self, samples):
         self.samples = list(samples)
         if not self.samples:
             raise ValueError("terrain grid has no samples")
+        self.cache_token = next(IndexedTerrainGrid._cache_token_counter)
         self.scan_only = len(self.samples) < self.SCAN_BELOW
         if self.scan_only:
             self._buckets = {}
@@ -113,6 +119,14 @@ class IndexedTerrainGrid:
                 raise ValueError(f"terrain sample {row_number} values must be finite")
             samples.append((x, y, elevation))
         return cls(samples)
+
+    def __eq__(self, other):
+        if type(other) is not type(self):
+            return NotImplemented
+        return self.samples == other.samples
+
+    def __hash__(self):
+        return hash((len(self.samples), self.samples[0], self.samples[-1]))
 
     def elevation_at(self, x, y):
         # Every pair sharing an endpoint walks the same coordinates, 24 per link. A decimetre

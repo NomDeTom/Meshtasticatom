@@ -85,6 +85,16 @@ class TerrainGrid:
             raise ValueError("terrain grid has no samples")
         return cls(samples)
 
+    # Value equality, so a config holding a grid can be compared - a deepcopy of a grid
+    # describes the same ground, and identity comparison would call it a different one.
+    def __eq__(self, other):
+        if type(other) is not type(self):
+            return NotImplemented
+        return self.samples == other.samples
+
+    def __hash__(self):
+        return hash((len(self.samples), self.samples[0], self.samples[-1]))
+
     def elevation_at(self, x, y):
         weighted_sum = 0.0
         weight_total = 0.0

@@ -26,7 +26,7 @@ def get_tx_delay_msec_weighted(node, rssi):  # from RadioInterface::getTxDelayMs
     snr = estimate_snr(node.conf, rssi)
     SNR_MIN = -20
     SNR_MAX = 10
-    slot_time_msec = get_current_slot_time()
+    slot_time_msec = get_current_slot_time(node.conf)
     if snr < SNR_MIN:
         logger.debug(f'{node.env.now:.3f} Node {node.nodeid} clamping to Minimum SNR at RSSI of {rssi} dBm')
         snr = SNR_MIN
@@ -53,7 +53,7 @@ def get_tx_delay_msec(node):  # from RadioInterface::getTxDelayMsec
     CWsize = int(channelUtil * (CWmax - CWmin) / 100 + CWmin)
     CW = random.randrange(0, 2 ** CWsize)
     logger.debug(f'{node.env.now:.3f} Current channel utilization is {channelUtil}, so picked {CWsize=} and {CW=}')
-    return CW * get_current_slot_time()
+    return CW * get_current_slot_time(node.conf)
 
 
 def get_retransmission_msec(node, packet):  # from RadioInterface::getRetransmissionMsec
@@ -62,6 +62,6 @@ def get_retransmission_msec(node, packet):  # from RadioInterface::getRetransmis
     packetAirtime = int(airtime(node.conf, packet.sf, packet.cr, packet.packetLen, packet.bw))
     channelUtil = node.airUtilization / node.env.now * 100
     CWsize = int(channelUtil * (CWmax - CWmin) / 100 + CWmin)
-    return 2 * packetAirtime + (2 ** CWsize + 2 * CWmax + 2 ** (int((CWmax + CWmin) / 2))) * get_current_slot_time() + PROCESSING_TIME_MSEC
+    return 2 * packetAirtime + (2 ** CWsize + 2 * CWmax + 2 ** (int((CWmax + CWmin) / 2))) * get_current_slot_time(node.conf) + PROCESSING_TIME_MSEC
 
 # NOTE: there is a getTxDelayMsecWeightedWorst function that we haven't implemented yet.

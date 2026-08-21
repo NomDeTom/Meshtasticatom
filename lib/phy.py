@@ -2,12 +2,6 @@ import logging
 import math
 import random
 
-from lib.config import CONFIG
-
-# TODO: if our config deviates from the default, we WILL get incorrect results.
-# refactor things to take a config object
-conf = CONFIG
-
 logger = logging.getLogger(__name__)
 
 # checked as of 2.8.0 (version.properties), commit 51eadb7, in the meshtastic-firmware repo
@@ -15,7 +9,12 @@ NUM_SYM_CAD = 2
 NUM_SYM_CAD_24GHZ = 4
 
 #                           CAD duration   +     airPropagationTime+TxRxTurnaround+MACprocessing
-def get_current_slot_time(): # from RadioInterface::computeSlotTimeMsec
+def get_current_slot_time(conf): # from RadioInterface::computeSlotTimeMsec
+    """Slot time in ms for `conf`'s preset and region.
+
+    Every caller passes the config its run is using; there is no module-level default, because a
+    process-wide one silently answered for whichever config was bound last.
+    """
     # all times in ms
     sum_prop_turnaround_mac_time = 0.2 + 0.4 + 7
     firmware_bw = conf.current_preset["bw"] / 1000 # convert Hz to KHz to match firmware
@@ -220,7 +219,7 @@ def is_channel_active(node, env):
     for p in node.packets:
         if p.detectedByN[node.nodeid]:
             # You will miss detecting a packet if it has just started before you could do CAD
-            if p.startTime + get_current_slot_time() <= env.now <= p.endTime:
+            if p.startTime + get_current_slot_time(node.conf) <= env.now <= p.endTime:
                 return True
     return False
 
@@ -310,9 +309,22 @@ def estimate_path_loss(conf, dist, freq, txZ=None, rxZ=None, model=None):
     return Lpl
 
 
-# TODO: take conf as parameter so we don't use this module's default conf
-def zero_link_budget(dist):
-    return conf.PTX + 2 * conf.GL - estimate_path_loss(conf, dist, conf.FREQ) - conf.current_preset["sensitivity"]
+def zero_link_budget(conf, dist, tx_gain=None, rx_gain=None):
+    """Link margin in dB at `dist`, zero at the range where the preset stops decoding.
+
+    A link has an antenna at each end, so both gains are counted; each defaults to the config's.
+    """
+    if tx_gain is None:
+        tx_gain = conf.GL
+    if rx_gain is None:
+        rx_gain = conf.GL
+    return (
+        conf.PTX
+        + tx_gain
+        + rx_gain
+        - estimate_path_loss(conf, dist, conf.FREQ)
+        - conf.current_preset["sensitivity"]
+    )
 
 
 def rootFinder(func, x0, args=(), tol=1, maxiter=100):
@@ -331,12 +343,7 @@ def rootFinder(func, x0, args=(), tol=1, maxiter=100):
   print("Warning: could not estimate max. range")
   return x
 
-# TODO: take conf as parameter so we don't use this module's default conf
-def zero_link_budget_with_gain(dist, gain):
-    return conf.PTX + gain - estimate_path_loss(conf, dist, conf.FREQ) - conf.current_preset["sensitivity"]
 
-def estimate_max_range(gain):
-    return rootFinder(zero_link_budget_with_gain, 1500, args=(gain,))
-
-# TODO: take conf as parameter so we don't use this module's default conf
-MAXRANGE = rootFinder(zero_link_budget, 1500)
+def estimate_max_range(conf, tx_gain=None, rx_gain=None):
+    """Distance in m at which `conf`'s preset stops decoding, for this pair of antenna gains."""
+    return rootFinder(lambda dist: zero_link_budget(conf, dist, tx_gain, rx_gain), 1500)

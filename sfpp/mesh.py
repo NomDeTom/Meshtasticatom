@@ -2018,7 +2018,7 @@ def make_config(
         # down while leaving the geometry alone asks what the mesh costs when everyone is polite.
         conf.PTX = tx_power
     # FREQ is derived from the preset's bandwidth at construction, so changing the preset afterwards
-    # leaves it stale. phy.py binds a module-level config at import, which must be this same object.
+    # leaves it stale.
     #
     # A preset this transport adds on top of the vendored table has no region profile to be legal
     # in, so fall back to the region's own default preset for slot selection when that happens.
@@ -2026,11 +2026,6 @@ def make_config(
         conf.FREQ = conf.frequency()
     except ValueError:
         conf.FREQ = conf.frequency(preset=conf.REGION["default_preset"])
-    import lib.config
-    import lib.phy as phy
-
-    lib.config.CONFIG = conf
-    phy.conf = conf
     return conf
 
 

@@ -26,8 +26,8 @@ class FakeNode:
         self.airUtilization = air_utilization
 
 
-def slots_drawn(delay, offset=0.0):
-    return round((delay - offset) / get_current_slot_time())
+def slots_drawn(node, delay, offset=0.0):
+    return round((delay - offset) / get_current_slot_time(node.conf))
 
 
 class TestWeightedDelayBounds(unittest.TestCase):
@@ -36,7 +36,7 @@ class TestWeightedDelayBounds(unittest.TestCase):
     def observed_slots(self, node, rssi, offset=0.0, draws=4000):
         random.seed(7)
         return {
-            slots_drawn(get_tx_delay_msec_weighted(node, rssi), offset) for _ in range(draws)
+            slots_drawn(node, get_tx_delay_msec_weighted(node, rssi), offset) for _ in range(draws)
         }
 
     def test_a_router_never_draws_its_top_slot(self):
@@ -48,7 +48,7 @@ class TestWeightedDelayBounds(unittest.TestCase):
 
     def test_a_client_starts_past_the_whole_router_window(self):
         node = FakeNode()
-        offset = 2 * CWmax * get_current_slot_time()
+        offset = 2 * CWmax * get_current_slot_time(node.conf)
         with mock.patch("lib.mac.estimate_snr", return_value=10):
             slots = self.observed_slots(node, rssi=-50, offset=offset)
         self.assertEqual(min(slots), 0)
@@ -68,14 +68,14 @@ class TestUnweightedDelayBounds(unittest.TestCase):
     def test_an_idle_channel_draws_the_smallest_window(self):
         node = FakeNode(air_utilization=0.0)
         random.seed(3)
-        slots = {slots_drawn(get_tx_delay_msec(node)) for _ in range(4000)}
+        slots = {slots_drawn(node, get_tx_delay_msec(node)) for _ in range(4000)}
         self.assertEqual(min(slots), 0)
         self.assertEqual(max(slots), 2**CWmin - 1)
 
     def test_a_saturated_channel_draws_the_largest(self):
         node = FakeNode(air_utilization=FakeEnv.now)
         random.seed(3)
-        slots = {slots_drawn(get_tx_delay_msec(node)) for _ in range(20000)}
+        slots = {slots_drawn(node, get_tx_delay_msec(node)) for _ in range(20000)}
         self.assertEqual(max(slots), 2**CWmax - 1)
 
 
