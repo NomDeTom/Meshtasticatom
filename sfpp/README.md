@@ -83,12 +83,32 @@ a replayed object and filing it via the replay header.
 
 ## 2. Quick start
 
-Nothing needs installing. The simulator and its tests are standard library only, as are the three
-vendored modules they import. `requirements.txt` lists two optional extras - matplotlib for the
-charts, pytest for a shorter test run - and the code degrades rather than fails without either.
+A flat run needs nothing installed: `python3 -m sfpp.campaign --no-charts` is standard library only,
+and so are the vendored modules it reaches for the link budget - `lib.phy`, `lib.config`,
+`lib.radio_loss`, `lib.link_model`. The test suite is stdlib apart from one case: the Batumi envelope
+check imports `lib.presets`, which needs `PyYAML` and pulls `simpy` in through `lib.node`. Without
+them that one test errors and the other 507 pass.
+
+Everything past a flat run does need packages, because `sfpp` now imports ten vendored modules
+rather than the three it started with, and four of them are not stdlib:
+
+| you want | you need | if it is missing |
+| --- | --- | --- |
+| a flat run, the test suite | nothing | - |
+| `--scenario` (terrain, clutter, a real snapshot) | `PyYAML`, and `numpy` + `simpy` transitively, through `lib.presets` -> `lib.node` and `lib.common` | `ImportError`, at the point the scenario loads |
+| charts, the mesh map, the digest page | `matplotlib` | the run writes its JSON and skips the picture |
+| `sfpp.check_oracle` | a **C++ compiler** (`g++`) and a firmware checkout | see §9.2 |
+
+`requirements.txt` in the repository root is the **whole tree's**, not this simulator's: eight hard
+dependencies for the discrete-event and interactive simulators. Install it in a virtualenv - the
+versions are pinned, and a run outside those pins is not a run this tree has tested.
+
+> This section said "nothing needs installing… two optional extras" until 2026-08-21. That was true
+> of `sim/requirements.txt`, which listed matplotlib and pytest and stated that nothing under `sfpp/`
+> used the vendored tree's own eight. That file did not travel with the move into this repository, so
+> the sentence kept its words and silently changed which file it was describing.
 
 ```bash
-cd sim
 python3 -m unittest discover -s sfpp -t . -p 'test_*.py'   # a gate, not a formality
 python3 -m pytest sfpp -q                                  # the same suite, shorter output
 
@@ -393,6 +413,14 @@ rest of the mesh keeps believing routes through a node that has gone. Not yet ex
 | `--chain-walk-cap`    | 4.0         | abandon a chain walk after this many round trips per object                                                            |
 
 ### 4.7 Run control
+
+Two knobs are environment variables rather than flags, because they configure where the process looks
+rather than what it simulates:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SFPP_SCENARIO_CACHE` | `cache/` beside the vendored tree | where map payloads, SRTM tiles and clutter grids are cached, shared with `loraMesh.py`'s own fetches. **Set it per job on a shared runner**: two CI jobs left on the default race to write the same mirrored CSV |
+| `MESHTASTIC_FIRMWARE_ROOT` | sibling checkout, then give up | where `sfpp.check_oracle` finds the firmware source to compile against - see §9.2 |
 
 | Flag          | Default | Meaning                                            |
 | ------------- | ------- | -------------------------------------------------- |
@@ -1226,6 +1254,28 @@ The vendored Meshtasticator's own 2.1-era physics remains reachable in `sim/mesh
 comparison, but the SF++ transport does not model behaviour older than `2.4`.
 
 ---
+
+### 9.2 The cross-implementation check, and what it needs
+
+`sfpp.check_oracle` is the only thing here that compares this port against the firmware **case for
+case** rather than asserting properties of the port alone: it compiles the firmware's own
+`PinSketch.cpp` against `sfpp/oracle.cpp` and diffs the two implementations. It therefore needs two
+things nothing else here does, and neither can go in `requirements.txt`:
+
+- **A C++ compiler.** `g++` is invoked directly. The binary it produces, `sfpp/oracle`, is not in the
+  tree and is not built by the test suite, so a fresh checkout has no oracle until you run the check.
+- **A firmware checkout**, named by `MESHTASTIC_FIRMWARE_ROOT`:
+
+  ```bash
+  MESHTASTIC_FIRMWARE_ROOT=/path/to/firmware python3 -m sfpp.check_oracle --require
+  ```
+
+  Without it a sibling checkout is tried (`../MeshtasticFirmware`, `../firmware`) and, failing that,
+  the check reports it and exits 0 - a tree that cannot see the firmware has not failed anything.
+  **`--require` turns that into a failure, which is what a CI job that means to run it must pass**:
+  an explicit path is answered with itself or with an error, never with somewhere else, because
+  falling back to a sibling once gave 628 passing checks against a tree the caller had not asked for
+  (TRAPS 16's shape, found in the firmware-discovery helper).
 
 ## 10. What is simplified, assumed, or not there at all
 

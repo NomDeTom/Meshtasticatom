@@ -6,3 +6,8 @@ PyPubSub==4.0.3
 simpy==4.1.1
 PyYAML~=6.0.2
 protobuf~=4.25.8
+
+# Optional. Only the interactive simulator's Docker path imports this, and it is guarded: without it
+# `interactiveSim.py -d` says what to install and exits. Left uncommented-out deliberately so a plain
+# `pip install -r` does not pull the Docker SDK for the far commoner PlatformIO-binary path.
+# docker
