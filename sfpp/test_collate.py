@@ -722,6 +722,46 @@ class Explorer(unittest.TestCase):
                 loader, page, f"the page pulls in something external: {loader}"
             )
 
+    def test_every_shown_metric_has_an_axis_and_a_colour(self):
+        """A register invariant: a metric added to SHOWN and nowhere else draws on an axis whose
+        heights mean nothing, silently pooled into a family called "other"."""
+        for key, label, _ in E.SHOWN:
+            self.assertIn(key, E.UNITS, f"{key} is charted with no unit family")
+            self.assertIn(E.UNITS[key], E.UNIT_AXIS, f"{key}'s family has no axis label")
+            self.assertIn(key, E.SERIES_COLOURS, f"{key} has no series colour")
+
+    def test_the_chart_offers_a_checkbox_per_field_and_opens_on_what_moved(self):
+        runs = E.load_archive(self.archive)
+        for r in runs:
+            r["_href"] = "runs/" + r["_name"]
+        blocks = E.index_by_block(runs)
+        page = E.render_html(runs, blocks, [])
+        # One box per field, so a reader picks the comparison rather than clicking through it.
+        for key, label, _ in E.SHOWN:
+            self.assertIn(f'type="checkbox" class="metric" value="{key}"', page)
+        self.assertNotIn('select class="metric"', page)
+        # Ticked on arrival: the measure collate says the block moves in.
+        moved = blocks["B-arm"].get("moved") or "held"
+        self.assertIn(f'value="{moved}" checked', page)
+        # The renderer needs the units to refuse a shared axis across families.
+        self.assertIn('id="chartmeta"', page)
+        self.assertIn("channel/air utilisation", page)
+
+    def test_the_pages_role_marks_match_the_drawn_maps(self):
+        """explorer.MAP_MARKS duplicates meshmap.ROLE_MARKS so the page can draw a legend with
+        meshmap absent. Pinned equal here, because two pictures of one mesh disagreeing on what a
+        square means is worse than either alone."""
+        from . import meshmap as MM
+
+        self.assertEqual(
+            [[role, shape, colour] for role, (shape, colour, _) in MM.ROLE_MARKS.items()],
+            E.MAP_MARKS[:-1],
+        )
+        # The last entry is meshmap's UNKNOWN_ROLE, which mesh_data indexes as len(ROLE_MARKS).
+        self.assertEqual(E.MAP_MARKS[-1][1:], list(MM.UNKNOWN_ROLE[:2]))
+        self.assertEqual(E.MAP_FRAGILE, MM.FRAGILE)
+        self.assertEqual(E.MAP_LINK, MM.LINK)
+
     def test_a_block_name_cannot_inject_markup(self):
         runs = E.load_archive(self.archive)
         runs[0]["blocks"][0]["block"] = "<script>alert(1)</script>"

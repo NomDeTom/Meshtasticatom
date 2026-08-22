@@ -78,12 +78,20 @@ PROPOSALS = {
     "extra_repeats": "the extra-repeats branch's RepeatScalingModule",
     "early_flood_on_unverified": "M4, compiled out at NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED 0",
     "coding_rate_ladder": "on a branch",
+    "coding_rate_var": "no release picks a coding rate per link",
+    "tx_power_var": "no release picks a transmit power per packet",
     "exhaust_hops": "off in every profile, no release path",
     "event_relay_hop_limit": "None in every profile",
 }
 
 # The earliest series whose profile carries each mechanism, and the release it shipped in. Read off
-# the tags in this repository rather than remembered; a value of None means it is only in this tree.
+# the tags in this repository rather than remembered. EXPECTED_TAG stands where the mechanism is in
+# the tree and its series has not been released yet: "unknown" is not a state a register should
+# have, and a bare None read as "unreleased forever" rather than "not tagged yet". Replace each with
+# the real tag when the series ships - the test below pins that every value is one or the other.
+# In this tree, in a series with no release yet. Not a claim that it shipped.
+EXPECTED_TAG = "v2.8.0-expected"
+
 FEATURE_TAG = {
     "core_portnums_mode": ("2.5", "v2.5.8"),
     "queue_late_first": ("2.5", "v2.5.18"),
@@ -96,16 +104,16 @@ FEATURE_TAG = {
     "hop_upgrade": ("2.7", "v2.7.13"),
     "next_hop_learning": ("2.7", "v2.7.13"),
     "traceroute_learning": ("2.7", "v2.7.13"),
-    "traceroute_corroboration": ("2.8", None),
-    "route_cache": ("2.8", None),
-    "adopt_hop_recommendation": ("2.8", None),
-    "resolve_ambiguity": ("2.8", None),
-    "route_health": ("2.8", None),
-    "warm_store": ("2.8", None),
-    "signing": ("2.8", None),
-    "hop_scaling": ("2.8", None),
-    "opaque_relay": ("2.8", None),
-    "congestion_clamp": ("2.8", None),
+    "traceroute_corroboration": ("2.8", EXPECTED_TAG),
+    "route_cache": ("2.8", EXPECTED_TAG),
+    "adopt_hop_recommendation": ("2.8", EXPECTED_TAG),
+    "resolve_ambiguity": ("2.8", EXPECTED_TAG),
+    "route_health": ("2.8", EXPECTED_TAG),
+    "warm_store": ("2.8", EXPECTED_TAG),
+    "signing": ("2.8", EXPECTED_TAG),
+    "hop_scaling": ("2.8", EXPECTED_TAG),
+    "opaque_relay": ("2.8", EXPECTED_TAG),
+    "congestion_clamp": ("2.8", EXPECTED_TAG),
 }
 
 # RadioInterface::getRetransmissionMsec - time to construct, process and reconstruct a packet.
@@ -206,6 +214,17 @@ VARIABLE_HOP_PORTNUMS = frozenset({3, 4, 67, 71})  # POSITION, NODEINFO, TELEMET
 # HopScalingModule: reporting roles stay reachable on a dense mesh whatever the histogram says.
 # None of the roles this transport models maps to one of these, so the floor is zero throughout.
 ROLE_HOP_FLOOR = {"TRACKER": 2, "TAK_TRACKER": 2, "SENSOR": 1}
+
+# 4/5 is the fastest the firmware's presets use and 4/8 the slowest, so a per-link choice moves
+# inside the range a receiver can already demodulate - LoRa carries the coding rate in an explicit
+# header, which is what makes any of this receivable at all.
+CODING_RATE_FASTEST = 5
+CODING_RATE_SLOWEST = 8
+# Meshtastic's power setting is whole dB, so a policy that asks for fractions is asking for
+# something no radio can be told. 15 dB is a floor on how far down it may go: past that the arm
+# stops measuring a policy and starts measuring a different mesh.
+TX_POWER_VAR_STEP_DB = 1.0
+TX_POWER_VAR_MAX_DB = 15.0
 
 # A Routing ACK is a two-byte payload; the header dominates it.
 ACK_PAYLOAD_BYTES = 2
@@ -503,6 +522,8 @@ class Profile:
         "extra_repeats",
         "early_flood_on_unverified",
         "coding_rate_ladder",
+        "coding_rate_var",
+        "tx_power_var",
         "exhaust_hops",
         "event_relay_hop_limit",
         "opaque_relay",
@@ -625,6 +646,8 @@ class Profile:
         # ladder is on a branch, so no release turns either on.
         self.early_flood_on_unverified = False
         self.coding_rate_ladder = False
+        self.coding_rate_var = False
+        self.tx_power_var = False
         self.exhaust_hops = False
         self.event_relay_hop_limit = None
         self.opaque_relay = self.at_least("2.8")
@@ -677,6 +700,8 @@ class Profile:
         self.extra_repeats = False
         self.early_flood_on_unverified = False
         self.coding_rate_ladder = False
+        self.coding_rate_var = False
+        self.tx_power_var = False
         self.opaque_relay = False
 
 
@@ -722,6 +747,9 @@ class Packet:
         "xeddsa_signed",
         "pki_encrypted",
         "coding_rate",
+        # dB against this node's configured power, per transmission. Zero is "as configured", which
+        # is every packet unless a proposal chose otherwise.
+        "tx_power_delta",
         "route",
         # NOT ON THE WIRE: instrumentation only, so a cancellation can be attributed. No decision
         # may read it - that is the ambiguity resolve_unique_last_byte exists to model.
@@ -771,6 +799,7 @@ class Packet:
         # A per-packet TX coding-rate override. None uses the preset's, which is what every packet
         # does unless the retransmission ladder has stepped this one.
         self.coding_rate = None
+        self.tx_power_delta = 0.0
         # RouteDiscovery's route array, on a traceroute and nothing else. None means this packet is
         # not a traceroute; a list is the hops recorded so far, in order.
         self.route = None
@@ -819,6 +848,7 @@ class Packet:
         clone.xeddsa_signed = self.xeddsa_signed
         clone.pki_encrypted = self.pki_encrypted
         clone.coding_rate = self.coding_rate
+        clone.tx_power_delta = self.tx_power_delta
         clone.route = None if self.route is None else list(self.route)
         clone.route_back = None if self.route_back is None else list(self.route_back)
         clone.relay_index = self.relay_index
@@ -871,6 +901,10 @@ class NodeRecord:
         "is_ignored",
         "has_key",
         "xeddsa_signed",
+        # The last RSSI this node heard the peer at, direct only. NodeInfoLite's own field in this
+        # fork, and the only signal knowledge a node has: everything that chooses per link has to
+        # decide from this, never from the transport's link matrix, which no node can read.
+        "rssi",
     )
 
     def __init__(
@@ -898,6 +932,10 @@ class NodeRecord:
         # Learned from verified traffic rather than from NodeInfo, so it survives a round trip
         # through the warm tier instead of being relearned from zero.
         self.xeddsa_signed = xeddsa_signed
+        # Last direct reception's RSSI, or None while nothing has been heard at zero hops. Not
+        # averaged: the firmware keeps the last one, and a mean would flatter a link that has since
+        # gone.
+        self.rssi = None
 
     @property
     def is_protected(self):
@@ -2132,6 +2170,12 @@ class Mesh:
         # A flat loss floor on every reception, standing in for what the physics does not carry.
         # The knob the capacity-against-loss sweep turns. TRANSPORT.md.
         self.extra_loss = extra_loss
+        # The two per-link policies' one knob each. Defaults chosen so a single arm is a result on
+        # its own: 10 dB is roughly the band the PER curve flattens over, and 6 dB of headroom is
+        # what a link needs to survive ordinary fading after the policy has spent the rest.
+        self.coding_rate_var_margin_db = 10.0
+        self.tx_power_var_headroom_db = 6.0
+        self.tx_power_var_broadcast = False
         # Bursty deafness: a blocked antenna, a neighbour keying up, a radio busy elsewhere. A
         # different problem for a sketch than flat loss - TRANSPORT.md.
         self.burst_loss = burst_loss
@@ -2248,6 +2292,14 @@ class Mesh:
             # The recommendation actually taking effect, and the zero-hop list doing the same.
             "hop_limit_lowered": 0,
             "hop_limit_zeroed": 0,
+            "cr_var_faster": 0,
+            "cr_var_slower": 0,
+            "cr_var_preset": 0,
+            "cr_var_no_basis": 0,
+            "tx_power_var_reduced": 0,
+            "tx_power_var_db_saved": 0.0,
+            "tx_power_var_no_basis": 0,
+            "tx_power_var_broadcast_kept": 0,
             "reliable_retx": 0,
             "reliable_failures": 0,
             "opaque_relays": 0,
@@ -3094,10 +3146,17 @@ class Mesh:
 
         # One lift for the whole transmission, taken at its start. It both admits new pairs and
         # makes existing links louder, which is what turns reach into contention. TRANSPORT.md.
-        lift = self.lift_db(tx.start)
+        duct = self.lift_db(tx.start)
+        # Two different dB, kept apart on purpose. `duct` is the channel improving for everyone on
+        # the air at that instant, so an interferer gets it too; `power` is what this transmission
+        # alone spent against its node's configured power, so nothing else may be judged by it.
+        # `lift` is their sum and is only ever applied to this packet's own path.
+        power = packet.tx_power_delta
+        lift = duct + power
         audience = self.neighbours[tx.tx_node]
-        if lift:
+        if duct:
             self.stats["ducted_transmissions"] += 1
+        if lift:
             audience = audience + [
                 j
                 for j in self.duct_reach[tx.tx_node]
@@ -3131,7 +3190,7 @@ class Mesh:
                 self.stats["lost_to_half_duplex"] += 1
                 continue
             if not self._survives_capture(
-                tx, rx, rssi, interferers, self._cad_floor_at(rx, tx.start, tx.end), lift
+                tx, rx, rssi, interferers, self._cad_floor_at(rx, tx.start, tx.end), duct
             ):
                 self.stats["lost_to_collision"] += 1
                 continue
@@ -3150,7 +3209,7 @@ class Mesh:
                 self.stats["lost_to_phy"] += 1
                 continue
             self.stats["receptions"] += 1
-            if lift and self.rssi[tx.tx_node][rx] < self._sensitivity_at(rx, tx.start, tx.end):
+            if duct and self.rssi[tx.tx_node][rx] < self._sensitivity_at(rx, tx.start, tx.end):
                 # This pair is not a link at rest. Everything the mesh learns from this reception -
                 # the NodeDB entry, the relay byte, a next_hop - outlives the duct that carried it.
                 self.stats["ducted_receptions"] += 1
@@ -3161,11 +3220,12 @@ class Mesh:
         # packets into a channel that had gone magically quiet. `cad_floor` is this receiver's own
         # energy-detection threshold for this frame, band included - it used to be a mesh-wide
         # sensitivity minus three.
-        audible = [
-            o
-            for o in interferers
-            if o.tx_node != rx and self.rssi[o.tx_node][rx] + lift >= cad_floor
-        ]
+        # `lift` here is the duct only: an interferer's own power offset is its own, so each is
+        # judged at what it spent rather than at what the packet under test spent.
+        def heard(o):
+            return self.rssi[o.tx_node][rx] + lift + o.packet.tx_power_delta
+
+        audible = [o for o in interferers if o.tx_node != rx and heard(o) >= cad_floor]
         if not audible:
             return True
         # Whichever preamble arrived first holds the receiver. A later packet needs the capture
@@ -3173,10 +3233,8 @@ class Mesh:
         earliest = min(audible, key=lambda o: o.start)
         if earliest.start < tx.start:
             # Both sides carry the same lift, so the margin comparison is unchanged by it.
-            return rssi >= self.rssi[earliest.tx_node][rx] + lift + CAPTURE_DB
-        return all(
-            rssi >= self.rssi[o.tx_node][rx] + lift + CAPTURE_DB for o in audible
-        )
+            return rssi >= heard(earliest) + CAPTURE_DB
+        return all(rssi >= heard(o) + CAPTURE_DB for o in audible)
 
     def _deaf(self, node):
         """Is this node inside a loss burst? Redrawn once per burst window, not per packet."""
@@ -3381,7 +3439,7 @@ class Mesh:
             "fell_back_to_degree": fell_back,
         }
 
-    def note_heard(self, rx, peer, hops_away=None):
+    def note_heard(self, rx, peer, hops_away=None, rssi=None):
         """Record a peer in rx's hot store, trimming it if that pushed it over the cap.
 
         Counted here so eviction is visible: a route dropped this way never expires or fails.
@@ -3389,6 +3447,10 @@ class Mesh:
         node = self.nodes[rx]
         was_warm = peer in node.warm
         record = node.update_from(peer, self.now, hops_away=hops_away)
+        # Only from a direct reception: a relayed packet's RSSI is the last relay's link, not the
+        # origin's, and storing it against the origin would invent a link that does not exist.
+        if rssi is not None and hops_away == 0:
+            record.rssi = rssi
         if was_warm:
             self.stats["warm_promotions"] += 1
         for dropped, warm_outcome in node.trim_nodedb():
@@ -3740,7 +3802,9 @@ class Mesh:
 
         # NodeDB::updateFrom. getHopsAway is hop_start - hop_limit, so a packet that has not been
         # relayed yet is what tells us a peer is a direct neighbour.
-        record = self.note_heard(rx, packet.origin, hops_away=packet.hops_taken())
+        record = self.note_heard(
+            rx, packet.origin, hops_away=packet.hops_taken(), rssi=packet.rx_rssi
+        )
         # NodeDB.cpp:3730 samples every packet heard over the air, clamping a negative hop count to
         # zero rather than rejecting it - the conservative direction for a recommendation.
         hops = max(0, packet.hops_taken())
@@ -4257,6 +4321,92 @@ class Mesh:
         retry.next_hop = NO_NEXT_HOP_PREFERENCE
         self.stats["next_hop_fallbacks"] += 1
 
+    # --- choosing per link, from what the node itself heard ---------------------------------------
+    #
+    # Both policies decide from NodeRecord.rssi, never from self.rssi: the link matrix is the
+    # observer's and no node can read it. That also makes each proposal stand alone - a node with
+    # nothing heard yet falls back to the profile's own coding rate and full power, which is the
+    # 2.8 default, so neither arm has to be crossed with traceroutes or next-hop learning to say
+    # something.
+
+    def _known_margin(self, node, destination):
+        """dB over sensitivity for the link this packet will actually use, as the sender sees it.
+
+        For an addressed packet that is the destination's own record. For a broadcast it is the
+        weakest direct neighbour, because a broadcast is only as good as the peer it loses first.
+        Returns None when the node has heard nothing it can decide from.
+        """
+        radio = self.nodes[node]
+        sensitivity = _phy().effective_sensitivity(self.conf)
+        if destination != BROADCAST:
+            record = radio.nodedb.get(destination)
+            if record is None or record.rssi is None:
+                return None
+            return record.rssi - sensitivity
+        heard = [
+            record.rssi - sensitivity
+            for record in radio.nodedb.values()
+            if record.rssi is not None and record.hops_away == 0
+        ]
+        return min(heard) if heard else None
+
+    def _var_coding_rate(self, node, destination):
+        """A coding rate for this packet, or None to keep the preset's.
+
+        One step toward the fast end where the link has margin to spend, one step toward the slow end
+        where it does not. A step rather than a jump for the reason the retry ladder takes one: 4/8
+        is nearly half again the airtime of 4/5, and a policy that reaches for it on a link two dB
+        short of comfortable spends that on every packet.
+
+        Which direction is available depends on the preset. Read off MeshRadio.h rather than
+        assumed: 4/5 on SHORT_TURBO, SHORT_FAST, SHORT_SLOW, MEDIUM_FAST, MEDIUM_SLOW, MEDIUM_TURBO,
+        LITE_FAST, LITE_SLOW and TINY_FAST; 4/6 on NARROW_FAST, NARROW_SLOW and TINY_SLOW; 4/8 on
+        LONG_TURBO, LONG_MODERATE and LONG_SLOW. So a 4/5 preset can only buy redundancy here and a
+        4/8 one can only save airtime, while the three 4/6 presets are the only ones with room both
+        ways - which makes them where this proposal is actually decided. A step that lands back on
+        the preset's own rate is counted as no decision rather than as one, because a run must not
+        read as having changed something it did not.
+        """
+        margin = self._known_margin(node, destination)
+        if margin is None:
+            self.stats["cr_var_no_basis"] += 1
+            return None
+        base = self.conf.current_preset["cr"]
+        if margin >= self.coding_rate_var_margin_db:
+            target = max(CODING_RATE_FASTEST, base - 1)
+        else:
+            target = min(CODING_RATE_SLOWEST, base + 1)
+        if target == base:
+            self.stats["cr_var_preset"] += 1
+            return None
+        self.stats["cr_var_faster" if target < base else "cr_var_slower"] += 1
+        return target
+
+    def _var_tx_power_delta(self, node, destination):
+        """dB to come down by, never up: the configured power is the ceiling a region allows.
+
+        Addressed packets only, unless a run asks otherwise. A per-link policy needs a link, and a
+        broadcast has none: the best a sender can do is size it to the weakest neighbour it has
+        *heard*, which is not the weakest neighbour it has. Measured at 24 nodes over an hour that
+        costs text reach 0.532 -> 0.079, every reduction pinned at the cap, because the peers a node
+        has not heard yet are exactly the ones it then stops reaching. Kept as an arm rather than
+        deleted - it is the honest measurement of the aggressive reading - but never the default.
+        """
+        if destination == BROADCAST and not self.tx_power_var_broadcast:
+            self.stats["tx_power_var_broadcast_kept"] += 1
+            return 0.0
+        margin = self._known_margin(node, destination)
+        if margin is None:
+            self.stats["tx_power_var_no_basis"] += 1
+            return 0.0
+        spare = margin - self.tx_power_var_headroom_db
+        if spare < TX_POWER_VAR_STEP_DB:
+            return 0.0
+        delta = -min(TX_POWER_VAR_MAX_DB, TX_POWER_VAR_STEP_DB * int(spare / TX_POWER_VAR_STEP_DB))
+        self.stats["tx_power_var_reduced"] += 1
+        self.stats["tx_power_var_db_saved"] += -delta
+        return float(delta)
+
     def _ladder_coding_rate(self, attempt):
         """`if (retransmissionAttempt >= 2) return 8;` else base + 1 on the first retry."""
         base = self.conf.current_preset["cr"]
@@ -4453,6 +4603,14 @@ class Mesh:
         self._apply_hop_policy(radio, packet)
         packet.xeddsa_signed = signed
         packet.pki_encrypted = bool(pki) and destination != BROADCAST
+        # Per-link choices, each independent of the other and of everything else: a node with
+        # nothing heard yet keeps the preset's coding rate and its configured power.
+        if radio.profile.coding_rate_var:
+            chosen = self._var_coding_rate(node, destination)
+            if chosen is not None:
+                packet.coding_rate = chosen
+        if radio.profile.tx_power_var:
+            packet.tx_power_delta = self._var_tx_power_delta(node, destination)
         packet.relay_node = radio.relay_byte
         packet.next_hop = (
             self.get_next_hop(node, destination, packet.relay_node)
@@ -4542,6 +4700,9 @@ def build(
     max_num_nodes=None,
     warm_num_nodes=None,
     hop_target_nodes=None,
+    coding_rate_var_margin_db=10.0,
+    tx_power_var_headroom_db=6.0,
+    tx_power_var_broadcast=False,
     signature_policy=SIGNATURE_POLICY_COMPATIBLE,
     platform_mix="uniform",
     siting_mix="uniform",
@@ -4652,6 +4813,12 @@ def build(
         profile=profile,
         terrain=terrain,
     )
+    # The per-link policies' knobs. Set here rather than in Mesh's signature: they belong to a
+    # proposal, and a transport that has never been asked for one should not carry three more
+    # constructor arguments for it.
+    mesh.coding_rate_var_margin_db = float(coding_rate_var_margin_db)
+    mesh.tx_power_var_headroom_db = float(tx_power_var_headroom_db)
+    mesh.tx_power_var_broadcast = bool(tx_power_var_broadcast)
     # Measured heights, applied before the mesh is lifted onto the ground: mast against windowsill
     # decides more links than any generated mix does.
     if scenario is not None and scenario.antenna_height:

@@ -95,6 +95,80 @@ def _mark(shape, cx, cy, r, fill, stroke, width=0.9):
     )
 
 
+# What a stored map may cost. A 92-node Batumi is 1915 links and 17 kB of JSON; the cap only bites
+# on meshes far larger than anything a snapshot holds, and drops are counted rather than hidden.
+MAX_STORED_LINKS = 6000
+# Positions are stored in decametres from the extent's corner. At 900 px across 20 km one pixel is
+# some 25 m, so 10 m is already below the ink; keeping metres would double the payload for nothing.
+POSITION_UNIT_M = 10
+
+
+def mesh_data(campaign, max_links=MAX_STORED_LINKS):
+    """One run's mesh as points and links, for a page to draw rather than an image to ship.
+
+    Split in two on purpose. `geometry` is decided by the radio - positions and which pairs close a
+    budget - so two cells that differ only in what the nodes *do* share one, and a digest can hold it
+    once. `overlay` is per cell: unlocking roles rewrites every mark on the map without moving a
+    single link. See `mesh_svg` for the same picture drawn server-side.
+    """
+    mesh = campaign.mesh
+    nodes = mesh.nodes
+    x0, y0, x1, y1 = _extent(nodes)
+    span_x, span_y = max(x1 - x0, 1.0), max(y1 - y0, 1.0)
+    sensitivity = float(campaign.conf.current_preset["sensitivity"])
+
+    pts = []
+    for n in nodes:
+        pts.append(round((n.x - x0) / POSITION_UNIT_M))
+        pts.append(round((n.y - y0) / POSITION_UNIT_M))
+
+    links, total, dropped = [], 0, 0
+    for i, peers in enumerate(mesh.neighbours):
+        for j in peers:
+            if j <= i:
+                continue  # each undirected pair once
+            total += 1
+            if len(links) // 3 >= max_links:
+                dropped += 1
+                continue
+            # The weaker direction, matching the drawn map: a link a reader is told exists has to
+            # close in both, and the margin shown is the one that fails first.
+            margin = min(mesh.rssi[i][j], mesh.rssi[j][i]) - sensitivity
+            # Floored, not rounded, so the stored dB is a lower bound on the real one: a link is
+            # never shown stronger than it measured. That also makes the drawn fragile set exact
+            # rather than nearly right - `floor(m) < 5` holds precisely when `m < 5`, where rounding
+            # promoted every 4.5-to-5 dB link out of the class and lost 70 of Batumi's 415.
+            links += [i, j, max(0, min(63, math.floor(margin)))]
+
+    roles = list(ROLE_MARKS)
+    role_of = []
+    for n in nodes:
+        role = getattr(n, "role", None) or "CLIENT"
+        role_of.append(roles.index(role) if role in roles else len(roles))
+    return {
+        "geometry": {
+            "n": len(nodes),
+            "unit_m": POSITION_UNIT_M,
+            "extent_km": [round(span_x / 1000, 2), round(span_y / 1000, 2)],
+            "sensitivity": round(sensitivity, 1),
+            "preset": campaign.conf.MODEM_PRESET,
+            "fragile_db": FRAGILE_DB,
+            "pts": pts,
+            "links": links,
+            "links_total": total,
+            "links_dropped": dropped,
+        },
+        "overlay": {
+            # `roles` travels with the overlay that uses it, so a reader of one cell needs nothing
+            # else to name a mark. Index len(roles) is meshmap's UNKNOWN_ROLE.
+            "roles": roles,
+            "role_of": role_of,
+            "servers": sorted(getattr(campaign, "servers", {}) or {}),
+            "designated": sorted(getattr(campaign, "designated", []) or []),
+        },
+    }
+
+
 def mesh_svg(campaign, path, max_links=2500):
     """Draw one run's mesh, returning the counts it drew so a caller can record the claim.
 

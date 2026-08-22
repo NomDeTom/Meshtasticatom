@@ -244,7 +244,24 @@ def per_node_of(report):
     return out
 
 
-def cells_of(reports, per_node=False):
+def map_of(report, registry):
+    """This report's mesh map as a reference into `registry`, or nothing when it carried none.
+
+    The geometry is entered once under the hash of its own contents, because a sweep changing what
+    nodes *do* leaves the radio picture identical: across one Batumi batch 102 of 123 cells shared a
+    single topology, so storing one per cell would be the same 17 kB written a hundred times.
+    """
+    got = report.get("mesh_map") or {}
+    geometry, overlay = got.get("geometry"), got.get("overlay")
+    if not geometry or not overlay:
+        return None
+    blob = json.dumps(geometry, separators=(",", ":"), sort_keys=True)
+    key = hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
+    registry.setdefault(key, geometry)
+    return {"geom": key, "overlay": overlay, "seed": report.get("seed")}
+
+
+def cells_of(reports, per_node=False, maps=None):
     """One entry per arm value, averaged over whatever seeds the run drew for it.
 
     Grouped on the requested value; `placement_capped` records where the achieved one differs.
@@ -264,6 +281,12 @@ def cells_of(reports, per_node=False):
             if vectors:
                 cell["per_node"] = vectors
                 cell["per_node_seed"] = group[0].get("seed")
+        # One seed's geometry, for the same reason per_node takes one: node indices belong to a
+        # single run, and a mean over two seeds' positions would draw a mesh that never existed.
+        if maps is not None:
+            reference = map_of(group[0], maps)
+            if reference:
+                cell["map"] = reference
         # Only when a value was run more than once - a single-seed run has no spread, and writing
         # 0.0 there would let the explorer average a fiction into a real one later.
         spread = {k: _sd([metric(g, k) for g in group]) for k in METRICS}
@@ -623,9 +646,9 @@ def check_timing(blocks, history):
             )
 
 
-def summarise_block(reports, per_node=False):
+def summarise_block(reports, per_node=False, maps=None):
     first = reports[0]
-    cells = cells_of(reports, per_node=per_node)
+    cells = cells_of(reports, per_node=per_node, maps=maps)
     against_control(cells)
     block = {
         "block": first.get("block", "?"),
@@ -738,6 +761,7 @@ def collate(
     expected=None,
     history_dir=None,
     per_node=False,
+    maps=False,
 ):
     # On the `block` field, not one block per file: a sharded cell uploads a file per seed, and
     # reading per file would average nothing and enter the block three times.
@@ -757,7 +781,11 @@ def collate(
             f"WARNING: {len(unsafe)} block name(s) are not usable as a path and will be "
             f"sanitised wherever one is needed: {', '.join(repr(n) for n in unsafe)}"
         )
-    blocks = [summarise_block(reports, per_node=per_node) for reports in by_block.values()]
+    registry = {} if maps else None
+    blocks = [
+        summarise_block(reports, per_node=per_node, maps=registry)
+        for reports in by_block.values()
+    ]
     # Against this block's own past, not against a figure written into a comment once. Skipped
     # entirely when no archive is given, so a local collate of one run behaves exactly as before.
     check_timing(blocks, load_history(history_dir, exclude_run_id=run_id))
@@ -790,6 +818,9 @@ def collate(
         "missing_blocks": missing,
         "wall_seconds": sum(b["wall_seconds"] for b in blocks),
         "gate": gate(blocks, missing),
+        # Deduplicated geometry, referenced by the cells that share it. Absent unless --maps, so a
+        # digest that nobody draws a map from stays the size it was.
+        **({"maps": registry} if registry else {}),
     }
 
 
@@ -1055,6 +1086,13 @@ def main(argv=None):
         "ones, and this digest is what the rolling page is built from",
     )
     ap.add_argument(
+        "--maps",
+        action="store_true",
+        help="carry each cell's mesh as points and links, so the page can draw the map instead of "
+        "linking an SVG that lives beside the block JSONs the archive is free to drop. Geometry is "
+        "shared between cells that have the same one, which in practice is most of a batch",
+    )
+    ap.add_argument(
         "--fail-on-gate",
         action="store_true",
         help="exit non-zero when a fatal gate failed",
@@ -1075,6 +1113,7 @@ def main(argv=None):
         expected=expected,
         history_dir=opts.history,
         per_node=opts.per_node,
+        maps=opts.maps,
     )
     out_dir = opts.out or opts.runs
     os.makedirs(out_dir, exist_ok=True)

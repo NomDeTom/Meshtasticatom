@@ -43,6 +43,59 @@ SHOWN = [
     ("sr_airtime", "SR air", 3),
     ("servers_placed", "placed", 0),
 ]
+# The axis each metric belongs on. Bars side by side invite reading one height against another, and
+# the note above is exactly why that has to be refused across units: `demand` has no ceiling and
+# `chutil_p90` cannot pass 100, so one y axis for both ranks collapse instead of measuring it. A
+# family is a promise that heights within it mean the same thing.
+UNITS = {
+    "text": "share",
+    "dm": "share",
+    "admin": "share",
+    "held": "share",
+    "union": "share",
+    "text_worst": "share",
+    "sr_airtime": "share",
+    "demand": "multiple",
+    "chutil_p90": "percent",
+    "chutil_max": "percent",
+    "airutil_max": "percent",
+    "servers_placed": "count",
+}
+# The map's role marks, as the drawn map has them. Duplicated rather than imported: this module is
+# built to read an archive with nothing else present, and a page that cannot draw a legend because
+# meshmap is absent would be worse than one whose two copies can drift. test_collate pins them equal.
+MAP_MARKS = [
+    ["ROUTER", "square", "#2E5E7E"],
+    ["ROUTER_LATE", "square-open", "#4E86A8"],
+    ["CLIENT_BASE", "diamond", "#7FB0CB"],
+    ["CLIENT", "circle", "#B5D2E2"],
+    ["CLIENT_MUTE", "circle-open", "#DCE9F1"],
+    ["unmodelled", "circle", "#F0F0F0"],
+]
+MAP_FRAGILE = "#B4472A"
+MAP_LINK = "#9fb4c7"
+UNIT_AXIS = {
+    "share": "share of offered traffic (0-1)",
+    "multiple": "multiple of the unscaled interval (x)",
+    "percent": "channel/air utilisation (%)",
+    "count": "nodes",
+}
+# Fixed per metric, not per position in the selection, so a colour means the same thing in every
+# panel and across a reload. Chosen to hold up on both themes and for red/green colour blindness.
+SERIES_COLOURS = {
+    "text": "#2E5E7E",
+    "dm": "#B4472A",
+    "admin": "#7A8C3F",
+    "held": "#4E86A8",
+    "union": "#8A5A9E",
+    "text_worst": "#C08A2E",
+    "sr_airtime": "#3F8A7A",
+    "demand": "#2E5E7E",
+    "chutil_p90": "#2E5E7E",
+    "chutil_max": "#B4472A",
+    "airutil_max": "#C08A2E",
+    "servers_placed": "#4E86A8",
+}
 
 
 def load_archive(archive_dir, window=None):
@@ -113,6 +166,11 @@ def index_by_block(runs):
                     # Only present when the digest was collated with --per-node.
                     "per_node": {
                         c["value"]: c["per_node"] for c in b["cells"] if c.get("per_node")
+                    },
+                    # Only present when the digest was collated with --maps. The geometry itself
+                    # lives once per run, in `run["maps"]`, and this holds the key into it.
+                    "maps": {
+                        c["value"]: c["map"] for c in b["cells"] if c.get("map")
                     },
                     "cost": b.get("cost"),
                     "flags": b.get("flags", []),
@@ -427,7 +485,15 @@ p.sub { color: var(--muted); margin: 0 0 1.5rem; }
 .figure > summary { cursor: pointer; color: var(--muted); font-size: .8rem; width: max-content; }
 .figure > summary:hover { color: var(--text); }
 .chartbar { margin: .5rem 0 .25rem; }
+/* Wraps rather than scrolls: on a narrow screen a reader needs to see every field on offer at once
+   to decide, and a hidden checkbox reads as a metric the digest does not carry. */
+.chartpick { display: flex; flex-wrap: wrap; gap: .15rem .9rem; font-size: .8rem; color: var(--muted); }
+.chartpick label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+.chartpick label:hover { color: var(--text); }
+.chartpick input { margin: 0; cursor: pointer; }
+.chartpick .wide { flex-basis: 100%; }
 .chart { min-height: 2rem; }
+.chart .axislabel { font-size: .75rem; color: var(--muted); margin: .5rem 0 -.2rem; }
 .figure svg { background: #FCFCFA; border: 1px solid var(--border); border-radius: 6px; margin-top: .4rem; }
 /* Tabs. Progressive enhancement: with no JS every panel stays visible and the nav is inert, so the
    page remains one long readable document - which is also what printing and grepping it want. */
@@ -488,6 +554,7 @@ JS = """
 // Bars per cell for the latest run, and a line per cell when there is more than one run to trace.
 (function () {
   const data = JSON.parse(document.getElementById('chartdata').textContent);
+  const meta = JSON.parse(document.getElementById('chartmeta').textContent);
   document.querySelectorAll('.nojs').forEach((p) => p.remove());
   const NS = 'http://www.w3.org/2000/svg';
   const el = (name, attrs) => {
@@ -538,75 +605,330 @@ JS = """
     host.appendChild(svg);
   }
 
-  function draw(host, block, metric) {
-    const entry = data[block];
-    if (!entry) return;
-    if (metric === '__nodes') { drawNodes(host, entry); return; }
-    const cells = Object.keys(entry.cells);
-    const runs = entry.runs;
+  function latestOf(entry, metric) {
     // The last run that has a number for a cell is the one the bars show; a cell missing from the
     // latest run keeps its most recent value rather than vanishing.
-    const latest = {};
-    cells.forEach((c) => {
+    const out = {};
+    Object.keys(entry.cells).forEach((c) => {
       const s = entry.cells[c][metric] || [];
-      for (let i = s.length - 1; i >= 0; i--) if (s[i] !== null) { latest[c] = s[i]; break; }
+      for (let i = s.length - 1; i >= 0; i--) if (s[i] !== null) { out[c] = s[i]; break; }
     });
-    const values = cells.map((c) => latest[c]).filter((v) => v !== undefined && v !== null);
-    host.textContent = '';
-    if (!values.length) {
-      host.appendChild(document.createTextNode('no ' + metric + ' recorded for this block'));
-      return;
-    }
-    const W = 640, H = 42 + cells.length * 26, LEFT = 132, top = 14;
-    const hi = Math.max(...values, 0), lo = Math.min(...values, 0);
-    const span = (hi - lo) || 1;
-    const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
-                           style: 'max-width:100%;height:auto;font-size:11px'});
-    const zero = LEFT + (0 - lo) / span * (W - LEFT - 56);
-    cells.forEach((c, i) => {
-      const y = top + i * 26;
-      const label = el('text', {x: LEFT - 8, y: y + 12, 'text-anchor': 'end',
-                                style: 'fill:var(--muted)'});
-      label.textContent = c.length > 20 ? c.slice(0, 19) + '…' : c;
-      svg.appendChild(label);
-      const v = latest[c];
-      if (v === undefined || v === null) return;
-      const x = LEFT + (v - lo) / span * (W - LEFT - 56);
-      svg.appendChild(el('rect', {x: Math.min(zero, x), y: y + 3, width: Math.abs(x - zero) || 1,
-                                  height: 15, rx: 2, style: 'fill:var(--accent)'}));
-      const num = el('text', {x: x + 6, y: y + 15, style: 'fill:var(--text)'});
-      num.textContent = Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3);
-      svg.appendChild(num);
-      // Run-to-run, when there is more than one: the same numbers the sparkline column traces.
-      const s = entry.cells[c][metric] || [];
-      const present = s.filter((n) => n !== null);
-      if (runs.length > 1 && present.length > 1) {
-        const title = el('title', {});
-        title.textContent = c + ' over ' + runs.length + ' runs: ' + present.join(', ');
-        svg.appendChild(title);
-      }
-    });
-    svg.appendChild(el('line', {x1: zero, y1: top, x2: zero, y2: H - 14,
-                                style: 'stroke:var(--border)'}));
-    host.appendChild(svg);
+    return out;
   }
 
+  const fmt = (v, places) =>
+    Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(places === undefined ? 3 : places);
+
+  // One group per cell, one bar per selected metric, sharing a y axis. Only ever called with
+  // metrics of a single unit family, because heights side by side are a claim that they compare.
+  function drawFamily(entry, metrics, unit) {
+    const cells = Object.keys(entry.cells);
+    if (!cells.length) return null;
+    const latest = {};
+    metrics.forEach((m) => { latest[m] = latestOf(entry, m); });
+    const has = (m, c) => latest[m][c] !== undefined && latest[m][c] !== null;
+    // A metric this block has no number for is dropped, not drawn flat at zero: an absent
+    // measurement and a measured zero are different findings.
+    const live = metrics.filter((m) => cells.some((c) => has(m, c)));
+    if (!live.length) return null;
+    const values = [];
+    cells.forEach((c) => live.forEach((m) => { if (has(m, c)) values.push(latest[m][c]); }));
+    if (!values.length) return null;
+
+    const turn = cells.some((c) => c.length > 7) || cells.length > 5;
+    const W = 640, padL = 54, padR = 14;
+    const padT = live.length > 1 ? 32 : 14, padB = turn ? 74 : 32;
+    const H = padT + 180 + padB;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    let hi = Math.max(...values, 0), lo = Math.min(...values, 0);
+    // A share is read against its ceiling; letting the tallest bar fill the panel turns 0.31 into
+    // a full-height bar and reads as success.
+    if (unit === 'share') hi = Math.max(hi, 1);
+    if (hi === lo) hi = lo + 1;
+    const span = hi - lo;
+    const yOf = (v) => padT + plotH - (v - lo) / span * plotH;
+    const places = meta.places[live[0]];
+
+    const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
+                           style: 'max-width:100%;height:auto;font-size:11px'});
+    for (let t = 0; t <= 4; t++) {
+      const v = lo + (span * t) / 4, y = yOf(v);
+      svg.appendChild(el('line', {x1: padL, y1: y, x2: padL + plotW, y2: y,
+                                  style: 'stroke:var(--border)' + (v === 0 ? '' : ';opacity:.45')}));
+      const lab = el('text', {x: padL - 7, y: y + 3.5, 'text-anchor': 'end',
+                              style: 'fill:var(--muted)'});
+      lab.textContent = fmt(v, places);
+      svg.appendChild(lab);
+    }
+    if (live.length > 1) {
+      let lx = padL;
+      live.forEach((m) => {
+        svg.appendChild(el('rect', {x: lx, y: 6, width: 9, height: 9, rx: 1.5,
+                                    style: 'fill:' + (meta.colours[m] || 'var(--accent)')}));
+        const lab = el('text', {x: lx + 13, y: 14.5, style: 'fill:var(--muted)'});
+        lab.textContent = meta.labels[m] || m;
+        svg.appendChild(lab);
+        lx += 26 + 6.4 * (meta.labels[m] || m).length;
+      });
+    }
+    const gw = plotW / cells.length;
+    const barW = Math.max(2.5, (gw * 0.76) / live.length);
+    const naming = cells.length * live.length <= 8;
+    cells.forEach((c, i) => {
+      const mid = padL + i * gw + gw / 2;
+      const base = mid - (barW * live.length) / 2;
+      live.forEach((m, k) => {
+        if (!has(m, c)) return;
+        const v = latest[m][c], top = yOf(v), zero = yOf(Math.max(lo, 0));
+        const bar = el('rect', {x: base + k * barW + 0.5, y: Math.min(top, zero),
+                                width: Math.max(1, barW - 1), height: Math.abs(zero - top) || 1,
+                                rx: 1.5, style: 'fill:' + (meta.colours[m] || 'var(--accent)')});
+        const title = el('title', {});
+        const run = entry.cells[c][m] || [];
+        const seen = run.filter((n) => n !== null);
+        title.textContent = `${c} · ${meta.labels[m] || m} = ${fmt(v, meta.places[m])}` +
+          (seen.length > 1 ? ` (${entry.runs.length} runs: ${seen.join(', ')})` : '');
+        bar.appendChild(title);
+        svg.appendChild(bar);
+        if (naming) {
+          const num = el('text', {x: base + k * barW + barW / 2, y: Math.min(top, zero) - 4,
+                                  'text-anchor': 'middle', style: 'fill:var(--text)'});
+          num.textContent = fmt(v, meta.places[m]);
+          svg.appendChild(num);
+        }
+      });
+      // Rotated only when the names would otherwise collide, so a two-cell block stays level.
+      const name = c.length > 22 ? c.slice(0, 21) + '…' : c;
+      const tick = turn
+        ? el('text', {x: mid, y: padT + plotH + 8, 'text-anchor': 'end',
+                      transform: `rotate(-34 ${mid} ${padT + plotH + 8})`,
+                      style: 'fill:var(--muted)'})
+        : el('text', {x: mid, y: padT + plotH + 14, 'text-anchor': 'middle',
+                      style: 'fill:var(--muted)'});
+      tick.textContent = name;
+      svg.appendChild(tick);
+    });
+    svg.appendChild(el('line', {x1: padL, y1: yOf(Math.max(lo, 0)), x2: padL + plotW,
+                                y2: yOf(Math.max(lo, 0)), style: 'stroke:var(--border)'}));
+    return {svg: svg, live: live};
+  }
+
+  // A mark per role, ordered by how much the node relays: a filled square relays everything, a
+  // hollow dot relays nothing. Same shapes meshmap.py draws, so the two pictures read alike.
+  function roleMark(shape, cx, cy, r, fill) {
+    if (shape === 'square') {
+      return el('rect', {x: cx - r, y: cy - r, width: 2 * r, height: 2 * r,
+                         style: `fill:${fill};stroke:var(--muted);stroke-width:.9`});
+    }
+    if (shape === 'square-open') {
+      return el('rect', {x: cx - r, y: cy - r, width: 2 * r, height: 2 * r,
+                         style: `fill:none;stroke:${fill};stroke-width:1.6`});
+    }
+    if (shape === 'diamond') {
+      return el('polygon', {points: `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`,
+                            style: `fill:${fill};stroke:var(--muted);stroke-width:.9`});
+    }
+    if (shape === 'circle-open') {
+      return el('circle', {cx: cx, cy: cy, r: r, style: `fill:none;stroke:${fill};stroke-width:1.6`});
+    }
+    return el('circle', {cx: cx, cy: cy, r: r,
+                         style: `fill:${fill};stroke:var(--muted);stroke-width:.9`});
+  }
+
+  // Nodes sharing a position, fanned onto a small circle around it. Batumi is 92 nodes on 55
+  // coordinates, so drawn literally a third of the mesh is invisible; the tooltip says so.
+  function fanOut(pts, n) {
+    const groups = {}, place = [], stack = [];
+    for (let i = 0; i < n; i++) {
+      const key = pts[2 * i] + ',' + pts[2 * i + 1];
+      (groups[key] = groups[key] || []).push(i);
+    }
+    Object.keys(groups).forEach((key) => {
+      const members = groups[key], count = members.length;
+      members.forEach((i, k) => {
+        stack[i] = count;
+        if (count === 1) { place[i] = [0, 0]; return; }
+        const angle = (2 * Math.PI * k) / count, spread = 7 * (count > 8 ? 1.55 : 1);
+        place[i] = [spread * Math.cos(angle), spread * Math.sin(angle)];
+      });
+    });
+    return {place: place, stack: stack};
+  }
+
+  function drawMap(host, entry) {
+    const cells = Object.keys(entry.maps || {});
+    host.textContent = '';
+    cells.forEach((cell) => {
+      const ref = entry.maps[cell];
+      const geo = meta.maps[ref.geom];
+      if (!geo) return;                 // a digest referencing a geometry it did not carry
+      const over = ref.overlay || {};
+      const n = geo.n, pts = geo.pts, links = geo.links || [];
+      const W = 640, padL = 14, padR = 14, padT = 34, padB = 46;
+      const H = 470;
+      let mx = 1, my = 1;
+      for (let i = 0; i < n; i++) { mx = Math.max(mx, pts[2 * i]); my = Math.max(my, pts[2 * i + 1]); }
+      // One scale for both axes, so the picture is not a stretched version of the geometry.
+      const scale = Math.min((W - padL - padR) / mx, (H - padT - padB) / my);
+      const ox = padL + ((W - padL - padR) - mx * scale) / 2;
+      const oy = padT + ((H - padT - padB) - my * scale) / 2;
+      const fan = fanOut(pts, n);
+      // SVG y grows downward; the mesh's does not.
+      const at = (i) => [ox + pts[2 * i] * scale + fan.place[i][0],
+                         oy + (my - pts[2 * i + 1]) * scale + fan.place[i][1]];
+
+      const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
+                             style: 'max-width:100%;height:auto;font-size:10.5px'});
+      const head = el('text', {x: 14, y: 16, style: 'fill:var(--text)'});
+      head.textContent = `${cell} · ${n} nodes, ${geo.links_total} link(s)`
+        + ((over.servers || []).length ? `, ${over.servers.length} archive(s)` : '');
+      svg.appendChild(head);
+      const sub = el('text', {x: 14, y: 29, style: 'fill:var(--muted)'});
+      sub.textContent = `${geo.preset} · sensitivity ${geo.sensitivity} dBm · `
+        + `${geo.extent_km[0]} x ${geo.extent_km[1]} km · a link is drawn where the budget closes;`
+        + ` red is under ${geo.fragile_db} dB of margin`;
+      svg.appendChild(sub);
+
+      // Two passes - every link faint, the fragile over the top - since 2000 equal links smear.
+      const weak = [];
+      for (let k = 0; k < links.length; k += 3) {
+        const a = at(links[k]), b = at(links[k + 1]), margin = links[k + 2];
+        if (margin < geo.fragile_db) {
+          weak.push(el('line', {x1: a[0], y1: a[1], x2: b[0], y2: b[1],
+                                style: `stroke:${meta.mapcolours.fragile};stroke-width:.8;opacity:.45`}));
+        } else {
+          const alpha = (0.06 + 0.16 * Math.min(1, margin / 25)).toFixed(2);
+          svg.appendChild(el('line', {x1: a[0], y1: a[1], x2: b[0], y2: b[1],
+                                      style: `stroke:${meta.mapcolours.link};stroke-width:.7;opacity:${alpha}`}));
+        }
+      }
+      weak.forEach((l) => svg.appendChild(l));
+
+      const servers = over.servers || [], designated = over.designated || [];
+      const seen = {};
+      for (let i = 0; i < n; i++) {
+        const p = at(i);
+        const idx = (over.role_of || [])[i];
+        const mark = meta.rolemarks[idx === undefined ? meta.rolemarks.length - 1 : idx]
+                     || meta.rolemarks[meta.rolemarks.length - 1];
+        seen[mark[0]] = (seen[mark[0]] || 0) + 1;
+        // A designated-but-archiveless node is the `--protocol none` control: ringed, not filled.
+        if (designated.indexOf(i) >= 0 && servers.indexOf(i) < 0) {
+          svg.appendChild(el('circle', {cx: p[0], cy: p[1], r: 10,
+                                        style: `fill:none;stroke:${meta.mapcolours.fragile};stroke-width:1.4;stroke-dasharray:3 2`}));
+        }
+        if (servers.indexOf(i) >= 0) {
+          // Outside the role mark rather than replacing it: an archive on a router and one on a
+          // muted client are different deployments, and one ring cannot tell them apart.
+          svg.appendChild(el('circle', {cx: p[0], cy: p[1], r: 10.5,
+                                        style: `fill:none;stroke:${meta.mapcolours.fragile};stroke-width:2.2`}));
+        }
+        const node = roleMark(mark[1], p[0], p[1], 5, mark[2]);
+        const title = el('title', {});
+        title.textContent = `node ${i} · ${mark[0]}`
+          + (servers.indexOf(i) >= 0 ? ' · archive' : '')
+          + (fan.stack[i] > 1
+              ? ` · shares a position with ${fan.stack[i] - 1} other(s), fanned out to be visible`
+              : '');
+        node.appendChild(title);
+        svg.appendChild(node);
+      }
+
+      let lx = 14;
+      meta.rolemarks.forEach((mark) => {
+        if (!seen[mark[0]]) return;     // only the roles this mesh has
+        svg.appendChild(roleMark(mark[1], lx + 5, H - 20, 5, mark[2]));
+        const lab = el('text', {x: lx + 15, y: H - 16, style: 'fill:var(--muted)'});
+        lab.textContent = `${mark[0]} ${seen[mark[0]]}`;
+        svg.appendChild(lab);
+        lx += 30 + 6.4 * (mark[0].length + String(seen[mark[0]]).length);
+      });
+      if (geo.links_dropped) {
+        const note = el('text', {x: W - 14, y: H - 6, 'text-anchor': 'end', style: 'fill:var(--muted)'});
+        note.textContent = `${geo.links_dropped} link(s) not stored (over the cap)`;
+        svg.appendChild(note);
+      }
+      const cap = document.createElement('p');
+      cap.className = 'axislabel';
+      cap.textContent = `mesh map · ${cell}` + (ref.run ? ` · ${ref.run}` : '')
+        + (ref.seed !== undefined && ref.seed !== null ? ` · seed ${ref.seed}` : '');
+      host.appendChild(cap);
+      host.appendChild(svg);
+    });
+  }
+
+  function draw(host, block, selected) {
+    const entry = data[block];
+    host.textContent = '';
+    if (!entry) return;
+    const nodes = selected.indexOf('__nodes') >= 0;
+    const wantMap = selected.indexOf('__map') >= 0;
+    const bars = selected.filter((m) => m !== '__nodes' && m !== '__map');
+    // Split by unit, in the order the fields are offered: a selection mixing a share with a
+    // percentage draws two charts rather than one chart nobody can read a height off.
+    const families = [];
+    bars.forEach((m) => {
+      const unit = meta.units[m] || 'other';
+      let fam = families.filter((f) => f.unit === unit)[0];
+      if (!fam) { fam = {unit: unit, metrics: []}; families.push(fam); }
+      fam.metrics.push(m);
+    });
+    let drew = 0;
+    families.forEach((fam) => {
+      const got = drawFamily(entry, fam.metrics, fam.unit);
+      if (!got) return;
+      const cap = document.createElement('p');
+      cap.className = 'axislabel';
+      // Named from what was drawn, not what was ticked, so a metric this block has no numbers
+      // for does not appear in the caption of a chart it is absent from.
+      cap.textContent = (meta.axis[fam.unit] || fam.unit)
+        + (got.live.length === 1 ? ' · ' + (meta.labels[got.live[0]] || got.live[0]) : '');
+      host.appendChild(cap);
+      host.appendChild(got.svg);
+      drew++;
+    });
+    if (nodes) {
+      const box = document.createElement('div');
+      host.appendChild(box);
+      drawNodes(box, entry);
+      drew++;
+    }
+    if (wantMap && entry.maps) {
+      const box = document.createElement('div');
+      host.appendChild(box);
+      drawMap(box, entry);
+      drew++;
+    }
+    if (!drew) {
+      host.appendChild(document.createTextNode(
+        selected.length ? 'no numbers recorded for this block' : 'tick a field to draw it'));
+    }
+  }
+
+  // The last set ticked becomes the default for the next panel opened: with fifty blocks on one
+  // page, re-ticking the same three fields per panel is the entire cost of the control.
+  let sticky = null;
   document.querySelectorAll('details[data-chart]').forEach((box) => {
     const block = box.getAttribute('data-chart');
     const host = box.querySelector('.chart');
-    const select = box.querySelector('select.metric');
-    const entry = data[block];
-    if (entry) {
-      // Open on whatever collate said this block moves, so the first chart is the useful one.
-      const opt = [...select.options].find((o) => o.value === entry.measure);
-      if (opt) select.value = entry.measure;
-    }
+    const picks = Array.from(box.querySelectorAll('input.metric'));
+    const chosen = () => picks.filter((b) => b.checked).map((b) => b.value);
     let drawn = false;
-    const render = () => draw(host, block, select.value);
     box.addEventListener('toggle', () => {
-      if (box.open && !drawn) { render(); drawn = true; }
+      if (!box.open || drawn) return;
+      if (sticky) {
+        // Only fields this panel offers: `__nodes` exists where the digest carried the vectors.
+        const offered = picks.map((b) => b.value);
+        const want = sticky.filter((v) => offered.indexOf(v) >= 0);
+        if (want.length) picks.forEach((b) => { b.checked = want.indexOf(b.value) >= 0; });
+      }
+      draw(host, block, chosen());
+      drawn = true;
     });
-    select.addEventListener('change', () => { if (box.open) render(); });
+    picks.forEach((b) => b.addEventListener('change', () => {
+      sticky = chosen();
+      if (box.open) draw(host, block, chosen());
+    }));
   });
 })();
 // Auto -> Light -> Dark, stamped on the root element. Auto removes the attribute and lets
@@ -919,6 +1241,12 @@ def chart_data(blocks, runs):
         for run in entry["runs"]:
             for value, vectors in (run.get("per_node") or {}).items():
                 nodes[str(value)] = {"run": run.get("run_id"), "classes": vectors}
+        # Same rule for maps: the latest run that has one for a cell wins, since a geometry and the
+        # node indices its overlay points at belong together.
+        maps = {}
+        for run in entry["runs"]:
+            for value, reference in (run.get("maps") or {}).items():
+                maps[str(value)] = dict(reference, run=run.get("run_id"))
         out[name] = {
             "arm": entry["arm"],
             "measure": entry.get("moved") or "held",
@@ -927,6 +1255,21 @@ def chart_data(blocks, runs):
         }
         if nodes:
             out[name]["nodes"] = nodes
+        if maps:
+            out[name]["maps"] = maps
+    return out
+
+
+def map_registry(runs):
+    """Every geometry any run carried, keyed by content hash - collate's registries, merged.
+
+    Identical geometry across two runs hashes the same, so a scenario measured every night enters
+    the page once however many nights are in the window.
+    """
+    out = {}
+    for run in runs:
+        for key, geometry in (run.get("maps") or {}).items():
+            out.setdefault(key, geometry)
     return out
 
 
@@ -1110,15 +1453,33 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
             )
         out.append("</tbody></table></div>")
 
-        metrics = [f'<option value="{k}">{_esc(label)}</option>' for k, label, _ in SHOWN]
+        # One checkbox per metric, because the question a reader arrives with is nearly always
+        # comparative - did DM hold up where text did not - and a control that shows one metric at a
+        # time answers it only by memory of the previous click.
+        # Ticked on arrival: whatever collate said this block moves, so the first chart is the
+        # useful one. A `moved` naming something outside SHOWN would tick nothing, so fall back.
+        opening = measure if measure in {k for k, _, _ in SHOWN} else "held"
+        picks = [
+            f'<label><input type="checkbox" class="metric" value="{k}"'
+            f'{" checked" if k == opening else ""}> {_esc(label)}</label>'
+            for k, label, _ in SHOWN
+        ]
         # Offered only where the digest carried the vectors, so the control cannot promise a chart
         # the page has no numbers for.
         if any(r.get("per_node") for r in entry["runs"]):
-            metrics.insert(0, '<option value="__nodes">every node, by class</option>')
+            picks.append(
+                '<label class="wide"><input type="checkbox" class="metric" value="__nodes">'
+                " every node, by class</label>"
+            )
+        if any(r.get("maps") for r in entry["runs"]):
+            picks.append(
+                '<label class="wide"><input type="checkbox" class="metric" value="__map">'
+                " mesh map</label>"
+            )
         out.append(
             f'<details class="figure" data-chart="{_esc(name)}">'
             f"<summary>chart</summary>"
-            f'<div class="chartbar"><select class="metric">{"".join(metrics)}</select></div>'
+            f'<div class="chartbar chartpick">{"".join(picks)}</div>'
             f'<div class="chart" role="img"></div>'
             f'<p class="sub nojs" style="font-size:.8rem">This chart draws from the same digest '
             f"numbers as the tables above; it needs JavaScript.</p></details>"
@@ -1192,6 +1553,23 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
         "</main>",
         # A block name reaches this blob, and a name holding `</script>` would close the element
         # and everything after it would be markup. Escaped as \u ..., which is still valid JSON.
+        '<script type="application/json" id="chartmeta">'
+        + json.dumps(
+            {
+                "units": UNITS,
+                "axis": UNIT_AXIS,
+                "colours": SERIES_COLOURS,
+                "labels": {k: label for k, label, _ in SHOWN},
+                "places": {k: places for k, _, places in SHOWN},
+                # Shared by every cell that has this geometry, which is why it travels here and
+                # not inside a block: one Batumi topology served 102 of 123 cells.
+                "maps": map_registry(runs),
+                "rolemarks": MAP_MARKS,
+                "mapcolours": {"fragile": MAP_FRAGILE, "link": MAP_LINK},
+            },
+            separators=(",", ":"),
+        )
+        + "</script>",
         '<script type="application/json" id="chartdata">'
         + (
             json.dumps(chart_data(blocks, runs), separators=(",", ":"))

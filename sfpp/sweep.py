@@ -54,6 +54,58 @@ BASE = [
 # --dm-mode or --coding-rate-ladder without these produces identical rows.
 DM_LADDER = ["--dm-transport", "transport", "--traceroute-per-hour", "1"]
 
+# --- how a block is named -----------------------------------------------------------------------
+#
+# A name is three things at once: the row identity the rolling page tracks a block by across runs, a
+# path component (`figures/<block>.svg`, `reports/<block>.txt`, `<block>.json`), and something a
+# reader has to place at a glance. The letters below it are rounds - the order the questions were
+# asked - which is why F holds both the degradation blocks and, much later, the future-radio ones.
+#
+# New names carry their domain instead. `<DD>-<subject>[-<qualifier>]`: two-letter uppercase domain,
+# lowercase kebab tail. Lowercase tails make two names that differ only in case impossible, which is
+# the one collision collate.safe_name cannot resolve for itself. No double dash - explorer.py reads
+# `<block>--<label>.svg` as a block's extra figure.
+DOMAINS = {
+    "BL": "baseline and paired controls: the shipped default on a given mesh",
+    "MS": "mesh composition and scale: count, density, area, topology, mirroring, siting, roles",
+    "RF": "radio and propagation: path loss, noise, ducting, calibration, presets, power, gain",
+    "RT": "routing and reach: hop limits and their assignment, adoption, rebroadcast",
+    "DM": "how an addressed message behaves: escalation, transport, acknowledgement. Not how much "
+    "of it there is - a DM rate is offered load and belongs in LD",
+    "TH": "throttles: what the firmware does to offered load - interval scaling, reach target, the "
+    "per-class multipliers",
+    "DB": "the node database: hot store cap, warm tier, and the board mix that sizes them",
+    "LD": "offered load: what the application asks for before any throttle acts on it, broadcast "
+    "and addressed alike - intervals, diurnal shape, DM and traceroute and admin rates",
+    "FW": "firmware version mix: which release each node runs, and the proportion running an older one",
+    "SC": "security policy: packet signing, and the admin and key rules that will join it",
+    "DG": "imposed degradation: loss floors, bursts, outages - a failure applied, not a model",
+    "AD": "adversarial meshes: removing what is known to help, one thing at a time",
+    "SF": "SF++ archive internals: how the sketch is tuned, not whether to have it",
+    "PR": "proposals no release ships, named `PR-<mechanism>-<variant>` so a pair reads as a pair",
+}
+
+# The names that predate the scheme. Grandfathered rather than renamed: their trend rows on the
+# results branch are the only history there is, and a rename orphans every one of them. Listed
+# explicitly so a new name cannot join them by accident - the contract test reads this set.
+LEGACY_BLOCKS = frozenset({
+    "D-cadence", "D-jitter", "D-resolve", "E-capacity", "E-signed", "E-width", "F-burst",
+    "F-flooding", "F-hoplimit", "F-loss", "F-outage", "F-preset-turbo", "F-txpower",
+    "G-allrouters", "G-hops", "G-place", "G-servers", "J-bucketmode", "J-timewin", "J-wincap",
+    "J-window", "K-density", "K-hopspread", "K-size", "K-spread", "L-advert", "L-provide",
+    "M-capacity", "M-combined", "M-jitter", "M-replayorder", "N-hops", "N-place", "N-servers",
+    "P-bw500", "P-catchup", "P-congestion", "P-diurnal", "P-eu-presets", "P-preset",
+    "Q-control", "Q-hopassign", "Q-interval", "Q-protocol", "Q-topology", "R-adopt",
+    "R-congestion-input", "R-congestion-mode", "R-crladder", "R-dmmode", "R-dmmode-cr",
+    "R-favourites", "R-firmware", "R-hopscale", "R-hotstore", "R-hotstore-stress", "R-mixed",
+    "R-mixed-26", "R-oversubscribed", "R-platform", "R-rebroadcast", "R-repeats",
+    "R-repeats-busy", "R-roles",
+    "R-roles-fav", "R-routerlate", "R-signing", "R-signing-cost", "R-siting", "R-srretries",
+    "R-traceroute", "R-traceroute-small", "R-versions", "R-warm", "X-amplifiers",
+    "X-amplify-worst", "X-badrouters", "X-chatty", "X-chatty-hops", "X-duct", "X-noise",
+    "X-nomute", "X-pulse", "X-siting", "X-stretch", "X-stretch-duct", "X-worst",
+})
+
 BLOCKS = {
     "D-cadence": ("trigger", ["bucket", "interval", "aimd", "bucket+interval"], []),
     "D-resolve": ("resolve", ["sketch", "enum", "hybrid"], []),

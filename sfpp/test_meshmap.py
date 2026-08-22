@@ -48,6 +48,68 @@ class FakeCampaign:
         self.designated = list(designated)
 
 
+class MapData(unittest.TestCase):
+    """The points-and-links form the rolling page draws from, against the SVG it mirrors."""
+
+    def _mesh(self):
+        # Margins chosen to straddle the fragile threshold, including the 4.5-5.0 dB band that
+        # rounding promoted out of the class: sensitivity is -131.5, so -126.9 is 4.6 dB of margin
+        # and belongs in the fragile set, while -125.4 is 6.1 dB and does not.
+        nodes = [FakeNode(0, 0), FakeNode(1000, 0), FakeNode(0, 1000), FakeNode(1000, 1000)]
+        n = len(nodes)
+        rssi = [[-200.0] * n for _ in range(n)]
+        pairs = {(0, 1): -125.4, (0, 2): -124.0, (1, 3): -126.9, (2, 3): -110.0}
+        neighbours = [set() for _ in range(n)]
+        for (i, j), value in pairs.items():
+            rssi[i][j] = rssi[j][i] = value
+            neighbours[i].add(j)
+            neighbours[j].add(i)
+        return FakeCampaign(nodes, neighbours=neighbours, rssi=rssi)
+
+    def test_the_stored_fragile_set_is_the_drawn_fragile_set(self):
+        """A stored margin is floored, so `< FRAGILE_DB` picks exactly the links the SVG reddens.
+        Rounding instead lost 70 of Batumi's 415 fragile links to the 4.5-5.0 dB band."""
+        campaign = self._mesh()
+        data = MM.mesh_data(campaign)
+        with tempfile.TemporaryDirectory() as tmp:
+            drawn = MM.mesh_svg(campaign, os.path.join(tmp, "m.svg"))
+        links = data["geometry"]["links"]
+        fragile = sum(
+            1 for k in range(0, len(links), 3) if links[k + 2] < MM.FRAGILE_DB
+        )
+        self.assertEqual(fragile, drawn["fragile_drawn"])
+        self.assertEqual(len(links) // 3, drawn["links_drawn"])
+        self.assertEqual(data["geometry"]["n"], drawn["nodes"])
+
+    def test_a_stored_margin_never_overstates_the_link(self):
+        campaign = self._mesh()
+        links = MM.mesh_data(campaign)["geometry"]["links"]
+        mesh, sens = campaign.mesh, float(campaign.conf.current_preset["sensitivity"])
+        for k in range(0, len(links), 3):
+            i, j, stored = links[k], links[k + 1], links[k + 2]
+            true = min(mesh.rssi[i][j], mesh.rssi[j][i]) - sens
+            self.assertLessEqual(stored, true)
+            self.assertLess(true - stored, 1.0)
+
+    def test_geometry_is_shared_where_only_the_overlay_differs(self):
+        """Unlocking roles rewrites every mark without moving a link, which is why the two halves
+        are stored apart: one Batumi geometry served 102 of 123 cells in a 72 h batch."""
+        campaign = self._mesh()
+        before = MM.mesh_data(campaign)
+        for node in campaign.mesh.nodes:
+            node.role = "ROUTER"
+        after = MM.mesh_data(campaign)
+        self.assertEqual(before["geometry"], after["geometry"])
+        self.assertNotEqual(before["overlay"]["role_of"], after["overlay"]["role_of"])
+
+    def test_the_link_cap_is_counted_not_hidden(self):
+        campaign = self._mesh()
+        geometry = MM.mesh_data(campaign, max_links=2)["geometry"]
+        self.assertEqual(len(geometry["links"]) // 3, 2)
+        self.assertEqual(geometry["links_total"], 4)
+        self.assertEqual(geometry["links_dropped"], 2)
+
+
 class MapOutput(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

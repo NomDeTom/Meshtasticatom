@@ -307,6 +307,11 @@ block sweep for mechanism and the cross for deployment advice.
 | `--dm-transport`            | `hop-by-hop` | `transport` routes an addressed SR message through next-hop routing and its retry ladder         |
 | `--dm-mode`                 | `directed-with-late-flood` | how a DM escalates. Inert unless `--dm-transport transport`                         |
 | `--coding-rate-ladder`      | off          | raise the coding rate on each retransmission. Not in any release                                 |
+| `--coding-rate-var`         | off          | choose the coding rate per link, one step toward 4/5 where the sender has margin to spend and one toward 4/8 where it has not, from the RSSI it has itself heard. **Not in any release.** Which way there is room is a property of the preset (`MeshRadio.h`): 4/5 on the short, medium, lite and tiny-fast presets, **4/6 on `NARROW_FAST`, `NARROW_SLOW` and `TINY_SLOW`**, 4/8 on `LONG_TURBO`, `LONG_MODERATE` and `LONG_SLOW` - so only those three 4/6 presets can move both ways. A step landing on the preset's own rate is recorded as no decision |
+| `--coding-rate-var-margin-db` | 10.0       | the margin over sensitivity above which `--coding-rate-var` calls a link comfortable - that proposal's arm |
+| `--tx-power-var`            | off          | choose transmit power per **addressed** packet, coming down to leave the headroom over sensitivity on the link it will use, never up. **Not in any release** |
+| `--tx-power-var-headroom-db` | 6.0         | what `--tx-power-var` leaves on the link after coming down - that proposal's arm |
+| `--tx-power-var-broadcast`  | off          | let `--tx-power-var` reduce broadcasts too, sized to the weakest neighbour the sender has *heard*. Off because that is not the weakest neighbour it **has**: measured at 24 nodes over an hour it takes text reach from 0.532 to 0.079, every reduction at the 15 dB cap, since the peers a node has not heard are the ones it stops reaching. Kept as the honest measurement of the aggressive reading |
 | `--extra-repeats`           | off          | tolerate a second heard copy before cancelling our own rebroadcast. Not in any release           |
 | `--congestion-mode`         | `adaptive`   | recompute the broadcast throttle per node from its own online count, or one mesh-wide value      |
 | `--congestion-pivot`        | 40           | node count below which nothing throttles at all - `Default.h`'s literal in `congestionScalingCoefficient`. Raising it lets a larger mesh keep its intervals. Scales the **interval**, not the reach |
@@ -1145,12 +1150,151 @@ about position and useless about roles, which is most of what the map is for.
 skipped past the cap, the role histogram, stacked count and extent - so a figure can be checked
 against the run rather than trusted because it looks like a mesh.
 
-**It needs `--out`, which means it comes from a direct `campaign` invocation and not from a sweep.**
-`sweep.py`, `matrix.py` and `design.py` write their own JSON and pass no `--out` to the run, so
-`--mesh-map` is inert inside all three. That is consistent with the weight argument above - hundreds of
-maps a round is the trap the results branch already avoids for raw JSON - but it is a limitation rather
-than a policy: getting maps out of a sweep would need the sweep to name a path per cell. The file is
-named by seed, so one `--out` directory holds one map per seed.
+**The same map as data, so a page can draw it.** Alongside the claim, `--mesh-map` records the mesh
+as points and links, which is what the rolling page renders (§7.8). One Batumi map is **16.5 kB of
+JSON against a 205 kB SVG**, and it is split in two because the two halves change independently:
+
+| Half | Holds | Changes when |
+| --- | --- | --- |
+| `geometry` | node positions, every link with its margin in whole dB, the extent, preset and sensitivity | the radio does - power, propagation, siting, node count |
+| `overlay` | the role of each node, which hold archives, which are designated | only what the nodes *do* - unlocking roles rewrites every mark without moving a link |
+
+Positions are stored in decametres from the extent's corner: at 900 px across 20 km one pixel is
+some 25 m, so 10 m is already below the ink and metres would double the payload for nothing. Margins
+are whole dB, because the picture only buckets them. Links are capped at `MAX_STORED_LINKS` (6000)
+with the dropped count recorded, which on any real snapshot never bites.
+
+The split is what makes it cheap: across one 72 h Batumi batch, **102 of 123 cells shared a single
+geometry**, and `collate --maps` enters each one once under the hash of its own contents, so the
+page carries 17 geometries rather than 123 maps.
+
+**The data needs no `--out`; the SVG still does.** `sweep.py`, `matrix.py` and `design.py` write
+their own JSON and pass no `--out`, so no `.svg` file appears inside any of the three - but the
+points and links reach the report wherever `--mesh-map` is set, which is what the digest and the
+page read. The file, when there is one, is named by seed, so one `--out` directory holds one map per
+seed. Asking for a map cannot move a number: `test_series.fingerprint` drops `mesh_map` from the
+report it hashes for exactly that reason.
+
+### 7.7a How a block is named
+
+A block name is three things at once: the **row identity** the rolling page tracks across runs, a
+**path component** (`figures/<block>.svg`, `reports/<block>.txt`, `<block>.json`), and a label a
+reader has to place at a glance. The letters on the 87 existing names are **rounds** - the order the
+questions were asked - which is why `F` holds the degradation blocks and, much later, the
+future-radio ones, and why `R` holds twenty-nine unrelated things. Those names are grandfathered in
+`sweep.LEGACY_BLOCKS`: their trend rows on the results branch are the only history there is, and a
+rename orphans every one of them.
+
+New names carry their domain instead: **`<DD>-<subject>[-<qualifier>]`**, two-letter uppercase
+domain and a lowercase kebab tail. Lowercase tails make two names that differ only in case
+impossible, which is the one collision `collate.safe_name` cannot resolve for itself; and no name
+may hold a double dash, because `explorer.py` reads `<block>--<label>.svg` as a block's extra
+figure.
+
+| Domain | Holds | Where the legacy names sit |
+| --- | --- | --- |
+| `BL` | baseline and paired controls: the shipped default on a given mesh | `Q-control` |
+| `MS` | mesh composition and scale: count, density, area, topology, mirroring, siting, **roles** | `K-size`, `K-density`, `R-hopscale`, `Q-topology`, `R-roles`, `R-routerlate` |
+| `RF` | radio and propagation: path loss, noise, ducting, calibration, presets, power, gain | `P-preset`, `P-bw500`, `X-noise`, `X-pulse`, `X-duct`, `F-txpower`, `F-preset-turbo` |
+| `RT` | routing and reach: hop limits and their assignment, adoption, rebroadcast | `K-hopspread`, `K-spread`, `Q-hopassign`, `F-hoplimit`, `R-adopt`, `R-rebroadcast` |
+| `DM` | how an addressed message **behaves**: escalation, transport, acknowledgement | `R-dmmode` |
+| `TH` | **throttles**: what the firmware does to offered load - interval scaling, reach target, per-class multipliers | `P-congestion`, `R-congestion-mode`, `R-congestion-input` |
+| `DB` | the node database: hot store cap, warm tier, and the board mix that sizes them | `R-hotstore`, `R-hotstore-stress`, `R-warm`, `R-platform` |
+| `LD` | offered load: what the application asks for before any throttle acts on it, broadcast and addressed alike - intervals, diurnal shape, DM and traceroute and admin rates | `Q-interval`, `P-diurnal`, `X-chatty`, `R-traceroute` |
+| `FW` | firmware version mix: which release each node runs, and the proportion on an older one | `R-firmware`, `R-versions`, `R-mixed`, `R-mixed-26`, `R-signing-cost` |
+| `SC` | security policy: packet signing, and the admin and key rules that will join it | `R-signing` |
+| `DG` | imposed degradation: a failure applied, not a model | `F-loss`, `F-burst`, `F-outage` |
+| `AD` | adversarial meshes: removing what is known to help, one thing at a time | `X-nomute`, `X-badrouters`, `X-siting`, `X-worst`, `X-amplifiers` |
+| `SF` | SF++ archive internals: how the sketch is tuned, not whether to have it | `D`, `E`, `G`, `J`, `L`, `M`, `N` |
+| `PR` | proposals no release ships | `R-repeats`, `R-crladder`, `R-dmmode-cr`, `Q-protocol` |
+
+**A domain that needs the word "firmware" to describe itself, or that holds more than about a fifth
+of the blocks, is a dumping ground.** That is what the letters became - `R` holds twenty-nine
+unrelated things - and it is why there is no `FW` domain for "firmware mechanisms": nearly everything
+here is one. `FW` is the version mix and nothing else.
+
+**`PR-dm-telemetry` and `PR-dm-position`, specified.** A periodic class is broadcast today, so every
+node that hears it learns from it and every relay pays for it. Addressed to one gateway, the packet
+is carried toward that node instead. The firmware already takes the destination as a parameter -
+`DeviceTelemetryModule::sendTelemetry(NodeNum dest)` sets `p->to = dest` and the periodic path passes
+`NODENUM_BROADCAST` - so the proposal is a configuration change, not new packet machinery. Four
+things have to be decided before it can be measured, and one of them is a trap:
+
+- **Who addresses.** A share of the mesh (`--telemetry-gateway-fraction`) or only the `SENSOR` role,
+  which in the firmware already means "emits telemetry, cannot be messaged" (`NodeDB.cpp:1532`) and
+  is therefore the firmware-authentic population. This transport does not model `SENSOR` at all -
+  `ROLE_HOP_FLOOR` names it and no role maps to it - so the role-scoped arm needs a new role in the
+  census first, and the fraction arm does not.
+- **Which node is the gateway.** It must be recorded, not implied: the highest-degree router-like
+  node is the realistic default (it is usually the one with a backhaul), with an explicit index for
+  a deliberate choice. A result that does not name the gateway cannot be compared with one that
+  chose differently.
+- **Still a channel message, not PKC.** The packet keeps the shared channel key and only sets `to`,
+  so there is no key to acquire, no `MESHTASTIC_PKC_OVERHEAD` on the frame, and no PKI failure mode
+  - and every node that overhears it can still decode it. That changes what the cost *is*: not "only
+  the gateway learns" but "the mesh learns wherever the path happens to pass", which is a smaller
+  loss than PKC addressing would be and has to be measured rather than assumed either way.
+- **What the measure becomes.** Reach is the wrong measure for an addressed class: success is
+  delivery *to the gateway*, and the cost is what the rest of the mesh no longer learns - which,
+  being channel-encrypted, is the difference between who used to hear it and who still overhears it.
+  Both belong in the report, because the trade is airtime against the mesh's own knowledge of itself:
+  a node that never hears a sensor cannot show it on a map or route by its telemetry.
+- **The trap.** An addressed packet with no learned route to the gateway floods anyway, so the
+  airtime saving is zero while the single point of failure is real. The arm is therefore only
+  readable crossed with `LD-traceroute` and next-hop learning, and the report has to state route
+  availability. Measured without that, this produces a confident "addressed telemetry is free".
+
+`DM` and `LD` split on **behaviour against volume**, not on broadcast against addressed. How a DM
+escalates is `DM-escalation`; how many of them a node sends is `LD-dm-rate`, beside the broadcast
+intervals and the admin rate, because all three are the load an application offers before any
+throttle acts on it. So a row's prefix says whether the arm changed what the mesh was asked to carry
+or what it does with it - which is the distinction a delivery number is read against.
+
+`TH` against `LD` is the split worth defending. `LD-interval` is the interval an application asks
+for; `TH-interval-pivot` is the node count above which the firmware overrides it. Three throttles
+live there: the **interval** scaling (`congestionScalingCoefficient`, and its mode, input and pivot),
+the **reach** target (`HopScalingModule`'s `TARGET_AFFECTED_NODES` - 40 by default, so 60 and 80 ask
+what aiming a recommendation further costs), and the **per-class multipliers** on position and
+telemetry. A fourth is declared and does nothing: `congestion_clamp` is in `FEATURE_TAG` and in every
+2.8 profile, and no code reads it - so a run on `--profile 2.8` claims a clamp it never applies.
+
+**`PR-<mechanism>-<variant>`**, so a pair reads as a pair rather than as two unrelated rows:
+
+| Name | Is | State |
+| --- | --- | --- |
+| `PR-cr-ladder` | raise the coding rate on each retransmission (`coding_rate_ladder`) | modelled |
+| `PR-cr-var` | coding rate chosen per link (`--coding-rate-var`) | modelled |
+| `PR-power-var` | transmit power chosen per addressed packet (`--tx-power-var`); broadcasts are an opt-in arm | modelled |
+| `PR-dm-earlyflood` | flood early on an unverified route (`early_flood_on_unverified`) | modelled |
+| `PR-relay-repeats` | tolerate a second heard copy before cancelling (`extra_repeats`) | modelled |
+| `PR-hop-lastrelay` | relay once with nothing left: `hop_limit` already 0, so the copy goes out at 0 and travels no further (`exhaust_hops`) | modelled |
+| `PR-hop-eventcap` | cap what any relay passes on, so a long-range flood cannot eat a crowded event's channel (`event_relay_hop_limit`) | modelled |
+| `PR-dm-telemetry` | telemetry addressed to a gateway node instead of broadcast: `p->to = dest` rather than `NODENUM_BROADCAST` | **reserved** - see below |
+| `PR-dm-position` | the same for position | **reserved** - see below |
+| `PR-sfpp-sr` / `PR-sfpp-chain` | whether the archive is worth having at all, against the baseline | modelled |
+
+`SF-*` and `PR-sfpp-*` are deliberately apart: one tunes an archive that is switched on, the other
+asks whether to have one. `PR-cr-ladder` and `PR-cr-var` are apart for the same reason - one raises
+the coding rate on a retry, the other picks it per link, and reading either as the other is a result
+about the wrong mechanism.
+
+**A run's name is the same segments, chained.** A block is one arm; a run is the conditions it was
+measured under, and those compose: `BL-batumi-AD-siting-local-PR-sfpp-sr` is the shipped baseline on
+Batumi, with the adversarial siting arm, against the sketch. Read left to right as mesh, then what
+was done to it, then what was proposed - the two-letter codes are a closed set, so a name splits on
+`-` before any `[A-Z][A-Z]-` and each segment stands on its own.
+
+| Rule | Why |
+| --- | --- |
+| Domain codes uppercase, everything else lowercase | the same reason a block name is: two names differing only in case are each valid and share one file on a case-insensitive filesystem, which is the one collision `safe_name` cannot resolve |
+| Mesh segment first (`BL-batumi`, `MS-batumi-x4`) | it decides what every later segment means, and a run without one is a flat world |
+| Proposal segments last | a reader wants "and what was proposed" at the end, and the proposals are what a run is usually filed under |
+| One segment per axis, no repeats | a name that carries two `RF-` segments is two experiments, and its cells are not paired against one control |
+| No segment omitted because it was the default | `BL-batumi` says the firmware is shipped-default; leaving it off makes an unlabelled run indistinguishable from an unfinished name |
+
+The same string names the run directory, the digest's `run_id` and the files under it, so a page, a
+report and a directory listing all say the same thing about the same run. `collate.safe_name` still
+guards every one of those paths, but a name built to this grammar never needs rewriting.
 
 ### 7.8 The digest, and the rolling page
 
@@ -1165,7 +1309,23 @@ rendered beside a block JSON by `autochart.py` is shown as well, when `--figures
 directory holding it; that is additional, because those figures live with the raw runs and the raw
 runs are exactly what the archive is allowed to drop. With `--per-node` in the digest the panel also
 offers **every node, by class**: one dot per node per packet class, which is where a single deaf node
-or a class that fails alone becomes visible.
+or a class that fails alone becomes visible. With `--maps` it offers the **mesh map**, drawn from the
+points and links of §7.7 rather than linked as an SVG that lives with the droppable raw runs.
+
+**Fields are ticked, not selected one at a time.** Each panel carries a checkbox per field, because
+the question a reader arrives with is nearly always comparative - did DM hold up where text did not -
+and a control showing one metric at a time answers that only from memory of the previous click. Cells
+become groups on the x axis with one bar per ticked field. The last set ticked becomes the default for
+the next panel opened, since re-ticking the same three fields across fifty blocks is the whole cost of
+the control.
+
+**Fields of different units never share a y axis.** A selection mixing them draws one chart per unit
+family - share, multiple, percent, count - each captioned with its own axis. This is the trap named
+in `SHOWN` itself: `demand` has no ceiling and `chutil_p90` cannot pass 100, so one scale for both
+ranks collapse instead of measuring it. Shares scale against 1.0 rather than the tallest bar, or 0.31
+fills the panel and reads as success. A field the block has no number for is dropped rather than drawn
+flat at zero - an absent measurement and a measured zero are different findings - and the caption
+names what was drawn, not what was ticked.
 
 Per block, beyond the metrics, the digest carries:
 
@@ -1177,6 +1337,7 @@ Per block, beyond the metrics, the digest carries:
 | `flags` / `fatal` | the warnings and failures, as sentences |
 | `flag_kinds` / `fatal_kinds` | the same, counted by kind from `FLAG_KINDS`. Carried from the point each check fires rather than recovered by re-reading the sentence, so rewording a warning cannot silently un-group it |
 | `explains` | what the cell covers, from whichever of the four surfaces declares it |
+| `map` (per cell) + `maps` (per run) | **only with `--maps`**: the cell's `overlay` and a key into the run's `maps` registry, which holds each distinct `geometry` once. Deduplicated by content hash, so a scenario measured every night enters the archive once however many nights are in the window, and cells differing only in what the nodes do share one geometry. Taken from a single seed, for the same reason `per_node` is: node indices belong to one run |
 | `per_node` / `per_node_seed` | **only with `--per-node`**: each class's per-node reach vector for that cell, and the seed whose node order it is. Off by default because this digest is what the rolling page is built from, and one vector per class per cell is nothing for a single run and tens of megabytes across a season of scheduled ones. Never averaged across seeds - node 7 of one seed is a different node from node 7 of the next |
 
 `--history <dir of run dirs>` turns on the runtime comparison. It is **warn-only in both directions**:
@@ -1274,7 +1435,7 @@ of that series:
 | `2.5`    | the late-rebroadcast window and the queue ordering that goes with it (late first, relayed preferred), `ROUTER_LATE`, `CORE_PORTNUMS_ONLY`, CW 2-7, congestion scaled per preset                |
 | `2.6`    | next-hop routing, CW floor to 3, SNR range narrowed to 10 dB, per-board NodeDB sizing                                                                                                          |
 | `2.7`    | next-hop and traceroute **learning**, role-aware cancellation, `CLIENT_BASE`, favourite-and-base early rebroadcast, hop preservation and hop upgrade, congestion scaled on SF and bandwidth    |
-| `2.8`    | this tree. Traceroute corroboration, the overflow route cache, last-byte ambiguity resolution, RouteHealth, the warm store, packet signing, the hop-scaling histogram and its recommendation, opaque relay, congestion clamp, 5 unicast attempts |
+| `2.8`    | this tree, and **not a released series yet** - every mechanism below carries `EXPECTED_TAG` (`v2.8.0-expected`) in `FEATURE_TAG` rather than a release tag, so a run on this profile is the tree and not the last tag. Traceroute corroboration, the overflow route cache, last-byte ambiguity resolution, RouteHealth, the warm store, packet signing, the hop-scaling histogram and its recommendation, opaque relay, congestion clamp, 5 unicast attempts |
 | `legacy` | this transport's own pre-fold-in model - **not a firmware version.** Four of its deviations were never any firmware's behaviour (no router offset, a continuous slot draw, a clamped contention window, a 400-backoff discard), so it must not be read as "2.7 and earlier" |
 
 Each row is **cumulative**: a profile carries everything from the rows above it. A version was dated

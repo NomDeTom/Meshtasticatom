@@ -453,6 +453,9 @@ class Campaign:
             max_num_nodes=_hot_store_size(opts),
             warm_num_nodes=getattr(opts, "warm_num_nodes", None),
             hop_target_nodes=getattr(opts, "hop_target_nodes", None),
+            coding_rate_var_margin_db=getattr(opts, "coding_rate_var_margin_db", 10.0),
+            tx_power_var_headroom_db=getattr(opts, "tx_power_var_headroom_db", 6.0),
+            tx_power_var_broadcast=getattr(opts, "tx_power_var_broadcast", False),
             signature_policy=getattr(
                 opts, "signature_policy", M.SIGNATURE_POLICY_COMPATIBLE
             ),
@@ -2542,6 +2545,10 @@ def _profile_for(opts):
         overrides["extra_repeats"] = True
     if getattr(opts, "coding_rate_ladder", False):
         overrides["coding_rate_ladder"] = True
+    if getattr(opts, "coding_rate_var", False):
+        overrides["coding_rate_var"] = True
+    if getattr(opts, "tx_power_var", False):
+        overrides["tx_power_var"] = True
     if getattr(opts, "no_adopt_hop_recommendation", False):
         overrides["adopt_hop_recommendation"] = False
     if dm_mode == "flood-only":
@@ -2645,6 +2652,45 @@ def build_parser():
         action="store_true",
         help="raise the coding rate on each retransmission - base, base+1, then 4/8 (branch "
         "CRCRRCRRR, no release has it)",
+    )
+    ap.add_argument(
+        "--coding-rate-var",
+        action="store_true",
+        help="choose the coding rate per link from the margin the sender itself has heard: one step "
+        "toward 4/5 where a link has margin to spend, one step toward 4/8 where it has not. Not in "
+        "any release. Which way there is room depends on the preset (MeshRadio.h): 4/5 on the short "
+        "and medium presets, 4/6 on NARROW_FAST, NARROW_SLOW and TINY_SLOW, 4/8 on LONG_TURBO, "
+        "LONG_MODERATE and LONG_SLOW - so the three 4/6 presets are the only ones that can move both "
+        "ways, and a step landing on the preset's own rate is recorded as no decision",
+    )
+    ap.add_argument(
+        "--coding-rate-var-margin-db",
+        type=float,
+        default=10.0,
+        help="the margin over sensitivity above which --coding-rate-var calls a link comfortable. "
+        "The arm of that proposal: raising it makes more links count as weak",
+    )
+    ap.add_argument(
+        "--tx-power-var",
+        action="store_true",
+        help="choose transmit power per addressed packet, coming down to leave "
+        "--tx-power-var-headroom-db over sensitivity on the link it will use. Never up: the "
+        "configured power is the ceiling a region allows. Not in any release",
+    )
+    ap.add_argument(
+        "--tx-power-var-headroom-db",
+        type=float,
+        default=6.0,
+        help="what --tx-power-var leaves on the link after coming down. The arm of that proposal",
+    )
+    ap.add_argument(
+        "--tx-power-var-broadcast",
+        action="store_true",
+        help="let --tx-power-var reduce broadcasts too, sized to the weakest neighbour the sender "
+        "has *heard*. Off by default because that is not the weakest neighbour it has: measured at "
+        "24 nodes over an hour it costs text reach 0.532 -> 0.079, every reduction at the cap, since "
+        "the peers a node has not heard yet are the ones it stops reaching. Kept as the honest "
+        "measurement of the aggressive reading",
     )
     ap.add_argument(
         "--extra-repeats",
@@ -3189,20 +3235,26 @@ def run_once(opts, seed):
         # Here rather than in main(): sweep.py calls run_once directly and writes its own JSON, so
         # stamping the commit further out left every swept result - which is all of them - unstamped.
         report["transport"] = AC.transport_pin()
-        # Drawn here because it needs the live mesh - positions, roles, the rssi matrix - none of
-        # which is in the report, so it cannot be redrawn from saved JSON.
-        if getattr(opts, "mesh_map", False) and opts.out:
-            from .meshmap import mesh_svg
+        # Taken here because it needs the live mesh - positions, roles, the rssi matrix - none of
+        # which the rest of the report carries. The points and links go in regardless of --out, so a
+        # digest can hold a map the page draws itself; the SVG is written only when there is a
+        # directory to write it beside.
+        if getattr(opts, "mesh_map", False):
+            from .meshmap import mesh_data, mesh_svg
 
-            path = os.path.join(
-                os.path.dirname(os.path.abspath(opts.out)),
-                "figures",
-                os.path.basename(opts.out).replace(".json", "") + f"-mesh-{seed}.svg",
-            )
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            report["mesh_map"] = mesh_svg(campaign, path)
-            report["mesh_map"]["path"] = os.path.basename(path)
-            print(f"wrote {path}")
+            claim = {}
+            if opts.out:
+                path = os.path.join(
+                    os.path.dirname(os.path.abspath(opts.out)),
+                    "figures",
+                    os.path.basename(opts.out).replace(".json", "") + f"-mesh-{seed}.svg",
+                )
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                claim = mesh_svg(campaign, path)
+                claim["path"] = os.path.basename(path)
+                print(f"wrote {path}")
+            claim.update(mesh_data(campaign))
+            report["mesh_map"] = claim
         return report
     finally:
         campaign.close()

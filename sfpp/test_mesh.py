@@ -1022,6 +1022,95 @@ class ForkExtras(unittest.TestCase):
         self.assertEqual(mesh.nodes[0].queue[0].packet.hop_limit, 2)
 
 
+class PerLinkChoices(unittest.TestCase):
+    """The two per-link proposals decide from what the node heard, never from the link matrix."""
+
+    def _mesh(self, **profile):
+        mesh = small_mesh(profile=M.Profile("2.8", **profile))
+        self.sensitivity = M._phy().effective_sensitivity(mesh.conf)
+        return mesh
+
+    def _heard(self, mesh, node, peer, margin_db):
+        """Put a peer in node's hot store at a chosen margin over sensitivity."""
+        record = mesh.note_heard(node, peer, hops_away=0, rssi=self.sensitivity + margin_db)
+        self.assertIsNotNone(record.rssi, "a direct reception must record its RSSI")
+        return record
+
+    def test_a_node_with_nothing_heard_keeps_the_preset_and_full_power(self):
+        # The reason each proposal stands alone: no knowledge means no decision, which is the 2.8
+        # default, so neither has to be crossed with traceroutes or next-hop learning to be read.
+        mesh = self._mesh(coding_rate_var=True, tx_power_var=True)
+        self.assertIsNone(mesh._var_coding_rate(0, 1))
+        self.assertEqual(mesh._var_tx_power_delta(0, 1), 0.0)
+        self.assertEqual(mesh.stats["cr_var_no_basis"], 1)
+        self.assertEqual(mesh.stats["tx_power_var_no_basis"], 1)
+
+    def test_a_relayed_packet_does_not_teach_a_link_that_does_not_exist(self):
+        mesh = self._mesh()
+        record = mesh.note_heard(0, 1, hops_away=2, rssi=self.sensitivity + 30)
+        self.assertIsNone(record.rssi, "two hops away is not a link to the origin")
+
+    def test_the_coding_rate_steps_toward_whichever_end_has_room(self):
+        mesh = self._mesh(coding_rate_var=True)
+        base = mesh.conf.current_preset["cr"]
+        self.assertEqual(base, 5, "this fixture is a 4/5 preset")
+        # Weak: one step slower, buying redundancy at the cost of airtime.
+        self._heard(mesh, 0, 1, margin_db=2)
+        self.assertEqual(mesh._var_coding_rate(0, 1), 6)
+        # Comfortable: nothing faster than 4/5 exists, so no decision rather than a claimed one.
+        self._heard(mesh, 0, 2, margin_db=30)
+        self.assertIsNone(mesh._var_coding_rate(0, 2))
+        self.assertEqual(mesh.stats["cr_var_slower"], 1)
+        self.assertEqual(mesh.stats["cr_var_preset"], 1)
+
+    def test_a_broadcast_is_sized_to_the_weakest_neighbour_heard(self):
+        mesh = self._mesh(coding_rate_var=True)
+        self._heard(mesh, 0, 1, margin_db=40)
+        self._heard(mesh, 0, 2, margin_db=3)
+        # The weak one decides: a broadcast is only as good as the peer it loses first.
+        self.assertEqual(mesh._var_coding_rate(0, M.BROADCAST), 6)
+
+    def test_power_comes_down_to_the_headroom_and_never_up(self):
+        mesh = self._mesh(tx_power_var=True)
+        mesh.tx_power_var_headroom_db = 6.0
+        self._heard(mesh, 0, 1, margin_db=20)
+        # 20 dB of margin, 6 kept, whole dB steps: 14 down.
+        self.assertEqual(mesh._var_tx_power_delta(0, 1), -14.0)
+        self.assertEqual(mesh.stats["tx_power_var_db_saved"], 14.0)
+        # A link with nothing spare is left alone, and no link is ever pushed above configured.
+        self._heard(mesh, 0, 2, margin_db=4)
+        self.assertEqual(mesh._var_tx_power_delta(0, 2), 0.0)
+
+    def test_power_reduction_is_capped(self):
+        mesh = self._mesh(tx_power_var=True)
+        self._heard(mesh, 0, 1, margin_db=200)
+        self.assertEqual(mesh._var_tx_power_delta(0, 1), -M.TX_POWER_VAR_MAX_DB)
+
+    def test_a_broadcast_keeps_full_power_unless_the_run_asks(self):
+        # Sized to the weakest neighbour *heard*, which is not the weakest neighbour there is, so
+        # this is an arm and not a default. mesh.py records what it costs.
+        mesh = self._mesh(tx_power_var=True)
+        self._heard(mesh, 0, 1, margin_db=40)
+        self.assertEqual(mesh._var_tx_power_delta(0, M.BROADCAST), 0.0)
+        self.assertEqual(mesh.stats["tx_power_var_broadcast_kept"], 1)
+        mesh.tx_power_var_broadcast = True
+        self.assertLess(mesh._var_tx_power_delta(0, M.BROADCAST), 0.0)
+
+    def test_a_quieter_packet_is_heard_by_fewer_nodes(self):
+        """The physics has to honour the choice, or the policy is a counter and nothing more."""
+        loud = small_mesh()
+        quiet = small_mesh()
+        for mesh, delta in ((loud, 0.0), (quiet, -M.TX_POWER_VAR_MAX_DB)):
+            packet = M.Packet(9, 0, 70, 40, hop_limit=3)
+            packet.tx_power_delta = delta
+            packet.rx_rssi, packet.rx_snr = -100.0, 2.0
+            mesh.send(0, packet)
+            mesh.run(60_000.0)
+        self.assertGreaterEqual(
+            loud.stats["receptions"], quiet.stats["receptions"], "power must reach the physics"
+        )
+
+
 class WarmTier(unittest.TestCase):
     """WarmNodeStore - what an evicted node keeps, and what it loses."""
 
@@ -2676,6 +2765,76 @@ print(",".join(failed))
                 f"{hops} hops: sessions must be completed or attributed, never neither",
             )
 
+    def test_every_mechanism_names_a_release_or_says_it_is_expected(self):
+        """`None` read two ways: not tagged yet, and never going to be. Only one was true.
+
+        Ten 2.8-series mechanisms sat untagged - in this tree, in a series with no release. They now
+        carry EXPECTED_TAG, so nothing in the register is silent about its own status, and the real
+        tag replaces it when the series ships.
+        """
+        from . import mesh as M
+
+        silent = sorted(k for k, (_series, tag) in M.FEATURE_TAG.items() if not tag)
+        self.assertEqual(silent, [], "a mechanism with no release and no expectation")
+        for feature, (series, tag) in M.FEATURE_TAG.items():
+            if tag == M.EXPECTED_TAG:
+                # An expectation belongs to an unreleased series only; a shipped one has a tag.
+                self.assertEqual(series, "2.8", f"{feature} expects a tag in a released series")
+            else:
+                self.assertTrue(tag.startswith("v"), f"{feature} tag is not a release tag: {tag}")
+
+    def test_a_new_block_name_carries_its_domain(self):
+        """The letters are rounds, so F holds degradation and, much later, future radio.
+
+        New names say what they are instead. The 87 that predate the scheme are grandfathered by
+        name, not by pattern, so one more cannot join them by accident.
+        """
+        import re
+
+        from .sweep import BLOCKS, DOMAINS, LEGACY_BLOCKS
+
+        grammar = re.compile(r"^(" + "|".join(sorted(DOMAINS)) + r")-[a-z0-9]+(-[a-z0-9]+)*$")
+        offenders = [
+            name
+            for name in BLOCKS
+            if name not in LEGACY_BLOCKS and not grammar.match(name)
+        ]
+        self.assertEqual(
+            offenders,
+            [],
+            f"new block names must be <DD>-subject with DD in {sorted(DOMAINS)}",
+        )
+        # A stale entry is as bad as a missing one: it grandfathers a name nothing declares.
+        self.assertEqual(
+            sorted(LEGACY_BLOCKS - set(BLOCKS)),
+            [],
+            "LEGACY_BLOCKS names a block that no longer exists",
+        )
+
+    def test_no_two_block_names_differ_only_in_case_or_hold_a_double_dash(self):
+        """The two things a name cannot be, whatever scheme it follows.
+
+        `safe_name` resolves every collision it can see, but two names differing only in case are
+        each individually valid and would share one file on a case-insensitive filesystem. And
+        explorer.py reads `<block>--<label>.svg` as a block's extra figure, so a double dash in a
+        name would claim another block's chart.
+        """
+        from .collate import is_safe_name
+        from .sweep import BLOCKS
+
+        folded = {}
+        for name in BLOCKS:
+            folded.setdefault(name.lower(), []).append(name)
+        self.assertEqual(
+            [v for v in folded.values() if len(v) > 1], [], "names differing only in case"
+        )
+        self.assertEqual([n for n in BLOCKS if "--" in n], [], "names holding a double dash")
+        self.assertEqual(
+            [n for n in BLOCKS if not is_safe_name(n)],
+            [],
+            "names that cannot be a path component without being rewritten",
+        )
+
     def test_every_command_line_flag_is_documented(self):
         """The README is the operating manual, so a flag it does not name cannot be found.
 
@@ -2712,8 +2871,14 @@ print(",".join(failed))
                 "--history",
                 # collate.py's, carrying the per-node reach vectors into the digest.
                 "--per-node",
+                # collate.py's, carrying the mesh as points and links so the page draws the map.
+                "--maps",
                 # explorer.py's, pointing the page at autochart's figures beside the block JSONs.
                 "--figures",
+                # Named by a reserved proposal in §7.7a and deliberately not accepted yet: the
+                # specification is written before the mechanism, so the flag it will need is in the
+                # manual before the parser. Remove from here as each one lands.
+                "--telemetry-gateway-fraction",
                 # check_oracle.py's, turning "no firmware reachable" into a failure - see §9.2.
                 "--require",
             }
