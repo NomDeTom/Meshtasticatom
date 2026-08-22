@@ -88,6 +88,24 @@ def report_one(r, indent=""):
             else ""
         )
     )
+    # The multiplier on every periodic broadcast interval - Default.h's congestionScalingCoefficient
+    # - which is what decides the demand above. Read from opts rather than a recorded mode, so a run
+    # measured before this line existed still reports its own throttle correctly.
+    o = r.get("opts") or {}
+    coefficient = t.get("congestion_coefficient")
+    if coefficient is not None:
+        if o.get("no_congestion_scaling"):
+            a(
+                f"{indent}  throttle            DISABLED by --no-congestion-scaling "
+                f"(x{coefficient:.2f}, so every interval is the unscaled one)"
+            )
+        else:
+            a(
+                f"{indent}  throttle            x{coefficient:.2f} on every broadcast interval · "
+                f"{o.get('congestion_mode', 'adaptive')} · "
+                f"{t.get('congestion_input', 'hotstore')} · pivot {o.get('congestion_pivot', 40)}"
+            )
+
     # A line each, not one "utilisation": chutil is what a node heard busy over a minute, and
     # air-util-TX what it sent over an hour. The spread is the point in both.
     for key, label, unit in (

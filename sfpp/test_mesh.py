@@ -2601,6 +2601,26 @@ print(",".join(failed))
             sum(v["originated"] for k, v in report["by_class"].items() if k != "all"),
         )
 
+    def test_a_run_says_whether_the_broadcast_throttle_was_scaling(self):
+        """The coefficient decides the demand, and only the block header named the arm.
+
+        A cell read on its own said `aggregate demand 3.02x` with nothing to say the firmware's
+        interval scaling had been switched off, which is the whole reason the demand was 3.02x.
+        """
+        from .campaign import build_parser, run_once
+        from .report import report_one
+
+        base = ["--nodes", "12", "--hours", "1", "--no-charts", "--protocol", "none"]
+        parser = build_parser()
+        scaled = report_one(run_once(parser.parse_args(base), seed=3))
+        self.assertIn("on every broadcast interval", scaled)
+        self.assertIn("pivot 40", scaled)
+
+        off = report_one(
+            run_once(parser.parse_args(base + ["--no-congestion-scaling"]), seed=3)
+        )
+        self.assertIn("DISABLED by --no-congestion-scaling", off)
+
     def test_a_real_snapshot_locks_its_roles_until_the_run_unlocks_them(self):
         """A swept --role-mix on Batumi was a column of identical rows and nothing recorded why.
 
