@@ -32,6 +32,7 @@ Usage, from the tree root:
 import argparse
 import datetime
 import glob
+import hashlib
 import json
 import os
 import statistics
@@ -228,7 +229,22 @@ def group_by_value(reports):
     return grouped
 
 
-def cells_of(reports):
+def per_node_of(report):
+    """Each class's per-node reach vector from one report, or nothing when it kept none.
+
+    One seed's own node order, so it is taken from a single report and never averaged: node 7 of one
+    seed is a different node from node 7 of the next, and a mean over them would be a fiction with a
+    plausible shape.
+    """
+    out = {}
+    for name, row in (report.get("by_class") or {}).items():
+        vector = row.get("per_node")
+        if vector:
+            out[name] = vector
+    return out
+
+
+def cells_of(reports, per_node=False):
     """One entry per arm value, averaged over whatever seeds the run drew for it.
 
     Grouped on the requested value; `placement_capped` records where the achieved one differs.
@@ -241,6 +257,13 @@ def cells_of(reports):
             "seeds": [g.get("seed") for g in group],
             "metrics": {k: _mean([metric(g, k) for g in group]) for k in METRICS},
         }
+        # Opt-in: one vector per class per cell is small for one run and 30 MB across a season of
+        # them, and the scheduled page is rolled from these digests.
+        if per_node:
+            vectors = per_node_of(group[0])
+            if vectors:
+                cell["per_node"] = vectors
+                cell["per_node_seed"] = group[0].get("seed")
         # Only when a value was run more than once - a single-seed run has no spread, and writing
         # 0.0 there would let the explorer average a fiction into a real one later.
         spread = {k: _sd([metric(g, k) for g in group]) for k in METRICS}
@@ -492,6 +515,53 @@ def _seconds_per_sim_hour(reports):
     return round(wall / hours, 4) if wall else None
 
 
+# A block name arrives from a digest, and a digest arrives from a git branch that more than one
+# person can write to. It is used two ways, and both are dangerous unescaped: as a path component
+# (`figures/<block>.svg`, `reports/<block>.txt`, `<block>.json`) and as page content. Escaping covers
+# the second - `_esc` on every display path, \u escapes inside the JSON blob - and this covers the
+# first. Anything outside the set becomes a dash, so a hostile name is inert rather than rejected:
+# the numbers in that block are still worth rolling up.
+SAFE_NAME_CHARS = set(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
+)
+SAFE_NAME_MAX = 96
+# Windows keeps these as device names whatever the extension, so `figures/CON.svg` is not a file
+# there. Guarded even though the runners are Linux: a report directory gets copied about.
+RESERVED_STEMS = (
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+)
+
+
+def safe_name(name, fallback="block"):
+    """`name` reduced to something that can only ever be one path component, and only ever its own.
+
+    Separators, parent references, control characters and the rest become dashes, so a name like
+    `../../etc/passwd` addresses a file called `-..-etc-passwd` inside the directory that was asked
+    for and nothing outside it. Leading and trailing dots go too: `..` must not survive as a prefix,
+    and Windows drops a trailing one, which would quietly merge two names into one file.
+
+    Anything that had to be changed also carries a digest of the original, because cleaning alone is
+    not injective: `a/b`, `a\\b` and a legitimate `a-b` all clean to `a-b`, and one block's report
+    would then overwrite another's - or a hostile name could aim at a real block's figure on purpose.
+    Truncation collides the same way and is covered by the same suffix.
+    """
+    raw = str(name)
+    cleaned = "".join(c if c in SAFE_NAME_CHARS else "-" for c in raw)[:SAFE_NAME_MAX]
+    cleaned = cleaned.strip(".")
+    stem = cleaned or fallback
+    if stem != raw or stem.upper() in RESERVED_STEMS:
+        digest = hashlib.sha256(raw.encode("utf-8", "surrogatepass")).hexdigest()[:6]
+        stem = f"{stem[: SAFE_NAME_MAX - 7]}-{digest}"
+    return stem
+
+
+def is_safe_name(name):
+    """Whether `name` is already usable as a path component, for a caller that wants to say so."""
+    return safe_name(name) == str(name)
+
+
 def load_history(archive_dir, exclude_run_id=None):
     """{block name: [seconds_per_sim_hour, ...]} from every prior digest in the archive.
 
@@ -553,9 +623,9 @@ def check_timing(blocks, history):
             )
 
 
-def summarise_block(reports):
+def summarise_block(reports, per_node=False):
     first = reports[0]
-    cells = cells_of(reports)
+    cells = cells_of(reports, per_node=per_node)
     against_control(cells)
     block = {
         "block": first.get("block", "?"),
@@ -667,6 +737,7 @@ def collate(
     scenario=None,
     expected=None,
     history_dir=None,
+    per_node=False,
 ):
     # On the `block` field, not one block per file: a sharded cell uploads a file per seed, and
     # reading per file would average nothing and enter the block three times.
@@ -678,7 +749,15 @@ def collate(
         for report in load_block(path):
             if "block" in report:
                 by_block.setdefault(report["block"], []).append(report)
-    blocks = [summarise_block(reports) for reports in by_block.values()]
+    unsafe = sorted(name for name in by_block if not is_safe_name(name))
+    if unsafe:
+        # Not dropped: the measurements are still measurements. Named, because a block whose name
+        # is a path is not something sweep.py or a batch runner produces.
+        print(
+            f"WARNING: {len(unsafe)} block name(s) are not usable as a path and will be "
+            f"sanitised wherever one is needed: {', '.join(repr(n) for n in unsafe)}"
+        )
+    blocks = [summarise_block(reports, per_node=per_node) for reports in by_block.values()]
     # Against this block's own past, not against a figure written into a comment once. Skipped
     # entirely when no archive is given, so a local collate of one run behaves exactly as before.
     check_timing(blocks, load_history(history_dir, exclude_run_id=run_id))
@@ -968,6 +1047,14 @@ def main(argv=None):
         "is compared against its own past. Omit to skip the timing comparison entirely",
     )
     ap.add_argument(
+        "--per-node",
+        action="store_true",
+        help="carry each class's per-node reach vector into the digest, for the meshes small enough "
+        "to read node by node (the run keeps one up to 256 nodes). Off by default: a vector per "
+        "class per cell is nothing for one run and tens of megabytes across a season of scheduled "
+        "ones, and this digest is what the rolling page is built from",
+    )
+    ap.add_argument(
         "--fail-on-gate",
         action="store_true",
         help="exit non-zero when a fatal gate failed",
@@ -987,6 +1074,7 @@ def main(argv=None):
         scenario=opts.scenario,
         expected=expected,
         history_dir=opts.history,
+        per_node=opts.per_node,
     )
     out_dir = opts.out or opts.runs
     os.makedirs(out_dir, exist_ok=True)

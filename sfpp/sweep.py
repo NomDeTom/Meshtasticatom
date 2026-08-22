@@ -21,6 +21,7 @@ from functools import lru_cache
 from . import autochart as AC
 from . import report as RP
 from .campaign import build_parser, run_once
+from .collate import safe_name
 
 # Everything the protocol blocks hold fixed. Servers sit two hops apart, comfortably inside the
 # default hop limit, so an advert reaches its peers and the arm under test is what varies.
@@ -643,7 +644,9 @@ def run_block(name, seeds, out_dir, grid=None):
         # A grid run is a different experiment, not a rerun of the same one, so it gets its own
         # file. Without this the second capacity in a capacity-by-loss sweep overwrites the first.
         suffix = "-" + "-".join(g.lstrip("-") for g in grid).replace(" ", "")
-    path = os.path.join(out_dir, f"{name}{suffix}.json")
+    # --grid is free text and lands in the filename, so the whole stem is sanitised rather than
+    # trusted: `--grid "--scenario ../x"` would otherwise write outside the run directory.
+    path = os.path.join(out_dir, safe_name(f"{name}{suffix}") + ".json")
     os.makedirs(out_dir, exist_ok=True)
     with open(path, "w") as f:
         json.dump(results, f, indent=2)
@@ -659,7 +662,7 @@ def run_block(name, seeds, out_dir, grid=None):
     # is where anyone looks afterwards.
     text = RP.report_block(path)
     print(text)
-    text_path = os.path.join(out_dir, "reports", f"{name}{suffix}.txt")
+    text_path = os.path.join(out_dir, "reports", safe_name(f"{name}{suffix}") + ".txt")
     os.makedirs(os.path.dirname(text_path), exist_ok=True)
     with open(text_path, "w") as f:
         f.write(text + "\n")

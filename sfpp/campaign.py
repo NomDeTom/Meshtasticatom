@@ -63,6 +63,11 @@ ADMIN_SESSION_TIMEOUT_MS = 300_000.0
 # assumption about the operator, not a firmware constant, and adjustable. MODEL.md.
 ADMIN_DEFAULT_ATTEMPTS = 3
 
+# Above this node count the per-node reach vectors are summarised and dropped rather than kept: a
+# distribution is the honest reading of a large mesh anyway, and one vector per class per cell is
+# what a 500-node sweep does not need in every report.
+PER_NODE_DETAIL_MAX_NODES = 256
+
 # The traffic mix. NodeInfo is every three hours in the firmware's defaults, not hourly.
 MIX = (
     T.Class("position", T.POSITION_APP, 4.0, 20, 4, 1.0),
@@ -2108,6 +2113,11 @@ class Campaign:
                 "nodes_receiving_none": sum(1 for c in per_node if c == 0),
                 "archived": name == "text",
             }
+            # The vector the distribution was taken from. Six statistics cannot show which node is
+            # the deaf one, or that two classes fail at the same node; on a mesh this size that is
+            # the question. Node order is this run's own, so it means nothing across seeds.
+            if self.opts.nodes <= PER_NODE_DETAIL_MAX_NODES:
+                out[name]["per_node"] = [round(s, 4) for s in shares]
         # One row across every class: a per-class table answers "did text get through" but not
         # "did this node hear the mesh at all", and an arm that trades one for another hides there.
         total_sent = sum(self.generator.originated.values())
@@ -2138,6 +2148,10 @@ class Campaign:
                 "nodes_receiving_none": sum(1 for c in per_node if c == 0),
                 "archived": False,
             }
+            # The same vector for every class at once: "did this node hear the mesh at all", which
+            # is the row a per-node reading starts from.
+            if self.opts.nodes <= PER_NODE_DETAIL_MAX_NODES:
+                out["all"]["per_node"] = [round(s, 4) for s in shares]
         return out
 
     def _dm_report(self):

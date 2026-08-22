@@ -920,7 +920,7 @@ diameter column reads fragmented rather than a number.
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mesh`         | nodes, area, degree, `diameter` (`None` if fragmented), components, routers, topology                                                                                                                                 |
 | `traffic`      | the largest section, and the one that grows. Includes **`cancelled_by_weaker_relay`** and **`cancelled_reach_lost`** - duplicate suppression backfiring, where the relay heard by fewer nodes silences the one heard by more. Offered load and airtime (originated per class, **`channel_utilisation`** and **`node_channel_util_percent`** - two different things, see below - transmissions, **`queue_drops`**, `dropped_to_backoff_cap`, receptions, collision, half-duplex and PHY losses, congestion coefficient), then one family per mechanism: next-hop routing (`next_hop_*`, `route_expired_*`, `routes_lost_to_eviction`), the NodeDB tiers (`nodedb_evictions`, `warm_*`, `dm_blocked_no_key`), signing (`packets_signed`, `dropped_unsigned_strict`, `dropped_unverifiable`, `dropped_downgrade`, `signature_bootstraps`), traceroute (`traceroutes_sent`, `traceroute_routes_learned`, `traceroute_uncorroborated`, `route_cache_*`), hop scaling (`hop_samples`, `hop_rolls`, `hop_limit_lowered`), and the unreleased mechanisms (`extra_repeats_*`, `early_floods`) |
-| `by_class`     | per portnum: sent, received, **per-node reception distribution**, `nodes_receiving_none`, airtime share, `archived`                                                                                                   |
+| `by_class`     | per portnum: sent, received, **per-node reception distribution**, `nodes_receiving_none`, airtime share, `archived`, and on a mesh of 256 nodes or fewer **`per_node`** - the vector the distribution was taken from, one share per node, in this run's own node order. Six statistics cannot show *which* node is deaf or that two classes fail at the same one; `explorer.py` draws it as a dot per node per class when the digest carried it                                                                                                   |
 | `by_hop_limit` | reception and hops traversed, split by the node's own limit                                                                                                                                                           |
 | `baseline`     | text reach min/median/mean/max, routing ceiling, and the loss split into beyond-hop-limit against lost-within-reach                                                                                                   |
 | `designated`   | the archive-sited nodes' own reception, with the archive off or on, plus held and the reconciled gain                                                                                                                 |
@@ -1158,6 +1158,15 @@ named by seed, so one `--out` directory holds one map per seed.
 person opens). `explorer.py` rolls every digest in the archive into one HTML page. Only the digests are
 read, never the block JSONs, so the archive can drop the raw runs without losing its history.
 
+**The page draws its charts, it does not carry them.** Every block panel renders from the digest
+numbers embedded in the page itself, in the browser, from the same values as the tables beside them -
+so a chart cannot disagree with its own table, and one exists wherever the page does. A figure
+rendered beside a block JSON by `autochart.py` is shown as well, when `--figures` points at the
+directory holding it; that is additional, because those figures live with the raw runs and the raw
+runs are exactly what the archive is allowed to drop. With `--per-node` in the digest the panel also
+offers **every node, by class**: one dot per node per packet class, which is where a single deaf node
+or a class that fails alone becomes visible.
+
 Per block, beyond the metrics, the digest carries:
 
 | Field | Is |
@@ -1168,6 +1177,7 @@ Per block, beyond the metrics, the digest carries:
 | `flags` / `fatal` | the warnings and failures, as sentences |
 | `flag_kinds` / `fatal_kinds` | the same, counted by kind from `FLAG_KINDS`. Carried from the point each check fires rather than recovered by re-reading the sentence, so rewording a warning cannot silently un-group it |
 | `explains` | what the cell covers, from whichever of the four surfaces declares it |
+| `per_node` / `per_node_seed` | **only with `--per-node`**: each class's per-node reach vector for that cell, and the seed whose node order it is. Off by default because this digest is what the rolling page is built from, and one vector per class per cell is nothing for a single run and tens of megabytes across a season of scheduled ones. Never averaged across seeds - node 7 of one seed is a different node from node 7 of the next |
 
 `--history <dir of run dirs>` turns on the runtime comparison. It is **warn-only in both directions**:
 a hosted runner is shared hardware and a 30-40% swing between two identical runs is ordinary, so the

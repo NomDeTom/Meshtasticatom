@@ -2710,6 +2710,10 @@ print(",".join(failed))
                 "--run",
                 # collate.py's, for the runtime comparison against the archive's own history.
                 "--history",
+                # collate.py's, carrying the per-node reach vectors into the digest.
+                "--per-node",
+                # explorer.py's, pointing the page at autochart's figures beside the block JSONs.
+                "--figures",
                 # check_oracle.py's, turning "no firmware reachable" into a failure - see §9.2.
                 "--require",
             }

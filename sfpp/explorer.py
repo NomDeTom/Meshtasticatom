@@ -20,8 +20,9 @@ import html
 import json
 import os
 import statistics
+import urllib.parse
 
-from .collate import COST
+from .collate import COST, safe_name
 from .version import SIM_VERSION
 
 # What the page shows per cell; the digest carries more. Eight numbers a cell is what keeps
@@ -109,6 +110,10 @@ def index_by_block(runs):
                     "scenario": run.get("scenario_requested") or "flat",
                     "seed_base": run.get("seed_base"),
                     "cells": {c["value"]: c["metrics"] for c in b["cells"]},
+                    # Only present when the digest was collated with --per-node.
+                    "per_node": {
+                        c["value"]: c["per_node"] for c in b["cells"] if c.get("per_node")
+                    },
                     "cost": b.get("cost"),
                     "flags": b.get("flags", []),
                     "flag_kinds": b.get("flag_kinds") or {},
@@ -416,6 +421,14 @@ p.sub { color: var(--muted); margin: 0 0 1.5rem; }
 .meta b { color: var(--text); font-weight: 600; }
 .panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
 .scroll { overflow-x: auto; }
+/* Collapsed by default: a reader scanning thirty blocks wants the tables, and opens the one chart
+   that the numbers sent them to. */
+.figure { margin: .75rem 0 .25rem; }
+.figure > summary { cursor: pointer; color: var(--muted); font-size: .8rem; width: max-content; }
+.figure > summary:hover { color: var(--text); }
+.chartbar { margin: .5rem 0 .25rem; }
+.chart { min-height: 2rem; }
+.figure svg { background: #FCFCFA; border: 1px solid var(--border); border-radius: 6px; margin-top: .4rem; }
 /* Tabs. Progressive enhancement: with no JS every panel stays visible and the nav is inert, so the
    page remains one long readable document - which is also what printing and grepping it want. */
 .tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--border); margin: 1.5rem 0 0; }
@@ -471,6 +484,131 @@ footer { color: var(--muted); font-size: .8rem; margin-top: 3rem; }
 """
 
 JS = """
+// Every panel's chart, drawn from the digest numbers embedded below rather than from an image.
+// Bars per cell for the latest run, and a line per cell when there is more than one run to trace.
+(function () {
+  const data = JSON.parse(document.getElementById('chartdata').textContent);
+  document.querySelectorAll('.nojs').forEach((p) => p.remove());
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (name, attrs) => {
+    const node = document.createElementNS(NS, name);
+    for (const k in attrs) node.setAttribute(k, attrs[k]);
+    return node;
+  };
+
+  // One dot per node per class: a mesh small enough to read node by node, read that way. The
+  // classes share an x axis, so a node that is deaf to everything lines up down the chart and a
+  // class that alone fails does not hide inside a median.
+  function drawNodes(host, entry) {
+    const cells = Object.keys(entry.nodes || {});
+    host.textContent = '';
+    if (!cells.length) return;
+    const W = 640, LEFT = 132, RIGHT = 24, PLOT = W - LEFT - RIGHT;
+    const rows = [];
+    cells.forEach((cell) => {
+      const classes = entry.nodes[cell].classes;
+      Object.keys(classes).forEach((cls) => rows.push([cell, cls, classes[cls]]));
+    });
+    const H = 34 + rows.length * 16;
+    const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
+                           style: 'max-width:100%;height:auto;font-size:10.5px'});
+    rows.forEach(([cell, cls, vector], i) => {
+      const y = 14 + i * 16;
+      const label = el('text', {x: LEFT - 8, y: y + 4, 'text-anchor': 'end',
+                                style: 'fill:var(--muted)'});
+      label.textContent = `${cell} · ${cls}`;
+      svg.appendChild(label);
+      svg.appendChild(el('line', {x1: LEFT, y1: y, x2: LEFT + PLOT, y2: y,
+                                  style: 'stroke:var(--border)'}));
+      vector.forEach((share, node) => {
+        const dot = el('circle', {cx: LEFT + Math.max(0, Math.min(1, share)) * PLOT, cy: y, r: 2.1,
+                                  style: 'fill:var(--accent);fill-opacity:.55'});
+        const title = el('title', {});
+        title.textContent = `node ${node}: ${share.toFixed(3)}`;
+        dot.appendChild(title);
+        svg.appendChild(dot);
+      });
+    });
+    [0, 0.5, 1].forEach((t) => {
+      const tick = el('text', {x: LEFT + t * PLOT, y: H - 4, 'text-anchor': 'middle',
+                               style: 'fill:var(--muted)'});
+      tick.textContent = t.toFixed(1);
+      svg.appendChild(tick);
+    });
+    host.appendChild(svg);
+  }
+
+  function draw(host, block, metric) {
+    const entry = data[block];
+    if (!entry) return;
+    if (metric === '__nodes') { drawNodes(host, entry); return; }
+    const cells = Object.keys(entry.cells);
+    const runs = entry.runs;
+    // The last run that has a number for a cell is the one the bars show; a cell missing from the
+    // latest run keeps its most recent value rather than vanishing.
+    const latest = {};
+    cells.forEach((c) => {
+      const s = entry.cells[c][metric] || [];
+      for (let i = s.length - 1; i >= 0; i--) if (s[i] !== null) { latest[c] = s[i]; break; }
+    });
+    const values = cells.map((c) => latest[c]).filter((v) => v !== undefined && v !== null);
+    host.textContent = '';
+    if (!values.length) {
+      host.appendChild(document.createTextNode('no ' + metric + ' recorded for this block'));
+      return;
+    }
+    const W = 640, H = 42 + cells.length * 26, LEFT = 132, top = 14;
+    const hi = Math.max(...values, 0), lo = Math.min(...values, 0);
+    const span = (hi - lo) || 1;
+    const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
+                           style: 'max-width:100%;height:auto;font-size:11px'});
+    const zero = LEFT + (0 - lo) / span * (W - LEFT - 56);
+    cells.forEach((c, i) => {
+      const y = top + i * 26;
+      const label = el('text', {x: LEFT - 8, y: y + 12, 'text-anchor': 'end',
+                                style: 'fill:var(--muted)'});
+      label.textContent = c.length > 20 ? c.slice(0, 19) + '…' : c;
+      svg.appendChild(label);
+      const v = latest[c];
+      if (v === undefined || v === null) return;
+      const x = LEFT + (v - lo) / span * (W - LEFT - 56);
+      svg.appendChild(el('rect', {x: Math.min(zero, x), y: y + 3, width: Math.abs(x - zero) || 1,
+                                  height: 15, rx: 2, style: 'fill:var(--accent)'}));
+      const num = el('text', {x: x + 6, y: y + 15, style: 'fill:var(--text)'});
+      num.textContent = Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3);
+      svg.appendChild(num);
+      // Run-to-run, when there is more than one: the same numbers the sparkline column traces.
+      const s = entry.cells[c][metric] || [];
+      const present = s.filter((n) => n !== null);
+      if (runs.length > 1 && present.length > 1) {
+        const title = el('title', {});
+        title.textContent = c + ' over ' + runs.length + ' runs: ' + present.join(', ');
+        svg.appendChild(title);
+      }
+    });
+    svg.appendChild(el('line', {x1: zero, y1: top, x2: zero, y2: H - 14,
+                                style: 'stroke:var(--border)'}));
+    host.appendChild(svg);
+  }
+
+  document.querySelectorAll('details[data-chart]').forEach((box) => {
+    const block = box.getAttribute('data-chart');
+    const host = box.querySelector('.chart');
+    const select = box.querySelector('select.metric');
+    const entry = data[block];
+    if (entry) {
+      // Open on whatever collate said this block moves, so the first chart is the useful one.
+      const opt = [...select.options].find((o) => o.value === entry.measure);
+      if (opt) select.value = entry.measure;
+    }
+    let drawn = false;
+    const render = () => draw(host, block, select.value);
+    box.addEventListener('toggle', () => {
+      if (box.open && !drawn) { render(); drawn = true; }
+    });
+    select.addEventListener('change', () => { if (box.open) render(); });
+  });
+})();
 // Auto -> Light -> Dark, stamped on the root element. Auto removes the attribute and lets
 // prefers-color-scheme decide. aria-pressed stays "false" per the site's convention.
 (function () {
@@ -684,7 +822,115 @@ def render_health(health):
     return out
 
 
-def render_html(runs, blocks, board, for_pages=False, superseded=()):
+# A chart is inlined, never linked: the page is opened from a git branch or a local directory and a
+# relative link to a figure that did not travel renders as a broken image. The cap is a runaway
+# guard, not a policy - it sits above every figure autochart produces, so nothing a block asks to
+# show is refused. A per-node mesh map is the one figure that can pass it, and it has its own page.
+FIGURE_CAP_BYTES = 400_000
+
+
+def block_figure(figures_dir, name):
+    """`<block>.svg` from a figures directory, inlined, or nothing at all.
+
+    The layout is autochart's own: `figures/<block>.svg` beside the block JSON, which is where both
+    sweep.run_block and a local batch put it.
+    """
+    if not figures_dir:
+        return ""
+    # The name comes from a digest, which comes from a branch someone else can write to. Sanitised
+    # so it can only ever address a file inside the directory that was asked for: without this a
+    # block called `../../id_rsa` would be read and inlined into a published page.
+    stem = safe_name(name)
+    path = os.path.join(figures_dir, f"{stem}.svg")
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return ""
+    if size > FIGURE_CAP_BYTES:
+        return (
+            f'<p class="sub" style="font-size:.8rem">chart is {size // 1024} kB, over the '
+            f"{FIGURE_CAP_BYTES // 1024} kB inline cap - open {_esc(path)}</p>"
+        )
+    figures = [(None, path)]
+    # A block may need more than one chart. `<block>--<label>.svg` beside it is rendered under the
+    # same disclosure, labelled by whatever the producer put after the dashes.
+    for extra in sorted(glob.glob(os.path.join(figures_dir, f"{stem}--*.svg"))):
+        if os.path.getsize(extra) <= FIGURE_CAP_BYTES:
+            label = os.path.basename(extra)[len(stem) + 2 : -4]
+            figures.append((label, extra))
+    parts = []
+    for label, each in figures:
+        with open(each) as f:
+            svg = f.read()
+        # The figure carries its own width and height; this makes it shrink with the panel instead
+        # of forcing the page to scroll sideways.
+        svg = svg.replace("<svg ", '<svg style="max-width:100%;height:auto" ', 1)
+        if label:
+            parts.append(f'<p class="sub" style="font-size:.8rem">{_esc(label)}</p>')
+        parts.append(f'<div class="scroll">{svg}</div>')
+    plural = "" if len(figures) == 1 else f" ({len(figures)})"
+    return (
+        f"<details class=\"figure\"><summary>chart{plural}</summary>"
+        + "".join(parts)
+        + "</details>"
+    )
+
+
+def _md(text):
+    """A name safe to drop into a markdown cell or code span.
+
+    `_esc` guards the HTML page; this guards the file beside it. A pipe ends a table cell and a
+    backtick ends a code span, so a block named ``a|b`` silently reshapes the table it is listed in.
+    """
+    return str(text).replace("\\", "").replace("|", "\\|").replace("`", "'")
+
+
+def _md_link(href):
+    """A link target that cannot end early: a bracket or a space in a run directory's name would
+    close the markdown link and leave whatever follows as clickable text of its own."""
+    return urllib.parse.quote(str(href), safe="/:._-~")
+
+
+def chart_data(blocks, runs):
+    """The numbers each block panel draws, as one JSON blob for the page to render live.
+
+    Drawn in the browser rather than shipped as an image, because the digests are all this page is
+    promised: figures live beside the block JSONs, which the archive is free to drop and the results
+    branch never carries. A chart built from the same numbers as the tables cannot go stale against
+    them either.
+    """
+    run_ids = [r.get("run_id") or r["_dir"] for r in runs]
+    out = {}
+    for name, entry in blocks.items():
+        by_run = {r.get("run_id"): r for r in entry["runs"]}
+        cells = {}
+        for run in entry["runs"]:
+            for value in run["cells"]:
+                cells.setdefault(str(value), {})
+        for value, metrics in cells.items():
+            for key, label, _ in SHOWN:
+                metrics[key] = [
+                    (by_run.get(rid, {}).get("cells", {}).get(value) or {}).get(key)
+                    for rid in run_ids
+                ]
+        # Per-node vectors, when the digest carried them: the latest run that has one for a cell,
+        # since node order belongs to a single run and cannot be pooled across them.
+        nodes = {}
+        for run in entry["runs"]:
+            for value, vectors in (run.get("per_node") or {}).items():
+                nodes[str(value)] = {"run": run.get("run_id"), "classes": vectors}
+        out[name] = {
+            "arm": entry["arm"],
+            "measure": entry.get("moved") or "held",
+            "runs": run_ids,
+            "cells": cells,
+        }
+        if nodes:
+            out[name]["nodes"] = nodes
+    return out
+
+
+def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir=None):
     scenarios = sorted({r.get("scenario_requested") or "flat" for r in runs})
     transports = sorted(
         {
@@ -864,6 +1110,25 @@ def render_html(runs, blocks, board, for_pages=False, superseded=()):
             )
         out.append("</tbody></table></div>")
 
+        metrics = [f'<option value="{k}">{_esc(label)}</option>' for k, label, _ in SHOWN]
+        # Offered only where the digest carried the vectors, so the control cannot promise a chart
+        # the page has no numbers for.
+        if any(r.get("per_node") for r in entry["runs"]):
+            metrics.insert(0, '<option value="__nodes">every node, by class</option>')
+        out.append(
+            f'<details class="figure" data-chart="{_esc(name)}">'
+            f"<summary>chart</summary>"
+            f'<div class="chartbar"><select class="metric">{"".join(metrics)}</select></div>'
+            f'<div class="chart" role="img"></div>'
+            f'<p class="sub nojs" style="font-size:.8rem">This chart draws from the same digest '
+            f"numbers as the tables above; it needs JavaScript.</p></details>"
+        )
+        # A figure rendered beside the block JSON, when the raw runs are still there to have one.
+        # Additional to the live chart, never instead of it.
+        figure = block_figure(figures_dir, name)
+        if figure:
+            out.append(figure)
+
         # The latest run in full: the sparkline row above carries `held` only, and a reader who has
         # spotted a moving block needs the currency it moved in without opening the run's own report.
         latest = entry["runs"][-1]
@@ -925,6 +1190,16 @@ def render_html(runs, blocks, board, for_pages=False, superseded=()):
         "<footer>Built by <code>sfpp.explorer</code> from the run digests in this branch. "
         "Nothing here is hand-edited; a scheduled job rewrites the page.</footer>",
         "</main>",
+        # A block name reaches this blob, and a name holding `</script>` would close the element
+        # and everything after it would be markup. Escaped as \u ..., which is still valid JSON.
+        '<script type="application/json" id="chartdata">'
+        + (
+            json.dumps(chart_data(blocks, runs), separators=(",", ":"))
+            .replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026")
+        )
+        + "</script>",
         f"<script>{JS}</script>",
     ]
     return "\n".join(out)
@@ -955,7 +1230,8 @@ def render_markdown(runs, blocks, board, superseded=()):
     ]
     for row in board:
         out.append(
-            f"| `{row['block']}` | {row['arm']} | **{row['measure']}** | {_fmt(row['spread'])} | "
+            f"| `{_md(row['block'])}` | {_md(row['arm'])} | **{_md(row['measure'])}** | "
+            f"{_fmt(row['spread'])} | "
             f"{_fmt(row['spread_sd'])} | {_fmt(row['cost'])} | {_price(row)} | {row['runs']} |"
         )
     out += [
@@ -968,7 +1244,8 @@ def render_markdown(runs, blocks, board, superseded=()):
     for r in reversed(runs):
         gate = r.get("gate", {})
         out.append(
-            f"| [`{r.get('run_id')}`]({r['_href']}/trend.md) | {r.get('scenario_requested') or 'flat'} | "
+            f"| [`{_md(r.get('run_id'))}`]({_md_link(r['_href'])}/trend.md) | "
+            f"{_md(r.get('scenario_requested') or 'flat')} | "
             f"`{r.get('seed_base', '-')}` | {gate.get('blocks_run', 0)} | {gate.get('blocks_missing', 0)} | "
             f"{len(gate.get('warnings', []))} |"
         )
@@ -994,6 +1271,13 @@ def main(argv=None):
         "--link-base",
         help="prefix for the per-run report links. The archive is a git branch, so a page published "
         "anywhere else has to point at it absolutely or every report link 404s",
+    )
+    ap.add_argument(
+        "--figures",
+        help="directory of autochart block figures (`figures/<block>.svg`, as sweep.run_block and "
+        "the local batches write them). Each block's chart is inlined under its tables when one "
+        "exists. Off by default: the scheduled page is rolled from digests alone, and the figures "
+        "live in a run's artifact rather than on the results branch",
     )
     ap.add_argument(
         "--for-pages",
@@ -1028,7 +1312,9 @@ def main(argv=None):
         else:
             r["_href"] = os.path.relpath(r["_dir"], opts.out).replace(os.sep, "/")
     with open(os.path.join(opts.out, opts.name), "w") as f:
-        f.write(render_html(runs, blocks, board, opts.for_pages, superseded))
+        f.write(
+            render_html(runs, blocks, board, opts.for_pages, superseded, opts.figures)
+        )
     with open(os.path.join(opts.out, "INDEX.md"), "w") as f:
         f.write(render_markdown(runs, blocks, board, superseded) + "\n")
     print(

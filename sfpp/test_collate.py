@@ -102,6 +102,141 @@ def write_run(directory, blocks):
     return directory
 
 
+class SafeNames(unittest.TestCase):
+    """A block name arrives from a digest on a shared branch and is used to build paths."""
+
+    def test_a_name_can_only_ever_be_one_path_component(self):
+        for hostile in ("../../etc/passwd", "/etc/passwd", "..", "a/b", "a\\b", "x\x00y", "..."):
+            cleaned = C.safe_name(hostile)
+            self.assertNotIn("/", cleaned)
+            self.assertNotIn("\\", cleaned)
+            self.assertNotEqual(cleaned, "..")
+            self.assertFalse(cleaned.startswith("."), cleaned)
+            self.assertEqual(cleaned, os.path.basename(cleaned))
+
+    def test_an_ordinary_block_name_is_left_alone(self):
+        for name in ("B-adopt", "R-hotstore-stress", "P-archive-sr", "E-signed"):
+            self.assertEqual(C.safe_name(name), name)
+            self.assertTrue(C.is_safe_name(name))
+
+    def test_an_empty_or_dotted_name_falls_back(self):
+        for name in ("", "...", "."):
+            self.assertTrue(C.safe_name(name).startswith("block-"), C.safe_name(name))
+
+    def test_two_names_never_land_on_one_file(self):
+        # Cleaning alone is not injective: `a/b`, `a\\b` and a real `a-b` all clean to `a-b`, so one
+        # block's report would overwrite another's - or a hostile name could aim at a real one.
+        names = ["a/b", "a\\b", "a-b", "a b", "x" * 200 + "A", "x" * 200 + "B", "..", ".", ""]
+        stems = [C.safe_name(n) for n in names]
+        self.assertEqual(len(set(stems)), len(stems), stems)
+
+    def test_a_windows_device_name_is_not_left_as_one(self):
+        # CON.svg is the console on Windows whatever the extension, and a report directory travels.
+        for device in ("CON", "nul", "COM1", "LPT9"):
+            self.assertNotEqual(C.safe_name(device).upper(), device.upper())
+
+    def test_a_name_already_usable_is_untouched(self):
+        # The suffix appears only where something had to change, so ordinary block names - which is
+        # all of them - keep addressing the files they always did.
+        self.assertEqual(C.safe_name("B-congestion-scaling"), "B-congestion-scaling")
+
+    def test_the_page_cannot_be_walked_out_of_the_figures_directory(self):
+        # Without sanitising, a block named ../secret would inline a file from outside the figures
+        # directory into a page that gets published.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        figures = os.path.join(tmp.name, "figures")
+        os.makedirs(figures)
+        secret = os.path.join(tmp.name, "secret.svg")
+        with open(secret, "w") as f:
+            f.write("<svg>PRIVATE</svg>")
+        self.assertEqual(E.block_figure(figures, "../secret"), "")
+
+    def test_a_name_cannot_reshape_the_markdown_beside_the_page(self):
+        # _esc guards the HTML and does nothing for the file next to it: a pipe ends a table cell,
+        # a backtick ends a code span, and a bracket or a space ends a link target.
+        self.assertEqual(E._md("a|b`c"), "a\\|b'c")
+        self.assertEqual(E._md_link("../run 1/x)y"), "../run%201/x%29y")
+
+    def test_a_hostile_run_directory_cannot_end_a_markdown_link(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        archive = os.path.join(tmp.name, "archive")
+        runs = write_run(os.path.join(tmp.name, "runs"), {"B-arm": [report()]})
+        quietly(
+            C.main,
+            ["--runs", runs, "--out", os.path.join(archive, "r1) [x](y"), "--run-id", "r1"],
+        )
+        out = os.path.join(tmp.name, "page")
+        quietly(E.main, ["--archive", archive, "--out", out])
+        with open(os.path.join(out, "INDEX.md")) as f:
+            index = f.read()
+        self.assertNotIn("r1) [x](y/trend.md", index)
+        self.assertIn("%29%20%5Bx%5D%28y/trend.md", index)
+
+    def test_collate_says_when_a_digest_carries_one(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        runs = write_run(os.path.join(tmp.name, "runs"), {"hostile": [report(block="../../x")]})
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            C.collate(runs, run_id="r1")
+        self.assertIn("not usable as a path", buffer.getvalue())
+
+
+class PerNodeDetail(unittest.TestCase):
+    """The vectors behind the distributions: stored by the run, carried only when asked."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.runs = write_run(
+            os.path.join(self.tmp.name, "runs"),
+            {
+                "B-arm": [
+                    report(value=0, by_class={"text": {"per_node": [0.9, 0.1, 0.5]}}),
+                    report(value=1, by_class={"text": {"per_node": [0.8, 0.2, 0.4]}}),
+                ]
+            },
+        )
+
+    def _cells(self, **kw):
+        digest = C.collate(self.runs, run_id="r1", **kw)
+        return {c["value"]: c for c in digest["blocks"][0]["cells"]}
+
+    def test_the_digest_leaves_them_out_by_default(self):
+        # This digest is what the rolling page is built from, and a season of them is not the place
+        # for a vector per class per cell.
+        for cell in self._cells().values():
+            self.assertNotIn("per_node", cell)
+
+    def test_per_node_carries_the_vectors_and_names_the_seed(self):
+        # Values are grouped as strings, the way every other cell in a digest is keyed.
+        cells = self._cells(per_node=True)
+        self.assertEqual(cells["0"]["per_node"]["text"], [0.9, 0.1, 0.5])
+        self.assertEqual(cells["1"]["per_node"]["text"], [0.8, 0.2, 0.4])
+        # Node order belongs to one run, so the digest says which seed the vector came from.
+        self.assertEqual(cells["0"]["per_node_seed"], 7)
+
+    def test_the_page_only_offers_the_chart_when_it_has_the_numbers(self):
+        archive = os.path.join(self.tmp.name, "archive")
+        quietly(C.main, ["--runs", self.runs, "--out", os.path.join(archive, "r1"),
+                         "--run-id", "r1"])
+        out = os.path.join(self.tmp.name, "plain")
+        quietly(E.main, ["--archive", archive, "--out", out])
+        with open(os.path.join(out, "index.html")) as f:
+            self.assertNotIn("every node, by class", f.read())
+
+        quietly(C.main, ["--runs", self.runs, "--out", os.path.join(archive, "r1"),
+                         "--run-id", "r1", "--per-node"])
+        out = os.path.join(self.tmp.name, "rich")
+        quietly(E.main, ["--archive", archive, "--out", out])
+        with open(os.path.join(out, "index.html")) as f:
+            page = f.read()
+        self.assertIn("every node, by class", page)
+        self.assertIn("0.9", page)
+
+
 class NumericLeaves(unittest.TestCase):
     def test_walks_dicts_and_lists(self):
         leaves = C.numeric_leaves({"a": {"b": 1}, "c": [2, {"d": 3.5}]})
