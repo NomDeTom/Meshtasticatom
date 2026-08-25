@@ -1,6 +1,6 @@
 # SF++ sweep explorer
 
-9 scheduled run(s) rolled up, 118 block(s). Open `index.html` for the filterable page; this file is the same data in a diff-readable form.
+10 scheduled run(s) rolled up, 131 block(s). Open `index.html` for the filterable page; this file is the same data in a diff-readable form.
 
 - **latest** `matrix-2026-08-25` on batumi ground, seed base `None`
 - **transport** `591429c`
@@ -10,24 +10,37 @@
 
 | block | arm | measure | spread | run-to-run sd | text spread | price | runs |
 | --- | --- | --- | --: | --: | --: | --- | --: |
+| `batumi-hop-limit-15` | archive | **held** | 0.988 | · | 0.067 | 1.3x bytes_on_air | 1 |
+| `batumi-hop-limit-7` | archive | **held** | 0.988 | · | 0.067 | 1.3x bytes_on_air | 1 |
+| `batumi-m4-early-flood` | archive | **held** | 0.986 | · | 0.067 | 1.2x bytes_on_air | 1 |
+| `batumi-congestion-40` | archive | **held** | 0.985 | · | 0.070 | 1.2x bytes_on_air | 1 |
+| `batumi-hop-scaling-40` | archive | **held** | 0.985 | · | 0.070 | 1.2x bytes_on_air | 1 |
+| `batumi-none` | archive | **held** | 0.985 | · | 0.070 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-coding-rate-ladder` | archive | **held** | 0.985 | · | 0.008 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-m4-early-flood` | archive | **held** | 0.985 | · | 0.008 | 1.2x bytes_on_air | 1 |
+| `batumi-extra-repeats` | archive | **held** | 0.985 | · | 0.072 | 1.2x bytes_on_air | 1 |
+| `batumi-coding-rate-ladder` | archive | **held** | 0.985 | · | 0.076 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-extra-repeats` | archive | **held** | 0.984 | · | 0.007 | 1.1x bytes_on_air | 1 |
 | `batumi-short-fast-congestion-40` | archive | **held** | 0.984 | · | 0.011 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-hop-scaling-40` | archive | **held** | 0.984 | · | 0.011 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-none` | archive | **held** | 0.984 | · | 0.011 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-favourite-routers` | archive | **held** | 0.984 | · | 0.009 | 1.2x bytes_on_air | 1 |
+| `batumi-favourite-routers` | archive | **held** | 0.984 | · | 0.077 | 1.3x bytes_on_air | 1 |
 | `batumi-short-fast-congestion-60` | archive | **held** | 0.984 | · | 0.010 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-hop-limit-15` | archive | **held** | 0.984 | · | 0.007 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-hop-limit-7` | archive | **held** | 0.984 | · | 0.007 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-congestion-80` | archive | **held** | 0.983 | · | 0.007 | 1.1x bytes_on_air | 1 |
 | `batumi-short-fast-hop-scaling-80` | archive | **held** | 0.980 | · | 0.010 | 1.1x bytes_on_air | 1 |
+| `batumi-hop-scaling-80` | archive | **held** | 0.979 | · | 0.086 | 1.2x bytes_on_air | 1 |
+| `batumi-hop-scaling-60` | archive | **held** | 0.979 | · | 0.086 | 1.2x bytes_on_air | 1 |
 | `batumi-short-fast-hop-scaling-60` | archive | **held** | 0.979 | · | 0.010 | 1.1x bytes_on_air | 1 |
 | `BL-control` | protocol | **held** | 0.963 | 0.026 | 0.029 | 1.1x bytes_on_air | 4 |
+| `batumi-congestion-60` | archive | **held** | 0.963 | · | 0.145 | 1.2x bytes_on_air | 1 |
 | `PR-protocol` | protocol | **held** | 0.951 | 0.030 | 0.018 | 1.2x bytes_on_air | 4 |
 | `RF-pulse` | noise-pulse-interval-ms | **held** | 0.770 | 0.010 | 0.662 | 1.4e+02x sr_airtime | 4 |
 | `RF-txpower` | tx-power | **held** | 0.769 | 0.095 | 0.728 | 3.8x advert_bytes | 4 |
 | `AD-siting` | siting-mix | **held** | 0.723 | 0.086 | 0.661 | 6.4x advert_bytes | 4 |
+| `batumi-congestion-80` | archive | **held** | 0.720 | · | 0.125 | 1x bytes_on_air | 1 |
 | `MS-siting` | siting-mix | **text** | 0.696 | 0.106 | 0.696 | 5x sr_airtime | 4 |
 | `MS-stretch` | stretch | **text** | 0.695 | 0.059 | 0.695 | 3.4x sr_airtime | 4 |
 | `RF-bw500` | preset | **text** | 0.559 | 0.099 | 0.559 | 1.9x sr_bytes | 4 |
@@ -136,6 +149,7 @@
 | [`matrix-2026-08-25`](runs/matrix-2026-08-25/trend.md) | batumi | `None` | 2 | 0 | 161 |
 | [`matrix-2026-08-24`](runs/matrix-2026-08-24/trend.md) | batumi | `None` | 2 | 0 | 119 |
 | [`matrix-2026-08-22`](runs/matrix-2026-08-22/trend.md) | batumi | `None` | 2 | 0 | 121 |
+| [`design-2026-08-25-8765439`](runs/design-2026-08-25-8765439/trend.md) | batumi | `8765439` | 13 | 0 | 605 |
 | [`design-2026-08-24-4578693`](runs/design-2026-08-24-4578693/trend.md) | batumi | `4578693` | 13 | 0 | 669 |
 | [`design-2026-08-22-8785397`](runs/design-2026-08-22-8785397/trend.md) | batumi | `8785397` | 13 | 0 | 641 |
 | [`blocks-2026-08-25-6335397`](runs/blocks-2026-08-25-6335397/trend.md) | rolling | `6335397` | 86 | 1 | 98 |
