@@ -15,13 +15,13 @@
 
 <details><summary>7 warnings</summary>
 
-- F-loss: extra-loss=0.2: decode_failures 1
-- F-loss: extra-loss=0.3: decode_failures 16
-- G-servers: servers=2: decode_failures 13
-- K-hopspread: hop-limit=3: decode_failures 22
-- N-hops: hops-apart=3: decode_failures 5
-- N-hops: hops-apart=4: decode_failures 17
-- N-hops: hops-apart=5: decode_failures 4
+- DG-loss: extra-loss=0.2: decode_failures 1
+- DG-loss: extra-loss=0.3: decode_failures 16
+- SF-servers-flat: servers=2: decode_failures 13
+- RT-hopspread: hop-limit=3: decode_failures 22
+- SF-hops-spread: hops-apart=3: decode_failures 5
+- SF-hops-spread: hops-apart=4: decode_failures 17
+- SF-hops-spread: hops-apart=5: decode_failures 4
 
 </details>
 
@@ -31,15 +31,15 @@ Ranked by how far the arm moves whichever success it moves most. The four measur
 
 | block | arm | moved | low → high | spread | text | dir | cells |
 | --- | --- | --- | --- | --: | --- | :-: | --: |
-| `Q-topology` | topology | **text** | 0.385 → 0.890 | 0.504 | 0.385 → 0.890 | up | 4 |
-| `N-hops` | hops-apart | **held** | 0.579 → 0.872 | 0.293 | 0.630 → 0.653 | down | 5 |
-| `K-hopspread` | hop-limit | **text** | 0.437 → 0.689 | 0.252 | 0.437 → 0.689 | up | 3 |
-| `F-loss` | extra-loss | **held** | 0.716 → 0.872 | 0.156 | 0.498 → 0.639 | down | 4 |
-| `G-servers` | servers | **held** | 0.791 → 0.945 | 0.155 | 0.636 → 0.652 | up | 4 |
+| `MS-topology` | topology | **text** | 0.385 → 0.890 | 0.504 | 0.385 → 0.890 | up | 4 |
+| `SF-hops-spread` | hops-apart | **held** | 0.579 → 0.872 | 0.293 | 0.630 → 0.653 | down | 5 |
+| `RT-hopspread` | hop-limit | **text** | 0.437 → 0.689 | 0.252 | 0.437 → 0.689 | up | 3 |
+| `DG-loss` | extra-loss | **held** | 0.716 → 0.872 | 0.156 | 0.498 → 0.639 | down | 4 |
+| `SF-servers-flat` | servers | **held** | 0.791 → 0.945 | 0.155 | 0.636 → 0.652 | up | 4 |
 
 ## Every block
 
-### `F-loss` - extra-loss  `--scenario rolling`
+### `DG-loss` - extra-loss  `--scenario rolling`
 
 | value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |
@@ -52,7 +52,7 @@ Ranked by how far the arm moves whichever success it moves most. The four measur
 
 > extra-loss=0.3: decode_failures 16
 
-### `G-servers` - servers  `--scenario rolling`
+### `SF-servers-flat` - servers  `--scenario rolling`
 
 | value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |
@@ -63,7 +63,7 @@ Ranked by how far the arm moves whichever success it moves most. The four measur
 
 > servers=2: decode_failures 13
 
-### `K-hopspread` - hop-limit  `--scenario rolling`
+### `RT-hopspread` - hop-limit  `--scenario rolling`
 
 | value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |
@@ -73,7 +73,7 @@ Ranked by how far the arm moves whichever success it moves most. The four measur
 
 > hop-limit=3: decode_failures 22
 
-### `N-hops` - hops-apart  `--scenario rolling`
+### `SF-hops-spread` - hops-apart  `--scenario rolling`
 
 | value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |
@@ -89,7 +89,7 @@ Ranked by how far the arm moves whichever success it moves most. The four measur
 
 > hops-apart=5: decode_failures 4
 
-### `Q-topology` - topology  `--scenario rolling`
+### `MS-topology` - topology  `--scenario rolling`
 
 | value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |

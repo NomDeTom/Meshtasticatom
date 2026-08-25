@@ -2,7 +2,7 @@
  "blocks": [
   {
    "arm": "extra-loss",
-   "block": "F-loss",
+   "block": "DG-loss",
    "cells": [
     {
      "metrics": {
@@ -220,7 +220,7 @@
   },
   {
    "arm": "servers",
-   "block": "G-servers",
+   "block": "SF-servers-flat",
    "cells": [
     {
      "metrics": {
@@ -437,7 +437,7 @@
   },
   {
    "arm": "hop-limit",
-   "block": "K-hopspread",
+   "block": "RT-hopspread",
    "cells": [
     {
      "metrics": {
@@ -608,7 +608,7 @@
   },
   {
    "arm": "hops-apart",
-   "block": "N-hops",
+   "block": "SF-hops-spread",
    "cells": [
     {
      "metrics": {
@@ -873,7 +873,7 @@
   },
   {
    "arm": "topology",
-   "block": "Q-topology",
+   "block": "MS-topology",
    "cells": [
     {
      "metrics": {
@@ -1093,13 +1093,13 @@
   "failures": [],
   "ok": true,
   "warnings": [
-   "F-loss: extra-loss=0.2: decode_failures 1",
-   "F-loss: extra-loss=0.3: decode_failures 16",
-   "G-servers: servers=2: decode_failures 13",
-   "K-hopspread: hop-limit=3: decode_failures 22",
-   "N-hops: hops-apart=3: decode_failures 5",
-   "N-hops: hops-apart=4: decode_failures 17",
-   "N-hops: hops-apart=5: decode_failures 4"
+   "DG-loss: extra-loss=0.2: decode_failures 1",
+   "DG-loss: extra-loss=0.3: decode_failures 16",
+   "SF-servers-flat: servers=2: decode_failures 13",
+   "RT-hopspread: hop-limit=3: decode_failures 22",
+   "SF-hops-spread: hops-apart=3: decode_failures 5",
+   "SF-hops-spread: hops-apart=4: decode_failures 17",
+   "SF-hops-spread: hops-apart=5: decode_failures 4"
   ]
  },
  "generated": "2026-08-19T18:07:37+00:00",

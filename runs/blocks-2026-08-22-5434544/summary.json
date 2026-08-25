@@ -2,7 +2,7 @@
  "blocks": [
   {
    "arm": "trigger",
-   "block": "D-cadence",
+   "block": "SF-cadence",
    "cells": [
     {
      "metrics": {
@@ -236,7 +236,7 @@
   },
   {
    "arm": "advert-jitter-s",
-   "block": "D-jitter",
+   "block": "SF-jitter-global",
    "cells": [
     {
      "metrics": {
@@ -462,7 +462,7 @@
   },
   {
    "arm": "resolve",
-   "block": "D-resolve",
+   "block": "SF-resolve",
    "cells": [
     {
      "metrics": {
@@ -642,7 +642,7 @@
   },
   {
    "arm": "capacity",
-   "block": "E-capacity",
+   "block": "SF-capacity",
    "cells": [
     {
      "metrics": {
@@ -920,7 +920,7 @@
   },
   {
    "arm": "signed",
-   "block": "E-signed",
+   "block": "SF-signed",
    "cells": [
     {
      "metrics": {
@@ -1054,7 +1054,7 @@
   },
   {
    "arm": "short-id-bits",
-   "block": "E-width",
+   "block": "SF-width",
    "cells": [
     {
      "metrics": {
@@ -1280,7 +1280,7 @@
   },
   {
    "arm": "burst-loss",
-   "block": "F-burst",
+   "block": "DG-burst",
    "cells": [
     {
      "metrics": {
@@ -1512,7 +1512,7 @@
   },
   {
    "arm": "role-mix",
-   "block": "F-flooding",
+   "block": "AD-flooding",
    "cells": [
     {
      "metrics": {
@@ -1650,7 +1650,7 @@
   },
   {
    "arm": "hop-limit",
-   "block": "F-hoplimit",
+   "block": "RT-hoplimit",
    "cells": [
     {
      "metrics": {
@@ -1880,7 +1880,7 @@
   },
   {
    "arm": "extra-loss",
-   "block": "F-loss",
+   "block": "DG-loss",
    "cells": [
     {
      "metrics": {
@@ -2111,7 +2111,7 @@
   },
   {
    "arm": "burst-loss",
-   "block": "F-outage",
+   "block": "DG-outage",
    "cells": [
     {
      "metrics": {
@@ -2343,7 +2343,7 @@
   },
   {
    "arm": "tx-power",
-   "block": "F-txpower",
+   "block": "RF-txpower",
    "cells": [
     {
      "metrics": {
@@ -2574,7 +2574,7 @@
   },
   {
    "arm": "servers",
-   "block": "G-allrouters",
+   "block": "SF-servers-allrouters",
    "cells": [
     {
      "metrics": {
@@ -2708,7 +2708,7 @@
   },
   {
    "arm": "hops-apart",
-   "block": "G-hops",
+   "block": "SF-hops-flat",
    "cells": [
     {
      "metrics": {
@@ -2939,7 +2939,7 @@
   },
   {
    "arm": "place",
-   "block": "G-place",
+   "block": "SF-place-flat",
    "cells": [
     {
      "metrics": {
@@ -3261,7 +3261,7 @@
   },
   {
    "arm": "servers",
-   "block": "G-servers",
+   "block": "SF-servers-flat",
    "cells": [
     {
      "metrics": {
@@ -3487,7 +3487,7 @@
   },
   {
    "arm": "bucket-mode",
-   "block": "J-bucketmode",
+   "block": "SF-bucket-mode",
    "cells": [
     {
      "metrics": {
@@ -3719,7 +3719,7 @@
   },
   {
    "arm": "time-bucket-s",
-   "block": "J-timewin",
+   "block": "SF-bucket-time",
    "cells": [
     {
      "metrics": {
@@ -3905,7 +3905,7 @@
   },
   {
    "arm": "capacity",
-   "block": "J-wincap",
+   "block": "SF-capacity-window",
    "cells": [
     {
      "metrics": {
@@ -4093,7 +4093,7 @@
   },
   {
    "arm": "window-size",
-   "block": "J-window",
+   "block": "SF-window-size",
    "cells": [
     {
      "metrics": {
@@ -4279,7 +4279,7 @@
   },
   {
    "arm": "nodes",
-   "block": "K-density",
+   "block": "MS-density",
    "cells": [
     {
      "metrics": {
@@ -4555,7 +4555,7 @@
   },
   {
    "arm": "hop-limit",
-   "block": "K-hopspread",
+   "block": "RT-hopspread",
    "cells": [
     {
      "metrics": {
@@ -4739,7 +4739,7 @@
   },
   {
    "arm": "nodes",
-   "block": "K-size",
+   "block": "MS-size",
    "cells": [
     {
      "metrics": {
@@ -5011,7 +5011,7 @@
   },
   {
    "arm": "hop-spread",
-   "block": "K-spread",
+   "block": "RT-spread",
    "cells": [
     {
      "metrics": {
@@ -5149,7 +5149,7 @@
   },
   {
    "arm": "advert-transport",
-   "block": "L-advert",
+   "block": "SF-advert-transport",
    "cells": [
     {
      "metrics": {
@@ -5283,7 +5283,7 @@
   },
   {
    "arm": "provide-transport",
-   "block": "L-provide",
+   "block": "SF-provide-transport",
    "cells": [
     {
      "metrics": {
@@ -5417,7 +5417,7 @@
   },
   {
    "arm": "capacity",
-   "block": "M-capacity",
+   "block": "SF-capacity-local",
    "cells": [
     {
      "metrics": {
@@ -5695,7 +5695,7 @@
   },
   {
    "arm": "replay-ordering",
-   "block": "M-combined",
+   "block": "SF-replay-order-broadcast",
    "cells": [
     {
      "metrics": {
@@ -5833,7 +5833,7 @@
   },
   {
    "arm": "advert-jitter-s",
-   "block": "M-jitter",
+   "block": "SF-jitter-local",
    "cells": [
     {
      "metrics": {
@@ -6059,7 +6059,7 @@
   },
   {
    "arm": "replay-ordering",
-   "block": "M-replayorder",
+   "block": "SF-replay-order",
    "cells": [
     {
      "metrics": {
@@ -6197,7 +6197,7 @@
   },
   {
    "arm": "hops-apart",
-   "block": "N-hops",
+   "block": "SF-hops-spread",
    "cells": [
     {
      "metrics": {
@@ -6475,7 +6475,7 @@
   },
   {
    "arm": "place",
-   "block": "N-place",
+   "block": "SF-place-spread",
    "cells": [
     {
      "metrics": {
@@ -6797,7 +6797,7 @@
   },
   {
    "arm": "servers",
-   "block": "N-servers",
+   "block": "SF-servers-spread",
    "cells": [
     {
      "metrics": {
@@ -7023,7 +7023,7 @@
   },
   {
    "arm": "preset",
-   "block": "P-bw500",
+   "block": "RF-bw500",
    "cells": [
     {
      "metrics": {
@@ -7208,7 +7208,7 @@
   },
   {
    "arm": "catch-up-hours",
-   "block": "P-catchup",
+   "block": "SF-catchup",
    "cells": [
     {
      "metrics": {
@@ -7394,7 +7394,7 @@
   },
   {
    "arm": "no-congestion-scaling",
-   "block": "P-congestion",
+   "block": "TH-congestion",
    "cells": [
     {
      "metrics": {
@@ -7534,7 +7534,7 @@
   },
   {
    "arm": "diurnal",
-   "block": "P-diurnal",
+   "block": "LD-diurnal",
    "cells": [
     {
      "metrics": {
@@ -7714,7 +7714,7 @@
   },
   {
    "arm": "preset",
-   "block": "P-eu-presets",
+   "block": "RF-eu-presets",
    "cells": [
     {
      "metrics": {
@@ -7945,7 +7945,7 @@
   },
   {
    "arm": "preset",
-   "block": "P-preset",
+   "block": "RF-preset",
    "cells": [
     {
      "metrics": {
@@ -8130,7 +8130,7 @@
   },
   {
    "arm": "protocol",
-   "block": "Q-control",
+   "block": "BL-control",
    "cells": [
     {
      "metrics": {
@@ -8268,7 +8268,7 @@
   },
   {
    "arm": "hop-assign",
-   "block": "Q-hopassign",
+   "block": "RT-hopassign",
    "cells": [
     {
      "metrics": {
@@ -8402,7 +8402,7 @@
   },
   {
    "arm": "broadcast-interval-s",
-   "block": "Q-interval",
+   "block": "LD-interval",
    "cells": [
     {
      "metrics": {
@@ -8628,7 +8628,7 @@
   },
   {
    "arm": "protocol",
-   "block": "Q-protocol",
+   "block": "PR-protocol",
    "cells": [
     {
      "metrics": {
@@ -8808,7 +8808,7 @@
   },
   {
    "arm": "topology",
-   "block": "Q-topology",
+   "block": "MS-topology",
    "cells": [
     {
      "metrics": {
@@ -9034,7 +9034,7 @@
   },
   {
    "arm": "no-adopt-hop-recommendation",
-   "block": "R-adopt",
+   "block": "RT-adopt",
    "cells": [
     {
      "metrics": {
@@ -9168,7 +9168,7 @@
   },
   {
    "arm": "congestion-input",
-   "block": "R-congestion-input",
+   "block": "TH-congestion-input",
    "cells": [
     {
      "metrics": {
@@ -9306,7 +9306,7 @@
   },
   {
    "arm": "congestion-mode",
-   "block": "R-congestion-mode",
+   "block": "TH-congestion-mode",
    "cells": [
     {
      "metrics": {
@@ -9444,7 +9444,7 @@
   },
   {
    "arm": "coding-rate-ladder",
-   "block": "R-crladder",
+   "block": "PR-crladder",
    "cells": [
     {
      "metrics": {
@@ -9583,7 +9583,7 @@
   },
   {
    "arm": "dm-mode",
-   "block": "R-dmmode",
+   "block": "DM-mode",
    "cells": [
     {
      "metrics": {
@@ -9767,7 +9767,7 @@
   },
   {
    "arm": "dm-mode",
-   "block": "R-dmmode-cr",
+   "block": "PR-dmmode-cr",
    "cells": [
     {
      "metrics": {
@@ -9906,7 +9906,7 @@
   },
   {
    "arm": "favourite-routers",
-   "block": "R-favourites",
+   "block": "RT-favourites",
    "cells": [
     {
      "metrics": {
@@ -10040,7 +10040,7 @@
   },
   {
    "arm": "profile",
-   "block": "R-firmware",
+   "block": "FW-firmware",
    "cells": [
     {
      "metrics": {
@@ -10174,7 +10174,7 @@
   },
   {
    "arm": "nodes",
-   "block": "R-hopscale",
+   "block": "MS-hopscale",
    "cells": [
     {
      "metrics": {
@@ -10405,7 +10405,7 @@
   },
   {
    "arm": "max-num-nodes",
-   "block": "R-hotstore",
+   "block": "DB-hotstore",
    "cells": [
     {
      "metrics": {
@@ -10631,7 +10631,7 @@
   },
   {
    "arm": "max-num-nodes",
-   "block": "R-hotstore-stress",
+   "block": "DB-hotstore-stress",
    "cells": [
     {
      "metrics": {
@@ -10816,7 +10816,7 @@
   },
   {
    "arm": "legacy-fraction",
-   "block": "R-mixed",
+   "block": "FW-mixed",
    "cells": [
     {
      "metrics": {
@@ -11042,7 +11042,7 @@
   },
   {
    "arm": "legacy-fraction",
-   "block": "R-mixed-26",
+   "block": "FW-mixed-26",
    "cells": [
     {
      "metrics": {
@@ -11268,7 +11268,7 @@
   },
   {
    "arm": "nodes",
-   "block": "R-oversubscribed",
+   "block": "MS-oversubscribed",
    "cells": [
     {
      "metrics": {
@@ -11453,7 +11453,7 @@
   },
   {
    "arm": "platform-mix",
-   "block": "R-platform",
+   "block": "DB-platform",
    "cells": [
     {
      "metrics": {
@@ -11637,7 +11637,7 @@
   },
   {
    "arm": "rebroadcast-mode",
-   "block": "R-rebroadcast",
+   "block": "RT-rebroadcast",
    "cells": [
     {
      "metrics": {
@@ -11821,7 +11821,7 @@
   },
   {
    "arm": "extra-repeats",
-   "block": "R-repeats",
+   "block": "PR-repeats",
    "cells": [
     {
      "metrics": {
@@ -11955,7 +11955,7 @@
   },
   {
    "arm": "extra-repeats",
-   "block": "R-repeats-busy",
+   "block": "PR-repeats-busy",
    "cells": [
     {
      "metrics": {
@@ -12089,7 +12089,7 @@
   },
   {
    "arm": "role-mix",
-   "block": "R-roles",
+   "block": "MS-roles",
    "cells": [
     {
      "metrics": {
@@ -12227,7 +12227,7 @@
   },
   {
    "arm": "role-mix",
-   "block": "R-roles-fav",
+   "block": "MS-roles-fav",
    "cells": [
     {
      "metrics": {
@@ -12361,7 +12361,7 @@
   },
   {
    "arm": "router-late-fraction",
-   "block": "R-routerlate",
+   "block": "MS-router-late",
    "cells": [
     {
      "metrics": {
@@ -12587,7 +12587,7 @@
   },
   {
    "arm": "signature-policy",
-   "block": "R-signing",
+   "block": "SC-signing",
    "cells": [
     {
      "metrics": {
@@ -12771,7 +12771,7 @@
   },
   {
    "arm": "profile-flag",
-   "block": "R-signing-cost",
+   "block": "FW-signing-cost",
    "cells": [
     {
      "metrics": {
@@ -12905,7 +12905,7 @@
   },
   {
    "arm": "siting-mix",
-   "block": "R-siting",
+   "block": "MS-siting",
    "cells": [
     {
      "metrics": {
@@ -13135,7 +13135,7 @@
   },
   {
    "arm": "sr-retries",
-   "block": "R-srretries",
+   "block": "SF-sr-retries",
    "cells": [
     {
      "metrics": {
@@ -13361,7 +13361,7 @@
   },
   {
    "arm": "traceroute-per-hour",
-   "block": "R-traceroute",
+   "block": "LD-traceroute",
    "cells": [
     {
      "metrics": {
@@ -13587,7 +13587,7 @@
   },
   {
    "arm": "traceroute-per-hour",
-   "block": "R-traceroute-small",
+   "block": "LD-traceroute-small",
    "cells": [
     {
      "metrics": {
@@ -13729,7 +13729,7 @@
   },
   {
    "arm": "profile",
-   "block": "R-versions",
+   "block": "FW-versions",
    "cells": [
     {
      "metrics": {
@@ -14005,7 +14005,7 @@
   },
   {
    "arm": "warm-num-nodes",
-   "block": "R-warm",
+   "block": "DB-warm",
    "cells": [
     {
      "metrics": {
@@ -14240,7 +14240,7 @@
   },
   {
    "arm": "amplifier-mix",
-   "block": "X-amplifiers",
+   "block": "AD-amplifiers",
    "cells": [
     {
      "metrics": {
@@ -14420,7 +14420,7 @@
   },
   {
    "arm": "amplify-worst",
-   "block": "X-amplify-worst",
+   "block": "AD-amplify-worst",
    "cells": [
     {
      "metrics": {
@@ -14600,7 +14600,7 @@
   },
   {
    "arm": "role-placement",
-   "block": "X-badrouters",
+   "block": "AD-badrouters",
    "cells": [
     {
      "metrics": {
@@ -14784,7 +14784,7 @@
   },
   {
    "arm": "broadcast-interval-s",
-   "block": "X-chatty",
+   "block": "LD-chatty",
    "cells": [
     {
      "metrics": {
@@ -14968,7 +14968,7 @@
   },
   {
    "arm": "broadcast-interval-s",
-   "block": "X-chatty-hops",
+   "block": "LD-chatty-hops",
    "cells": [
     {
      "metrics": {
@@ -15154,7 +15154,7 @@
   },
   {
    "arm": "duct-per-hour",
-   "block": "X-duct",
+   "block": "RF-duct",
    "cells": [
     {
      "metrics": {
@@ -15334,7 +15334,7 @@
   },
   {
    "arm": "noise-profile",
-   "block": "X-noise",
+   "block": "RF-noise",
    "cells": [
     {
      "metrics": {
@@ -15564,7 +15564,7 @@
   },
   {
    "arm": "role-mix",
-   "block": "X-nomute",
+   "block": "AD-nomute",
    "cells": [
     {
      "metrics": {
@@ -15748,7 +15748,7 @@
   },
   {
    "arm": "noise-pulse-interval-ms",
-   "block": "X-pulse",
+   "block": "RF-pulse",
    "cells": [
     {
      "metrics": {
@@ -15978,7 +15978,7 @@
   },
   {
    "arm": "siting-mix",
-   "block": "X-siting",
+   "block": "AD-siting",
    "cells": [
     {
      "metrics": {
@@ -16163,7 +16163,7 @@
   },
   {
    "arm": "stretch",
-   "block": "X-stretch",
+   "block": "MS-stretch",
    "cells": [
     {
      "metrics": {
@@ -16395,7 +16395,7 @@
   },
   {
    "arm": "duct-per-hour",
-   "block": "X-stretch-duct",
+   "block": "RF-stretch-duct",
    "cells": [
     {
      "metrics": {
@@ -16533,7 +16533,7 @@
   },
   {
    "arm": "role-placement",
-   "block": "X-worst",
+   "block": "AD-worst",
    "cells": [
     {
      "metrics": {
@@ -16672,111 +16672,111 @@
   "failures": [],
   "ok": true,
   "warnings": [
-   "D-cadence: trigger=interval: misdecodes 11",
-   "D-cadence: trigger=interval: decode_failures 14",
-   "D-cadence: trigger=aimd: misdecodes 1",
-   "D-cadence: trigger=aimd: decode_failures 1",
-   "D-cadence: trigger=bucket+interval: misdecodes 12",
-   "E-capacity: capacity=4: decode_failures 102",
-   "E-capacity: capacity=8: decode_failures 62",
-   "E-capacity: capacity=16: decode_failures 3",
-   "F-burst: burst-loss=0.1: decode_failures 54",
-   "F-burst: burst-loss=0.2: decode_failures 42",
-   "F-burst: burst-loss=0.3: decode_failures 37",
-   "F-flooding: role-mix=baymesh-2026-08: decode_failures 29",
-   "F-hoplimit: hop-limit=3: decode_failures 1",
-   "F-loss: extra-loss=0.2: decode_failures 1",
-   "F-loss: extra-loss=0.3: decode_failures 1",
-   "F-outage: burst-loss=0.1: decode_failures 31",
-   "F-outage: burst-loss=0.2: decode_failures 42",
-   "F-outage: burst-loss=0.3: decode_failures 31",
-   "F-txpower: tx-power=22: decode_failures 8",
-   "F-txpower: tx-power=17: decode_failures 6",
-   "G-hops: hops-apart=3: misdecodes 1",
-   "G-hops: hops-apart=4: decode_failures 35",
-   "G-place: place=spread: decode_failures 2",
-   "J-bucketmode: bucket-mode=global: misdecodes 32",
-   "J-bucketmode: bucket-mode=time: misdecodes 11",
-   "J-bucketmode: bucket-mode=window: misdecodes 18",
-   "J-timewin: time-bucket-s=600: misdecodes 112",
-   "J-timewin: time-bucket-s=1800: misdecodes 11",
-   "J-timewin: time-bucket-s=3600: misdecodes 5",
-   "J-wincap: capacity=8: misdecodes 18",
-   "J-wincap: capacity=8: decode_failures 56",
-   "J-wincap: capacity=16: misdecodes 17",
-   "J-wincap: capacity=16: decode_failures 2",
-   "J-wincap: capacity=32: misdecodes 18",
-   "J-window: window-size=8: misdecodes 157",
-   "J-window: window-size=16: misdecodes 72",
-   "J-window: window-size=32: misdecodes 18",
-   "K-density: nodes=150: decode_failures 5",
-   "K-hopspread: hop-limit=3: decode_failures 1",
-   "K-spread: hop-spread=False: decode_failures 1",
-   "M-capacity: capacity=4: decode_failures 102",
-   "M-capacity: capacity=8: decode_failures 62",
-   "M-capacity: capacity=16: decode_failures 3",
-   "M-combined: replay-ordering=heard: misdecodes 9",
-   "M-replayorder: replay-ordering=heard: misdecodes 10",
-   "N-hops: hops-apart=3: misdecodes 1",
-   "N-hops: hops-apart=4: decode_failures 35",
-   "N-hops: hops-apart=5: decode_failures 25",
-   "N-place: place=spread: decode_failures 2",
-   "P-bw500: preset=SHORT_TURBO: decode_failures 5",
-   "P-bw500: preset=LONG_TURBO: decode_failures 1",
-   "P-catchup: catch-up-hours=: misdecodes 12",
-   "P-catchup: catch-up-hours=02-06: decode_failures 40",
-   "P-catchup: catch-up-hours=00-08: decode_failures 41",
-   "P-congestion: no-congestion-scaling=True: queue drops 15.4% of transmissions - airtime here is measured through a cap",
-   "P-congestion: no-congestion-scaling=True: decode_failures 105",
-   "P-eu-presets: preset=SHORT_FAST: decode_failures 1",
-   "P-eu-presets: preset=NARROW_SLOW: decode_failures 47",
-   "P-preset: preset=SHORT_FAST: decode_failures 1",
-   "P-preset: preset=LONG_MODERATE: decode_failures 5",
-   "Q-control: protocol=sr: misdecodes 1",
-   "R-congestion-input: congestion-input=hotstore: decode_failures 1",
-   "R-congestion-mode: congestion-mode=static: misdecodes 1",
-   "R-crladder: coding-rate-ladder=False: decode_failures 1",
-   "R-crladder: coding-rate-ladder=True: decode_failures 2",
-   "R-dmmode-cr: dm-mode=directed-with-late-flood: decode_failures 2",
-   "R-dmmode-cr: dm-mode=m4-early-flood: decode_failures 9",
-   "R-dmmode: dm-mode=directed-with-late-flood: decode_failures 1",
-   "R-hopscale: nodes=250: decode_failures 2",
-   "R-hopscale: nodes=500: decode_failures 151",
-   "R-hotstore-stress: max-num-nodes=10: decode_failures 92",
-   "R-hotstore-stress: max-num-nodes=120: decode_failures 1",
-   "R-oversubscribed: nodes=250: decode_failures 1",
-   "R-oversubscribed: nodes=500: decode_failures 49",
-   "R-platform: platform-mix=constrained: decode_failures 3",
-   "R-rebroadcast: rebroadcast-mode=CORE_PORTNUMS_ONLY: decode_failures 2",
-   "R-roles: role-mix=baymesh-2026-08: decode_failures 29",
-   "R-signing: signature-policy=STRICT: decode_failures 4",
-   "R-siting: siting-mix=local-typical: decode_failures 3",
-   "R-traceroute-small: traceroute-per-hour=0.0: queue drops 16.2% of transmissions - airtime here is measured through a cap",
-   "R-traceroute-small: traceroute-per-hour=0.0: decode_failures 98",
-   "R-traceroute-small: traceroute-per-hour=1.0: queue drops 25.1% of transmissions - airtime here is measured through a cap",
-   "R-traceroute-small: traceroute-per-hour=1.0: decode_failures 86",
-   "R-versions: profile=2.6: decode_failures 2",
-   "R-warm: warm-num-nodes=0: queue drops 16.2% of transmissions - airtime here is measured through a cap",
-   "R-warm: warm-num-nodes=0: decode_failures 98",
-   "R-warm: warm-num-nodes=25: queue drops 16.2% of transmissions - airtime here is measured through a cap",
-   "R-warm: warm-num-nodes=25: decode_failures 98",
-   "R-warm: warm-num-nodes=100: queue drops 16.2% of transmissions - airtime here is measured through a cap",
-   "R-warm: warm-num-nodes=100: decode_failures 98",
-   "R-warm: warm-num-nodes=2000: queue drops 16.2% of transmissions - airtime here is measured through a cap",
-   "R-warm: warm-num-nodes=2000: decode_failures 98",
-   "X-badrouters: role-placement=degree: decode_failures 29",
-   "X-chatty-hops: broadcast-interval-s=300: queue drops 12.3% of transmissions - airtime here is measured through a cap",
-   "X-chatty-hops: broadcast-interval-s=300: decode_failures 38",
-   "X-chatty: broadcast-interval-s=300: decode_failures 29",
-   "X-noise: noise-profile=temporal: decode_failures 37",
-   "X-nomute: role-mix=baymesh-2026-08: decode_failures 29",
-   "X-pulse: noise-pulse-interval-ms=4000: decode_failures 5",
-   "X-siting: siting-mix=uniform: decode_failures 29",
-   "X-siting: siting-mix=local-typical: decode_failures 22",
-   "X-stretch-duct: duct-per-hour=0.0: decode_failures 7",
-   "X-stretch: stretch=1.25: decode_failures 23",
-   "X-stretch: stretch=1.5: decode_failures 7",
-   "X-stretch: stretch=2.0: decode_failures 2"
+   "SF-cadence: trigger=interval: misdecodes 11",
+   "SF-cadence: trigger=interval: decode_failures 14",
+   "SF-cadence: trigger=aimd: misdecodes 1",
+   "SF-cadence: trigger=aimd: decode_failures 1",
+   "SF-cadence: trigger=bucket+interval: misdecodes 12",
+   "SF-capacity: capacity=4: decode_failures 102",
+   "SF-capacity: capacity=8: decode_failures 62",
+   "SF-capacity: capacity=16: decode_failures 3",
+   "DG-burst: burst-loss=0.1: decode_failures 54",
+   "DG-burst: burst-loss=0.2: decode_failures 42",
+   "DG-burst: burst-loss=0.3: decode_failures 37",
+   "AD-flooding: role-mix=baymesh-2026-08: decode_failures 29",
+   "RT-hoplimit: hop-limit=3: decode_failures 1",
+   "DG-loss: extra-loss=0.2: decode_failures 1",
+   "DG-loss: extra-loss=0.3: decode_failures 1",
+   "DG-outage: burst-loss=0.1: decode_failures 31",
+   "DG-outage: burst-loss=0.2: decode_failures 42",
+   "DG-outage: burst-loss=0.3: decode_failures 31",
+   "RF-txpower: tx-power=22: decode_failures 8",
+   "RF-txpower: tx-power=17: decode_failures 6",
+   "SF-hops-flat: hops-apart=3: misdecodes 1",
+   "SF-hops-flat: hops-apart=4: decode_failures 35",
+   "SF-place-flat: place=spread: decode_failures 2",
+   "SF-bucket-mode: bucket-mode=global: misdecodes 32",
+   "SF-bucket-mode: bucket-mode=time: misdecodes 11",
+   "SF-bucket-mode: bucket-mode=window: misdecodes 18",
+   "SF-bucket-time: time-bucket-s=600: misdecodes 112",
+   "SF-bucket-time: time-bucket-s=1800: misdecodes 11",
+   "SF-bucket-time: time-bucket-s=3600: misdecodes 5",
+   "SF-capacity-window: capacity=8: misdecodes 18",
+   "SF-capacity-window: capacity=8: decode_failures 56",
+   "SF-capacity-window: capacity=16: misdecodes 17",
+   "SF-capacity-window: capacity=16: decode_failures 2",
+   "SF-capacity-window: capacity=32: misdecodes 18",
+   "SF-window-size: window-size=8: misdecodes 157",
+   "SF-window-size: window-size=16: misdecodes 72",
+   "SF-window-size: window-size=32: misdecodes 18",
+   "MS-density: nodes=150: decode_failures 5",
+   "RT-hopspread: hop-limit=3: decode_failures 1",
+   "RT-spread: hop-spread=False: decode_failures 1",
+   "SF-capacity-local: capacity=4: decode_failures 102",
+   "SF-capacity-local: capacity=8: decode_failures 62",
+   "SF-capacity-local: capacity=16: decode_failures 3",
+   "SF-replay-order-broadcast: replay-ordering=heard: misdecodes 9",
+   "SF-replay-order: replay-ordering=heard: misdecodes 10",
+   "SF-hops-spread: hops-apart=3: misdecodes 1",
+   "SF-hops-spread: hops-apart=4: decode_failures 35",
+   "SF-hops-spread: hops-apart=5: decode_failures 25",
+   "SF-place-spread: place=spread: decode_failures 2",
+   "RF-bw500: preset=SHORT_TURBO: decode_failures 5",
+   "RF-bw500: preset=LONG_TURBO: decode_failures 1",
+   "SF-catchup: catch-up-hours=: misdecodes 12",
+   "SF-catchup: catch-up-hours=02-06: decode_failures 40",
+   "SF-catchup: catch-up-hours=00-08: decode_failures 41",
+   "TH-congestion: no-congestion-scaling=True: queue drops 15.4% of transmissions - airtime here is measured through a cap",
+   "TH-congestion: no-congestion-scaling=True: decode_failures 105",
+   "RF-eu-presets: preset=SHORT_FAST: decode_failures 1",
+   "RF-eu-presets: preset=NARROW_SLOW: decode_failures 47",
+   "RF-preset: preset=SHORT_FAST: decode_failures 1",
+   "RF-preset: preset=LONG_MODERATE: decode_failures 5",
+   "BL-control: protocol=sr: misdecodes 1",
+   "TH-congestion-input: congestion-input=hotstore: decode_failures 1",
+   "TH-congestion-mode: congestion-mode=static: misdecodes 1",
+   "PR-crladder: coding-rate-ladder=False: decode_failures 1",
+   "PR-crladder: coding-rate-ladder=True: decode_failures 2",
+   "PR-dmmode-cr: dm-mode=directed-with-late-flood: decode_failures 2",
+   "PR-dmmode-cr: dm-mode=m4-early-flood: decode_failures 9",
+   "DM-mode: dm-mode=directed-with-late-flood: decode_failures 1",
+   "MS-hopscale: nodes=250: decode_failures 2",
+   "MS-hopscale: nodes=500: decode_failures 151",
+   "DB-hotstore-stress: max-num-nodes=10: decode_failures 92",
+   "DB-hotstore-stress: max-num-nodes=120: decode_failures 1",
+   "MS-oversubscribed: nodes=250: decode_failures 1",
+   "MS-oversubscribed: nodes=500: decode_failures 49",
+   "DB-platform: platform-mix=constrained: decode_failures 3",
+   "RT-rebroadcast: rebroadcast-mode=CORE_PORTNUMS_ONLY: decode_failures 2",
+   "MS-roles: role-mix=baymesh-2026-08: decode_failures 29",
+   "SC-signing: signature-policy=STRICT: decode_failures 4",
+   "MS-siting: siting-mix=local-typical: decode_failures 3",
+   "LD-traceroute-small: traceroute-per-hour=0.0: queue drops 16.2% of transmissions - airtime here is measured through a cap",
+   "LD-traceroute-small: traceroute-per-hour=0.0: decode_failures 98",
+   "LD-traceroute-small: traceroute-per-hour=1.0: queue drops 25.1% of transmissions - airtime here is measured through a cap",
+   "LD-traceroute-small: traceroute-per-hour=1.0: decode_failures 86",
+   "FW-versions: profile=2.6: decode_failures 2",
+   "DB-warm: warm-num-nodes=0: queue drops 16.2% of transmissions - airtime here is measured through a cap",
+   "DB-warm: warm-num-nodes=0: decode_failures 98",
+   "DB-warm: warm-num-nodes=25: queue drops 16.2% of transmissions - airtime here is measured through a cap",
+   "DB-warm: warm-num-nodes=25: decode_failures 98",
+   "DB-warm: warm-num-nodes=100: queue drops 16.2% of transmissions - airtime here is measured through a cap",
+   "DB-warm: warm-num-nodes=100: decode_failures 98",
+   "DB-warm: warm-num-nodes=2000: queue drops 16.2% of transmissions - airtime here is measured through a cap",
+   "DB-warm: warm-num-nodes=2000: decode_failures 98",
+   "AD-badrouters: role-placement=degree: decode_failures 29",
+   "LD-chatty-hops: broadcast-interval-s=300: queue drops 12.3% of transmissions - airtime here is measured through a cap",
+   "LD-chatty-hops: broadcast-interval-s=300: decode_failures 38",
+   "LD-chatty: broadcast-interval-s=300: decode_failures 29",
+   "RF-noise: noise-profile=temporal: decode_failures 37",
+   "AD-nomute: role-mix=baymesh-2026-08: decode_failures 29",
+   "RF-pulse: noise-pulse-interval-ms=4000: decode_failures 5",
+   "AD-siting: siting-mix=uniform: decode_failures 29",
+   "AD-siting: siting-mix=local-typical: decode_failures 22",
+   "RF-stretch-duct: duct-per-hour=0.0: decode_failures 7",
+   "MS-stretch: stretch=1.25: decode_failures 23",
+   "MS-stretch: stretch=1.5: decode_failures 7",
+   "MS-stretch: stretch=2.0: decode_failures 2"
   ],
   "warnings_by_kind": {
    "queue-drops": {
@@ -16791,7 +16791,7 @@
  },
  "generated": "2026-08-22T05:20:11+00:00",
  "missing_blocks": [
-  "F-preset-turbo"
+  "RF-preset-turbo"
  ],
  "run_id": "blocks-2026-08-22-5434544",
  "scenario_observed": [

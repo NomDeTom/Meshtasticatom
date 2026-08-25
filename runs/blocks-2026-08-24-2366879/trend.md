@@ -16,100 +16,100 @@
 
 <details><summary>90 warnings</summary>
 
-- D-cadence: trigger=interval: misdecodes 21
-- D-cadence: trigger=aimd: misdecodes 2
-- D-cadence: trigger=aimd: decode_failures 2
-- D-cadence: trigger=bucket+interval: misdecodes 22
-- E-capacity: capacity=4: decode_failures 92
-- E-capacity: capacity=8: decode_failures 52
-- F-burst: burst-loss=0.2: decode_failures 2
-- F-burst: burst-loss=0.3: decode_failures 34
-- F-loss: extra-loss=0.3: decode_failures 1
-- F-outage: burst-loss=0.1: decode_failures 35
-- F-outage: burst-loss=0.2: decode_failures 7
-- F-outage: burst-loss=0.3: decode_failures 41
-- F-txpower: faster: 1.06 s per simulated hour against 2.33 over 3 prior run(s) - 2.2x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate
-- G-hops: hops-apart=4: decode_failures 19
-- G-place: place=spread: decode_failures 13
-- J-bucketmode: bucket-mode=global: misdecodes 39
-- J-bucketmode: bucket-mode=time: misdecodes 26
-- J-bucketmode: bucket-mode=window: misdecodes 28
-- J-timewin: time-bucket-s=600: misdecodes 124
-- J-timewin: time-bucket-s=1800: misdecodes 26
-- J-timewin: time-bucket-s=3600: misdecodes 6
-- J-wincap: capacity=8: misdecodes 24
-- J-wincap: capacity=8: decode_failures 44
-- J-wincap: capacity=16: misdecodes 16
-- J-wincap: capacity=16: decode_failures 2
-- J-wincap: capacity=32: misdecodes 28
-- J-window: window-size=8: misdecodes 92
-- J-window: window-size=16: misdecodes 64
-- J-window: window-size=32: misdecodes 28
-- M-capacity: capacity=4: decode_failures 92
-- M-capacity: capacity=8: decode_failures 52
-- M-combined: replay-ordering=heard: misdecodes 10
-- M-replayorder: replay-ordering=heard: misdecodes 21
-- N-hops: hops-apart=4: decode_failures 19
-- N-hops: hops-apart=5: decode_failures 19
-- N-place: place=spread: decode_failures 13
-- P-bw500: preset=MEDIUM_TURBO: decode_failures 1
-- P-catchup: catch-up-hours=: misdecodes 22
-- P-catchup: catch-up-hours=02-06: decode_failures 31
-- P-catchup: catch-up-hours=00-08: misdecodes 1
-- P-catchup: catch-up-hours=00-08: decode_failures 32
-- P-congestion: no-congestion-scaling=True: queue drops 16.4% of transmissions - airtime here is measured through a cap
-- P-congestion: no-congestion-scaling=True: decode_failures 100
-- P-preset: preset=LONG_MODERATE: decode_failures 9
-- Q-topology: topology=hub: misdecodes 1
-- R-congestion-input: congestion-input=hotstore: decode_failures 18
-- R-congestion-input: congestion-input=truesize: decode_failures 8
-- R-firmware: profile=legacy: decode_failures 37
-- R-firmware: slower: 7.35 s per simulated hour against 1.93 over 3 prior run(s) - 3.8x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
-- R-hopscale: nodes=250: decode_failures 113
-- R-hopscale: nodes=500: decode_failures 101
-- R-hotstore-stress: max-num-nodes=10: decode_failures 38
-- R-hotstore-stress: max-num-nodes=120: decode_failures 18
-- R-hotstore-stress: max-num-nodes=250: decode_failures 73
-- R-mixed-26: legacy-fraction=0.5: decode_failures 23
-- R-mixed-26: slower: 3.62 s per simulated hour against 1.71 over 3 prior run(s) - 2.1x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
-- R-mixed: legacy-fraction=0.5: decode_failures 3
-- R-oversubscribed: nodes=250: decode_failures 18
-- R-oversubscribed: nodes=500: decode_failures 4
-- R-platform: platform-mix=constrained: decode_failures 1
-- R-signing: signature-policy=STRICT: decode_failures 2
-- R-traceroute-small: traceroute-per-hour=0.0: queue drops 19.0% of transmissions - airtime here is measured through a cap
-- R-traceroute-small: traceroute-per-hour=0.0: decode_failures 81
-- R-traceroute-small: traceroute-per-hour=1.0: queue drops 26.7% of transmissions - airtime here is measured through a cap
-- R-traceroute-small: traceroute-per-hour=1.0: decode_failures 57
-- R-versions: profile=2.4: decode_failures 46
-- R-versions: profile=2.5: decode_failures 44
-- R-versions: profile=2.6: decode_failures 40
-- R-versions: profile=2.7: decode_failures 39
-- R-versions: slower: 11.4 s per simulated hour against 1.92 over 3 prior run(s) - 6.0x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
-- R-warm: warm-num-nodes=0: queue drops 19.0% of transmissions - airtime here is measured through a cap
-- R-warm: warm-num-nodes=0: decode_failures 81
-- R-warm: warm-num-nodes=25: queue drops 19.0% of transmissions - airtime here is measured through a cap
-- R-warm: warm-num-nodes=25: decode_failures 81
-- R-warm: warm-num-nodes=100: queue drops 19.0% of transmissions - airtime here is measured through a cap
-- R-warm: warm-num-nodes=100: decode_failures 81
-- R-warm: warm-num-nodes=2000: queue drops 19.0% of transmissions - airtime here is measured through a cap
-- R-warm: warm-num-nodes=2000: decode_failures 81
-- X-badrouters: role-placement=inverse: decode_failures 3
-- X-badrouters: role-placement=random: decode_failures 2
-- X-chatty-hops: broadcast-interval-s=300: decode_failures 3
-- X-chatty: broadcast-interval-s=300: decode_failures 4
-- X-pulse: noise-pulse-interval-ms=4000: decode_failures 3
-- X-stretch-duct: duct-per-hour=0.0: decode_failures 1
-- X-stretch-duct: duct-per-hour=1.0: decode_failures 30
-- X-stretch: stretch=1.25: decode_failures 13
-- X-stretch: stretch=1.5: decode_failures 1
-- X-worst: role-placement=degree: decode_failures 60
-- X-worst: role-placement=inverse: decode_failures 43
-- X-worst: slower: 18.1 s per simulated hour against 3.33 over 3 prior run(s) - 5.4x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
+- SF-cadence: trigger=interval: misdecodes 21
+- SF-cadence: trigger=aimd: misdecodes 2
+- SF-cadence: trigger=aimd: decode_failures 2
+- SF-cadence: trigger=bucket+interval: misdecodes 22
+- SF-capacity: capacity=4: decode_failures 92
+- SF-capacity: capacity=8: decode_failures 52
+- DG-burst: burst-loss=0.2: decode_failures 2
+- DG-burst: burst-loss=0.3: decode_failures 34
+- DG-loss: extra-loss=0.3: decode_failures 1
+- DG-outage: burst-loss=0.1: decode_failures 35
+- DG-outage: burst-loss=0.2: decode_failures 7
+- DG-outage: burst-loss=0.3: decode_failures 41
+- RF-txpower: faster: 1.06 s per simulated hour against 2.33 over 3 prior run(s) - 2.2x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate
+- SF-hops-flat: hops-apart=4: decode_failures 19
+- SF-place-flat: place=spread: decode_failures 13
+- SF-bucket-mode: bucket-mode=global: misdecodes 39
+- SF-bucket-mode: bucket-mode=time: misdecodes 26
+- SF-bucket-mode: bucket-mode=window: misdecodes 28
+- SF-bucket-time: time-bucket-s=600: misdecodes 124
+- SF-bucket-time: time-bucket-s=1800: misdecodes 26
+- SF-bucket-time: time-bucket-s=3600: misdecodes 6
+- SF-capacity-window: capacity=8: misdecodes 24
+- SF-capacity-window: capacity=8: decode_failures 44
+- SF-capacity-window: capacity=16: misdecodes 16
+- SF-capacity-window: capacity=16: decode_failures 2
+- SF-capacity-window: capacity=32: misdecodes 28
+- SF-window-size: window-size=8: misdecodes 92
+- SF-window-size: window-size=16: misdecodes 64
+- SF-window-size: window-size=32: misdecodes 28
+- SF-capacity-local: capacity=4: decode_failures 92
+- SF-capacity-local: capacity=8: decode_failures 52
+- SF-replay-order-broadcast: replay-ordering=heard: misdecodes 10
+- SF-replay-order: replay-ordering=heard: misdecodes 21
+- SF-hops-spread: hops-apart=4: decode_failures 19
+- SF-hops-spread: hops-apart=5: decode_failures 19
+- SF-place-spread: place=spread: decode_failures 13
+- RF-bw500: preset=MEDIUM_TURBO: decode_failures 1
+- SF-catchup: catch-up-hours=: misdecodes 22
+- SF-catchup: catch-up-hours=02-06: decode_failures 31
+- SF-catchup: catch-up-hours=00-08: misdecodes 1
+- SF-catchup: catch-up-hours=00-08: decode_failures 32
+- TH-congestion: no-congestion-scaling=True: queue drops 16.4% of transmissions - airtime here is measured through a cap
+- TH-congestion: no-congestion-scaling=True: decode_failures 100
+- RF-preset: preset=LONG_MODERATE: decode_failures 9
+- MS-topology: topology=hub: misdecodes 1
+- TH-congestion-input: congestion-input=hotstore: decode_failures 18
+- TH-congestion-input: congestion-input=truesize: decode_failures 8
+- FW-firmware: profile=legacy: decode_failures 37
+- FW-firmware: slower: 7.35 s per simulated hour against 1.93 over 3 prior run(s) - 3.8x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
+- MS-hopscale: nodes=250: decode_failures 113
+- MS-hopscale: nodes=500: decode_failures 101
+- DB-hotstore-stress: max-num-nodes=10: decode_failures 38
+- DB-hotstore-stress: max-num-nodes=120: decode_failures 18
+- DB-hotstore-stress: max-num-nodes=250: decode_failures 73
+- FW-mixed-26: legacy-fraction=0.5: decode_failures 23
+- FW-mixed-26: slower: 3.62 s per simulated hour against 1.71 over 3 prior run(s) - 2.1x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
+- FW-mixed: legacy-fraction=0.5: decode_failures 3
+- MS-oversubscribed: nodes=250: decode_failures 18
+- MS-oversubscribed: nodes=500: decode_failures 4
+- DB-platform: platform-mix=constrained: decode_failures 1
+- SC-signing: signature-policy=STRICT: decode_failures 2
+- LD-traceroute-small: traceroute-per-hour=0.0: queue drops 19.0% of transmissions - airtime here is measured through a cap
+- LD-traceroute-small: traceroute-per-hour=0.0: decode_failures 81
+- LD-traceroute-small: traceroute-per-hour=1.0: queue drops 26.7% of transmissions - airtime here is measured through a cap
+- LD-traceroute-small: traceroute-per-hour=1.0: decode_failures 57
+- FW-versions: profile=2.4: decode_failures 46
+- FW-versions: profile=2.5: decode_failures 44
+- FW-versions: profile=2.6: decode_failures 40
+- FW-versions: profile=2.7: decode_failures 39
+- FW-versions: slower: 11.4 s per simulated hour against 1.92 over 3 prior run(s) - 6.0x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
+- DB-warm: warm-num-nodes=0: queue drops 19.0% of transmissions - airtime here is measured through a cap
+- DB-warm: warm-num-nodes=0: decode_failures 81
+- DB-warm: warm-num-nodes=25: queue drops 19.0% of transmissions - airtime here is measured through a cap
+- DB-warm: warm-num-nodes=25: decode_failures 81
+- DB-warm: warm-num-nodes=100: queue drops 19.0% of transmissions - airtime here is measured through a cap
+- DB-warm: warm-num-nodes=100: decode_failures 81
+- DB-warm: warm-num-nodes=2000: queue drops 19.0% of transmissions - airtime here is measured through a cap
+- DB-warm: warm-num-nodes=2000: decode_failures 81
+- AD-badrouters: role-placement=inverse: decode_failures 3
+- AD-badrouters: role-placement=random: decode_failures 2
+- LD-chatty-hops: broadcast-interval-s=300: decode_failures 3
+- LD-chatty: broadcast-interval-s=300: decode_failures 4
+- RF-pulse: noise-pulse-interval-ms=4000: decode_failures 3
+- RF-stretch-duct: duct-per-hour=0.0: decode_failures 1
+- RF-stretch-duct: duct-per-hour=1.0: decode_failures 30
+- MS-stretch: stretch=1.25: decode_failures 13
+- MS-stretch: stretch=1.5: decode_failures 1
+- AD-worst: role-placement=degree: decode_failures 60
+- AD-worst: role-placement=inverse: decode_failures 43
+- AD-worst: slower: 18.1 s per simulated hour against 3.33 over 3 prior run(s) - 5.4x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
 
 </details>
 
-Blocks that produced no JSON (their job failed, timed out, or was cancelled): `F-preset-turbo`
+Blocks that produced no JSON (their job failed, timed out, or was cancelled): `RF-preset-turbo`
 
 ## Runtime against this block's own history
 
@@ -117,20 +117,20 @@ Wall-clock seconds per **simulated** hour, against the median of the same block'
 
 | block | s/sim-h | median | ratio | runs compared |
 | --- | --: | --: | --: | --: |
-| `R-versions` | 11.4 | 1.92 | 5.96x | 3 |
-| `X-worst` | 18.1 | 3.33 | 5.45x | 3 |
-| `R-firmware` | 7.35 | 1.93 | 3.80x | 3 |
-| `R-mixed-26` | 3.62 | 1.71 | 2.12x | 3 |
-| `R-hotstore` | 3.38 | 1.99 | 1.70x | 3 |
-| `R-srretries` | 2.16 | 1.29 | 1.68x | 3 |
-| `P-diurnal` | 2.3 | 1.47 | 1.57x | 3 |
-| `X-chatty` | 3 | 4.58 | 0.66x | 3 |
-| `K-hopspread` | 1.44 | 2.31 | 0.62x | 3 |
-| `G-place` | 2.06 | 3.47 | 0.59x | 3 |
-| `X-stretch` | 2 | 3.48 | 0.57x | 3 |
-| `P-bw500` | 1.43 | 2.64 | 0.54x | 3 |
-| `J-window` | 1.06 | 2.03 | 0.52x | 3 |
-| `F-txpower` | 1.06 | 2.33 | 0.46x | 3 |
+| `FW-versions` | 11.4 | 1.92 | 5.96x | 3 |
+| `AD-worst` | 18.1 | 3.33 | 5.45x | 3 |
+| `FW-firmware` | 7.35 | 1.93 | 3.80x | 3 |
+| `FW-mixed-26` | 3.62 | 1.71 | 2.12x | 3 |
+| `DB-hotstore` | 3.38 | 1.99 | 1.70x | 3 |
+| `SF-sr-retries` | 2.16 | 1.29 | 1.68x | 3 |
+| `LD-diurnal` | 2.3 | 1.47 | 1.57x | 3 |
+| `LD-chatty` | 3 | 4.58 | 0.66x | 3 |
+| `RT-hopspread` | 1.44 | 2.31 | 0.62x | 3 |
+| `SF-place-flat` | 2.06 | 3.47 | 0.59x | 3 |
+| `MS-stretch` | 2 | 3.48 | 0.57x | 3 |
+| `RF-bw500` | 1.43 | 2.64 | 0.54x | 3 |
+| `SF-window-size` | 1.06 | 2.03 | 0.52x | 3 |
+| `RF-txpower` | 1.06 | 2.33 | 0.46x | 3 |
 
 ## What moved a delivery measure
 
@@ -138,90 +138,90 @@ Ranked by how far the arm moves whichever success it moves most. The four measur
 
 | block | arm | moved | low → high | spread | text | price | dir | cells |
 | --- | --- | --- | --- | --: | --- | --- | :-: | --: |
-| `Q-control` | protocol | **held** | 0 → 0.981 | 0.981 | 0.850 → 0.872 | 1x bytes_on_air | up | 2 |
-| `Q-protocol` | protocol | **held** | 0 → 0.961 | 0.961 | 0.833 → 0.861 | 1.2x bytes_on_air | up | 3 |
-| `X-pulse` | noise-pulse-interval-ms | **held** | 0.129 → 0.903 | 0.774 | 0.107 → 0.793 | 1e+02x sr_airtime | down | 4 |
-| `F-txpower` | tx-power | **text** | 0.104 → 0.861 | 0.756 | 0.104 → 0.861 | 7.2x sr_airtime | down | 4 |
-| `X-stretch` | stretch | **text** | 0.129 → 0.861 | 0.732 | 0.129 → 0.861 | 7.3x sr_airtime | down | 4 |
-| `R-siting` | siting-mix | **text** | 0.255 → 0.980 | 0.725 | 0.255 → 0.980 | 4.5x sr_airtime | up | 4 |
-| `X-siting` | siting-mix | **text** | 0.089 → 0.793 | 0.704 | 0.089 → 0.793 | 2.9x advert_bytes | down | 3 |
-| `P-preset` | preset | **held** | 0.312 → 0.980 | 0.668 | 0.226 → 0.861 | 7.5x sr_airtime | up | 3 |
-| `P-bw500` | preset | **held** | 0.312 → 0.967 | 0.655 | 0.163 → 0.773 | 7.5x sr_bytes | up | 3 |
-| `P-eu-presets` | preset | **held** | 0.312 → 0.961 | 0.648 | 0.226 → 0.861 | 4.9x sr_airtime | up | 4 |
-| `R-hopscale` | nodes | **text** | 0.310 → 0.861 | 0.551 | 0.310 → 0.861 | 10x sr_bytes | down | 4 |
-| `X-stretch-duct` | duct-per-hour | **held** | 0.339 → 0.835 | 0.496 | 0.276 → 0.733 | 14x sr_airtime | up | 2 |
-| `R-oversubscribed` | nodes | **held** | 0.510 → 0.952 | 0.442 | 0.316 → 0.738 | 4.5x bytes_on_air | down | 3 |
-| `X-chatty-hops` | broadcast-interval-s | **text** | 0.567 → 0.930 | 0.364 | 0.567 → 0.930 | 11x sr_airtime | down | 3 |
-| `X-chatty` | broadcast-interval-s | **text** | 0.517 → 0.877 | 0.360 | 0.517 → 0.877 | 11x sr_airtime | down | 3 |
-| `Q-topology` | topology | **text** | 0.610 → 0.963 | 0.353 | 0.610 → 0.963 | 1.7x sr_bytes | up | 4 |
-| `F-outage` | burst-loss | **text** | 0.518 → 0.861 | 0.343 | 0.518 → 0.861 | 2.1x sr_bytes | down | 4 |
-| `F-burst` | burst-loss | **text** | 0.552 → 0.861 | 0.309 | 0.552 → 0.861 | 2.5x sr_bytes | down | 4 |
-| `R-hotstore-stress` | max-num-nodes | **held** | 0.419 → 0.698 | 0.279 | 0.320 → 0.524 | 7x sr_airtime | up | 3 |
-| `P-congestion` | no-congestion-scaling | **text** | 0.747 → 0.968 | 0.221 | 0.747 → 0.968 | 3.3x sr_airtime | down | 2 |
-| `F-hoplimit` | hop-limit | **text** | 0.711 → 0.930 | 0.219 | 0.711 → 0.930 | 1.6x sr_bytes | up | 4 |
-| `K-density` | nodes | **text** | 0.767 → 0.969 | 0.202 | 0.767 → 0.969 | 5.2x sr_airtime | up | 5 |
-| `K-hopspread` | hop-limit | **text** | 0.711 → 0.913 | 0.202 | 0.711 → 0.913 | 1.5x bytes_on_air | up | 3 |
-| `X-noise` | noise-profile | **text** | 0.679 → 0.861 | 0.181 | 0.679 → 0.861 | 1.3x sr_airtime | down | 4 |
-| `K-size` | nodes | **text** | 0.719 → 0.882 | 0.164 | 0.719 → 0.882 | 4.9x sr_bytes | down | 5 |
-| `K-spread` | hop-spread | **text** | 0.711 → 0.861 | 0.150 | 0.711 → 0.861 | 1.3x bytes_on_air | up | 2 |
-| `F-loss` | extra-loss | **text** | 0.719 → 0.861 | 0.141 | 0.719 → 0.861 | 1.5x sr_bytes | down | 4 |
-| `R-signing` | signature-policy | **text** | 0.729 → 0.861 | 0.131 | 0.729 → 0.861 | 1.3x sr_airtime | down | 3 |
-| `R-hotstore` | max-num-nodes | **text** | 0.745 → 0.876 | 0.131 | 0.745 → 0.876 | 2.2x sr_airtime | up | 4 |
-| `R-platform` | platform-mix | **text** | 0.761 → 0.876 | 0.115 | 0.761 → 0.876 | 2.2x sr_airtime | down | 3 |
-| `Q-interval` | broadcast-interval-s | **text** | 0.786 → 0.901 | 0.115 | 0.786 → 0.901 | 6.1x sr_airtime | up | 4 |
-| `F-flooding` | role-mix | **text** | 0.793 → 0.892 | 0.099 | 0.793 → 0.892 | 2.4x bytes_on_air | up | 2 |
-| `X-nomute` | role-mix | **text** | 0.793 → 0.892 | 0.099 | 0.793 → 0.892 | 2.4x bytes_on_air | up | 3 |
-| `X-amplify-worst` | amplify-worst | **text** | 0.861 → 0.960 | 0.099 | 0.861 → 0.960 | 1.7x sr_bytes | up | 3 |
-| `X-amplifiers` | amplifier-mix | **text** | 0.861 → 0.953 | 0.092 | 0.861 → 0.953 | 1.5x sr_bytes | up | 3 |
-| `X-badrouters` | role-placement | **text** | 0.709 → 0.793 | 0.085 | 0.709 → 0.793 | 1.6x sr_bytes | down | 3 |
-| `G-place` | place | **held** | 0.915 → 0.988 | 0.074 | 0.854 → 0.877 | 2.3x sr_bytes | up | 6 |
-| `N-place` | place | **held** | 0.915 → 0.988 | 0.074 | 0.854 → 0.877 | 2.3x sr_bytes | up | 6 |
-| `D-cadence` | trigger | **held** | 0.889 → 0.961 | 0.072 | 0.821 → 0.861 | 14x advert_bytes | down | 4 |
-| `R-traceroute-small` | traceroute-per-hour | **held** | 0.770 → 0.841 | 0.070 | 0.661 → 0.726 | 1.2x sr_airtime | down | 2 |
-| `X-duct` | duct-per-hour | **text** | 0.861 → 0.930 | 0.069 | 0.861 → 0.930 | 1.5x bytes_on_air | up | 3 |
-| `G-hops` | hops-apart | **held** | 0.912 → 0.981 | 0.069 | 0.853 → 0.882 | 2.8x sr_bytes | up | 4 |
-| `N-hops` | hops-apart | **held** | 0.912 → 0.981 | 0.069 | 0.853 → 0.882 | 2.8x sr_bytes | up | 5 |
-| `R-traceroute` | traceroute-per-hour | **text** | 0.793 → 0.861 | 0.068 | 0.793 → 0.861 | 1.6x sr_airtime | down | 4 |
-| `R-roles` | role-mix | **text** | 0.793 → 0.853 | 0.060 | 0.793 → 0.853 | 1.2x bytes_on_air | down | 2 |
-| `R-mixed-26` | legacy-fraction | **held** | 0.941 → 0.992 | 0.051 | 0.845 → 0.886 | 2.2x bytes_on_air | up | 4 |
-| `R-mixed` | legacy-fraction | **text** | 0.845 → 0.890 | 0.045 | 0.845 → 0.890 | 2.1x bytes_on_air | up | 4 |
-| `R-congestion-input` | congestion-input | **held** | 0.698 → 0.742 | 0.045 | 0.521 → 0.554 | 1.5x sr_airtime | up | 2 |
-| `R-versions` | profile | **held** | 0.922 → 0.961 | 0.039 | 0.841 → 0.861 | 3.1x bytes_on_air | up | 5 |
-| `R-roles-fav` | role-mix | **text** | 0.815 → 0.853 | 0.038 | 0.815 → 0.853 | 1.1x bytes_on_air | down | 2 |
-| `G-servers` | servers | **held** | 0.950 → 0.988 | 0.037 | 0.851 → 0.862 | 8.3x sr_bytes | up | 4 |
-| `N-servers` | servers | **held** | 0.950 → 0.988 | 0.037 | 0.851 → 0.862 | 8.3x sr_bytes | up | 4 |
-| `P-catchup` | catch-up-hours | **text** | 0.821 → 0.854 | 0.033 | 0.821 → 0.854 | 9.2x advert_bytes | up | 3 |
-| `R-signing-cost` | profile-flag | **text** | 0.861 → 0.892 | 0.031 | 0.861 → 0.892 | 3.3x bytes_on_air | down | 2 |
-| `R-rebroadcast` | rebroadcast-mode | **held** | 0.930 → 0.961 | 0.031 | 0.861 → 0.861 | 10x sr_airtime | down | 3 |
-| `R-dmmode` | dm-mode | **text** | 0.786 → 0.812 | 0.026 | 0.786 → 0.812 | 1.1x sr_airtime | up | 3 |
-| `R-firmware` | profile | **held** | 0.935 → 0.961 | 0.026 | 0.842 → 0.861 | 3.1x bytes_on_air | up | 2 |
-| `X-worst` | role-placement | **text** | 0.743 → 0.768 | 0.025 | 0.743 → 0.768 | 1.1x sr_bytes | down | 2 |
-| `E-capacity` | capacity | **held** | 0.946 → 0.967 | 0.021 | 0.845 → 0.861 | 5.3x advert_bytes | up | 5 |
-| `M-capacity` | capacity | **held** | 0.946 → 0.967 | 0.021 | 0.845 → 0.861 | 5.3x advert_bytes | up | 5 |
-| `P-diurnal` | diurnal | **text** | 0.855 → 0.875 | 0.020 | 0.855 → 0.875 | 1.2x advert_bytes | down | 3 |
-| `J-wincap` | capacity | **held** | 0.937 → 0.957 | 0.020 | 0.854 → 0.859 | 2.2x advert_bytes | up | 3 |
-| `D-resolve` | resolve | **held** | 0.941 → 0.961 | 0.020 | 0.844 → 0.861 | 5.9x advert_bytes | = | 3 |
-| `J-timewin` | time-bucket-s | **held** | 0.943 → 0.961 | 0.019 | 0.838 → 0.849 | 5.3x advert_bytes | up | 3 |
-| `L-provide` | provide-transport | **text** | 0.861 → 0.878 | 0.017 | 0.861 → 0.878 | 3.1x sr_airtime | up | 2 |
-| `R-favourites` | favourite-routers | **text** | 0.850 → 0.867 | 0.017 | 0.850 → 0.867 | 1.1x sr_bytes | up | 2 |
-| `R-srretries` | sr-retries | **held** | 0.949 → 0.966 | 0.017 | 0.853 → 0.860 | 1.1x sr_bytes | down | 4 |
-| `R-routerlate` | router-late-fraction | **held** | 0.952 → 0.968 | 0.015 | 0.853 → 0.865 | 1.3x bytes_on_air | down | 4 |
-| `R-dmmode-cr` | dm-mode | **text** | 0.800 → 0.813 | 0.014 | 0.800 → 0.813 | 1.1x sr_bytes | up | 2 |
-| `J-window` | window-size | **held** | 0.948 → 0.961 | 0.013 | 0.848 → 0.859 | 4.8x advert_bytes | up | 3 |
-| `J-bucketmode` | bucket-mode | **text** | 0.848 → 0.861 | 0.013 | 0.848 → 0.861 | 3x advert_bytes | up | 4 |
-| `Q-hopassign` | hop-assign | **held** | 0.948 → 0.961 | 0.013 | 0.852 → 0.861 | 1.1x advert_bytes | down | 2 |
-| `M-replayorder` | replay-ordering | **text** | 0.848 → 0.861 | 0.013 | 0.848 → 0.861 | 1.2x sr_bytes | down | 2 |
-| `E-width` | short-id-bits | **held** | 0.949 → 0.961 | 0.012 | 0.851 → 0.861 | 3.1x advert_bytes | up | 4 |
-| `D-jitter` | advert-jitter-s | **text** | 0.852 → 0.861 | 0.009 | 0.852 → 0.861 | 1.1x sr_airtime | down | 4 |
-| `M-jitter` | advert-jitter-s | **text** | 0.852 → 0.861 | 0.009 | 0.852 → 0.861 | 1.1x sr_airtime | down | 4 |
-| `R-crladder` | coding-rate-ladder | **text** | 0.800 → 0.807 | 0.008 | 0.800 → 0.807 | 1.2x sr_airtime | down | 2 |
-| `R-adopt` | no-adopt-hop-recommendation | **text** | 0.961 → 0.968 | 0.007 | 0.961 → 0.968 | 1.1x bytes_on_air | down | 2 |
-| `G-allrouters` | servers | **text** | 0.854 → 0.859 | 0.005 | 0.854 → 0.859 | 2.6x sr_bytes | up | 2 |
-| `L-advert` | advert-transport | **text** | 0.856 → 0.861 | 0.005 | 0.856 → 0.861 | 3.5x sr_airtime | down | 2 |
-| `R-repeats` | extra-repeats | **held** | 0.961 → 0.966 | 0.005 | 0.861 → 0.861 | 1.1x sr_airtime | up | 2 |
-| `M-combined` | replay-ordering | **held** | 0.946 → 0.951 | 0.004 | 0.877 → 0.878 | 1x sr_bytes | up | 2 |
-| `R-congestion-mode` | congestion-mode | **text** | 0.968 → 0.970 | 0.002 | 0.968 → 0.970 | 1.1x sr_airtime | down | 2 |
-| `R-repeats-busy` | extra-repeats | **text** | 0.968 → 0.968 | 0.000 | 0.968 → 0.968 | 1x sr_bytes | up | 2 |
+| `BL-control` | protocol | **held** | 0 → 0.981 | 0.981 | 0.850 → 0.872 | 1x bytes_on_air | up | 2 |
+| `PR-protocol` | protocol | **held** | 0 → 0.961 | 0.961 | 0.833 → 0.861 | 1.2x bytes_on_air | up | 3 |
+| `RF-pulse` | noise-pulse-interval-ms | **held** | 0.129 → 0.903 | 0.774 | 0.107 → 0.793 | 1e+02x sr_airtime | down | 4 |
+| `RF-txpower` | tx-power | **text** | 0.104 → 0.861 | 0.756 | 0.104 → 0.861 | 7.2x sr_airtime | down | 4 |
+| `MS-stretch` | stretch | **text** | 0.129 → 0.861 | 0.732 | 0.129 → 0.861 | 7.3x sr_airtime | down | 4 |
+| `MS-siting` | siting-mix | **text** | 0.255 → 0.980 | 0.725 | 0.255 → 0.980 | 4.5x sr_airtime | up | 4 |
+| `AD-siting` | siting-mix | **text** | 0.089 → 0.793 | 0.704 | 0.089 → 0.793 | 2.9x advert_bytes | down | 3 |
+| `RF-preset` | preset | **held** | 0.312 → 0.980 | 0.668 | 0.226 → 0.861 | 7.5x sr_airtime | up | 3 |
+| `RF-bw500` | preset | **held** | 0.312 → 0.967 | 0.655 | 0.163 → 0.773 | 7.5x sr_bytes | up | 3 |
+| `RF-eu-presets` | preset | **held** | 0.312 → 0.961 | 0.648 | 0.226 → 0.861 | 4.9x sr_airtime | up | 4 |
+| `MS-hopscale` | nodes | **text** | 0.310 → 0.861 | 0.551 | 0.310 → 0.861 | 10x sr_bytes | down | 4 |
+| `RF-stretch-duct` | duct-per-hour | **held** | 0.339 → 0.835 | 0.496 | 0.276 → 0.733 | 14x sr_airtime | up | 2 |
+| `MS-oversubscribed` | nodes | **held** | 0.510 → 0.952 | 0.442 | 0.316 → 0.738 | 4.5x bytes_on_air | down | 3 |
+| `LD-chatty-hops` | broadcast-interval-s | **text** | 0.567 → 0.930 | 0.364 | 0.567 → 0.930 | 11x sr_airtime | down | 3 |
+| `LD-chatty` | broadcast-interval-s | **text** | 0.517 → 0.877 | 0.360 | 0.517 → 0.877 | 11x sr_airtime | down | 3 |
+| `MS-topology` | topology | **text** | 0.610 → 0.963 | 0.353 | 0.610 → 0.963 | 1.7x sr_bytes | up | 4 |
+| `DG-outage` | burst-loss | **text** | 0.518 → 0.861 | 0.343 | 0.518 → 0.861 | 2.1x sr_bytes | down | 4 |
+| `DG-burst` | burst-loss | **text** | 0.552 → 0.861 | 0.309 | 0.552 → 0.861 | 2.5x sr_bytes | down | 4 |
+| `DB-hotstore-stress` | max-num-nodes | **held** | 0.419 → 0.698 | 0.279 | 0.320 → 0.524 | 7x sr_airtime | up | 3 |
+| `TH-congestion` | no-congestion-scaling | **text** | 0.747 → 0.968 | 0.221 | 0.747 → 0.968 | 3.3x sr_airtime | down | 2 |
+| `RT-hoplimit` | hop-limit | **text** | 0.711 → 0.930 | 0.219 | 0.711 → 0.930 | 1.6x sr_bytes | up | 4 |
+| `MS-density` | nodes | **text** | 0.767 → 0.969 | 0.202 | 0.767 → 0.969 | 5.2x sr_airtime | up | 5 |
+| `RT-hopspread` | hop-limit | **text** | 0.711 → 0.913 | 0.202 | 0.711 → 0.913 | 1.5x bytes_on_air | up | 3 |
+| `RF-noise` | noise-profile | **text** | 0.679 → 0.861 | 0.181 | 0.679 → 0.861 | 1.3x sr_airtime | down | 4 |
+| `MS-size` | nodes | **text** | 0.719 → 0.882 | 0.164 | 0.719 → 0.882 | 4.9x sr_bytes | down | 5 |
+| `RT-spread` | hop-spread | **text** | 0.711 → 0.861 | 0.150 | 0.711 → 0.861 | 1.3x bytes_on_air | up | 2 |
+| `DG-loss` | extra-loss | **text** | 0.719 → 0.861 | 0.141 | 0.719 → 0.861 | 1.5x sr_bytes | down | 4 |
+| `SC-signing` | signature-policy | **text** | 0.729 → 0.861 | 0.131 | 0.729 → 0.861 | 1.3x sr_airtime | down | 3 |
+| `DB-hotstore` | max-num-nodes | **text** | 0.745 → 0.876 | 0.131 | 0.745 → 0.876 | 2.2x sr_airtime | up | 4 |
+| `DB-platform` | platform-mix | **text** | 0.761 → 0.876 | 0.115 | 0.761 → 0.876 | 2.2x sr_airtime | down | 3 |
+| `LD-interval` | broadcast-interval-s | **text** | 0.786 → 0.901 | 0.115 | 0.786 → 0.901 | 6.1x sr_airtime | up | 4 |
+| `AD-flooding` | role-mix | **text** | 0.793 → 0.892 | 0.099 | 0.793 → 0.892 | 2.4x bytes_on_air | up | 2 |
+| `AD-nomute` | role-mix | **text** | 0.793 → 0.892 | 0.099 | 0.793 → 0.892 | 2.4x bytes_on_air | up | 3 |
+| `AD-amplify-worst` | amplify-worst | **text** | 0.861 → 0.960 | 0.099 | 0.861 → 0.960 | 1.7x sr_bytes | up | 3 |
+| `AD-amplifiers` | amplifier-mix | **text** | 0.861 → 0.953 | 0.092 | 0.861 → 0.953 | 1.5x sr_bytes | up | 3 |
+| `AD-badrouters` | role-placement | **text** | 0.709 → 0.793 | 0.085 | 0.709 → 0.793 | 1.6x sr_bytes | down | 3 |
+| `SF-place-flat` | place | **held** | 0.915 → 0.988 | 0.074 | 0.854 → 0.877 | 2.3x sr_bytes | up | 6 |
+| `SF-place-spread` | place | **held** | 0.915 → 0.988 | 0.074 | 0.854 → 0.877 | 2.3x sr_bytes | up | 6 |
+| `SF-cadence` | trigger | **held** | 0.889 → 0.961 | 0.072 | 0.821 → 0.861 | 14x advert_bytes | down | 4 |
+| `LD-traceroute-small` | traceroute-per-hour | **held** | 0.770 → 0.841 | 0.070 | 0.661 → 0.726 | 1.2x sr_airtime | down | 2 |
+| `RF-duct` | duct-per-hour | **text** | 0.861 → 0.930 | 0.069 | 0.861 → 0.930 | 1.5x bytes_on_air | up | 3 |
+| `SF-hops-flat` | hops-apart | **held** | 0.912 → 0.981 | 0.069 | 0.853 → 0.882 | 2.8x sr_bytes | up | 4 |
+| `SF-hops-spread` | hops-apart | **held** | 0.912 → 0.981 | 0.069 | 0.853 → 0.882 | 2.8x sr_bytes | up | 5 |
+| `LD-traceroute` | traceroute-per-hour | **text** | 0.793 → 0.861 | 0.068 | 0.793 → 0.861 | 1.6x sr_airtime | down | 4 |
+| `MS-roles` | role-mix | **text** | 0.793 → 0.853 | 0.060 | 0.793 → 0.853 | 1.2x bytes_on_air | down | 2 |
+| `FW-mixed-26` | legacy-fraction | **held** | 0.941 → 0.992 | 0.051 | 0.845 → 0.886 | 2.2x bytes_on_air | up | 4 |
+| `FW-mixed` | legacy-fraction | **text** | 0.845 → 0.890 | 0.045 | 0.845 → 0.890 | 2.1x bytes_on_air | up | 4 |
+| `TH-congestion-input` | congestion-input | **held** | 0.698 → 0.742 | 0.045 | 0.521 → 0.554 | 1.5x sr_airtime | up | 2 |
+| `FW-versions` | profile | **held** | 0.922 → 0.961 | 0.039 | 0.841 → 0.861 | 3.1x bytes_on_air | up | 5 |
+| `MS-roles-fav` | role-mix | **text** | 0.815 → 0.853 | 0.038 | 0.815 → 0.853 | 1.1x bytes_on_air | down | 2 |
+| `SF-servers-flat` | servers | **held** | 0.950 → 0.988 | 0.037 | 0.851 → 0.862 | 8.3x sr_bytes | up | 4 |
+| `SF-servers-spread` | servers | **held** | 0.950 → 0.988 | 0.037 | 0.851 → 0.862 | 8.3x sr_bytes | up | 4 |
+| `SF-catchup` | catch-up-hours | **text** | 0.821 → 0.854 | 0.033 | 0.821 → 0.854 | 9.2x advert_bytes | up | 3 |
+| `FW-signing-cost` | profile-flag | **text** | 0.861 → 0.892 | 0.031 | 0.861 → 0.892 | 3.3x bytes_on_air | down | 2 |
+| `RT-rebroadcast` | rebroadcast-mode | **held** | 0.930 → 0.961 | 0.031 | 0.861 → 0.861 | 10x sr_airtime | down | 3 |
+| `DM-mode` | dm-mode | **text** | 0.786 → 0.812 | 0.026 | 0.786 → 0.812 | 1.1x sr_airtime | up | 3 |
+| `FW-firmware` | profile | **held** | 0.935 → 0.961 | 0.026 | 0.842 → 0.861 | 3.1x bytes_on_air | up | 2 |
+| `AD-worst` | role-placement | **text** | 0.743 → 0.768 | 0.025 | 0.743 → 0.768 | 1.1x sr_bytes | down | 2 |
+| `SF-capacity` | capacity | **held** | 0.946 → 0.967 | 0.021 | 0.845 → 0.861 | 5.3x advert_bytes | up | 5 |
+| `SF-capacity-local` | capacity | **held** | 0.946 → 0.967 | 0.021 | 0.845 → 0.861 | 5.3x advert_bytes | up | 5 |
+| `LD-diurnal` | diurnal | **text** | 0.855 → 0.875 | 0.020 | 0.855 → 0.875 | 1.2x advert_bytes | down | 3 |
+| `SF-capacity-window` | capacity | **held** | 0.937 → 0.957 | 0.020 | 0.854 → 0.859 | 2.2x advert_bytes | up | 3 |
+| `SF-resolve` | resolve | **held** | 0.941 → 0.961 | 0.020 | 0.844 → 0.861 | 5.9x advert_bytes | = | 3 |
+| `SF-bucket-time` | time-bucket-s | **held** | 0.943 → 0.961 | 0.019 | 0.838 → 0.849 | 5.3x advert_bytes | up | 3 |
+| `SF-provide-transport` | provide-transport | **text** | 0.861 → 0.878 | 0.017 | 0.861 → 0.878 | 3.1x sr_airtime | up | 2 |
+| `RT-favourites` | favourite-routers | **text** | 0.850 → 0.867 | 0.017 | 0.850 → 0.867 | 1.1x sr_bytes | up | 2 |
+| `SF-sr-retries` | sr-retries | **held** | 0.949 → 0.966 | 0.017 | 0.853 → 0.860 | 1.1x sr_bytes | down | 4 |
+| `MS-router-late` | router-late-fraction | **held** | 0.952 → 0.968 | 0.015 | 0.853 → 0.865 | 1.3x bytes_on_air | down | 4 |
+| `PR-dmmode-cr` | dm-mode | **text** | 0.800 → 0.813 | 0.014 | 0.800 → 0.813 | 1.1x sr_bytes | up | 2 |
+| `SF-window-size` | window-size | **held** | 0.948 → 0.961 | 0.013 | 0.848 → 0.859 | 4.8x advert_bytes | up | 3 |
+| `SF-bucket-mode` | bucket-mode | **text** | 0.848 → 0.861 | 0.013 | 0.848 → 0.861 | 3x advert_bytes | up | 4 |
+| `RT-hopassign` | hop-assign | **held** | 0.948 → 0.961 | 0.013 | 0.852 → 0.861 | 1.1x advert_bytes | down | 2 |
+| `SF-replay-order` | replay-ordering | **text** | 0.848 → 0.861 | 0.013 | 0.848 → 0.861 | 1.2x sr_bytes | down | 2 |
+| `SF-width` | short-id-bits | **held** | 0.949 → 0.961 | 0.012 | 0.851 → 0.861 | 3.1x advert_bytes | up | 4 |
+| `SF-jitter-global` | advert-jitter-s | **text** | 0.852 → 0.861 | 0.009 | 0.852 → 0.861 | 1.1x sr_airtime | down | 4 |
+| `SF-jitter-local` | advert-jitter-s | **text** | 0.852 → 0.861 | 0.009 | 0.852 → 0.861 | 1.1x sr_airtime | down | 4 |
+| `PR-crladder` | coding-rate-ladder | **text** | 0.800 → 0.807 | 0.008 | 0.800 → 0.807 | 1.2x sr_airtime | down | 2 |
+| `RT-adopt` | no-adopt-hop-recommendation | **text** | 0.961 → 0.968 | 0.007 | 0.961 → 0.968 | 1.1x bytes_on_air | down | 2 |
+| `SF-servers-allrouters` | servers | **text** | 0.854 → 0.859 | 0.005 | 0.854 → 0.859 | 2.6x sr_bytes | up | 2 |
+| `SF-advert-transport` | advert-transport | **text** | 0.856 → 0.861 | 0.005 | 0.856 → 0.861 | 3.5x sr_airtime | down | 2 |
+| `PR-repeats` | extra-repeats | **held** | 0.961 → 0.966 | 0.005 | 0.861 → 0.861 | 1.1x sr_airtime | up | 2 |
+| `SF-replay-order-broadcast` | replay-ordering | **held** | 0.946 → 0.951 | 0.004 | 0.877 → 0.878 | 1x sr_bytes | up | 2 |
+| `TH-congestion-mode` | congestion-mode | **text** | 0.968 → 0.970 | 0.002 | 0.968 → 0.970 | 1.1x sr_airtime | down | 2 |
+| `PR-repeats-busy` | extra-repeats | **text** | 0.968 → 0.968 | 0.000 | 0.968 → 0.968 | 1x sr_bytes | up | 2 |
 
 ### Moved no delivery measure
 
@@ -229,12 +229,12 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 | block | arm | price | cells |
 | --- | --- | --- | --: |
-| `E-signed` | signed | 1.4x advert_bytes | 2 |
-| `R-warm` | warm-num-nodes | - | 4 |
+| `SF-signed` | signed | 1.4x advert_bytes | 2 |
+| `DB-warm` | warm-num-nodes | - | 4 |
 
 ## Every block
 
-### `D-cadence` - trigger  `--scenario ridge`
+### `SF-cadence` - trigger  `--scenario ridge`
 
 *When an archive advertises: on a sealed bucket, a fixed interval, AIMD, or both.*
 
@@ -253,7 +253,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > trigger=bucket+interval: misdecodes 22
 
-### `D-jitter` - advert-jitter-s  `--scenario ridge`
+### `SF-jitter-global` - advert-jitter-s  `--scenario ridge`
 
 *Spread applied to bucket-close under global numbering, where every archive seals the same bucket at the same moment and fires together.*
 
@@ -264,7 +264,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 120 | 0.853 | - | - | 0.954 | 0.955 | 0.603 | 1.26x | 23.7/27.4% | 4.9% | 3 |
 | 600 | 0.852 | - | - | 0.952 | 0.952 | 0.613 | 1.27x | 24.0/27.6% | 4.9% | 3 |
 
-### `D-resolve` - resolve  `--scenario ridge`
+### `SF-resolve` - resolve  `--scenario ridge`
 
 *How two archives settle a disagreement - send a sketch, enumerate, or sketch then fall back. Delivery should not move; what it costs should.*
 
@@ -274,7 +274,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | enum | 0.844 | - | - | 0.941 | 0.947 | 0.605 | 1.24x | 23.5/27.1% | 4.8% | 3 |
 | hybrid | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 
-### `E-capacity` - capacity  `--scenario ridge`
+### `SF-capacity` - capacity  `--scenario ridge`
 
 *How many differences one sketch can decode before it fails and the exchange escalates.*
 
@@ -290,7 +290,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > capacity=8: decode_failures 52
 
-### `E-signed` - signed  `--scenario ridge`
+### `SF-signed` - signed  `--scenario ridge`
 
 *Whether the advert carries its 66-byte signature.*
 
@@ -299,7 +299,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | False | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 | True | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 
-### `E-width` - short-id-bits  `--scenario ridge`
+### `SF-width` - short-id-bits  `--scenario ridge`
 
 *Sketch member width. Narrower identifiers collide more often, and a collision cancels in the sketch without cancelling in the checksum.*
 
@@ -310,7 +310,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 32 | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 | 64 | 0.851 | - | - | 0.954 | 0.955 | 0.619 | 1.26x | 24.0/27.4% | 4.9% | 3 |
 
-### `F-burst` - burst-loss  `--scenario ridge`
+### `DG-burst` - burst-loss  `--scenario ridge`
 
 *The same nominal loss delivered in 60-second stretches of deafness, which puts a whole bucket's divergence into one sketch instead of spreading it.*
 
@@ -325,7 +325,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > burst-loss=0.3: decode_failures 34
 
-### `F-flooding` - role-mix  `--scenario ridge`
+### `AD-flooding` - role-mix  `--scenario ridge`
 
 *Every node rebroadcasting everything, against a real role census.*
 
@@ -334,7 +334,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | baymesh-2026-08 | 0.793 | - | - | 0.911 | 0.912 | 0.597 | 1.11x | 23.9/26.0% | 4.9% | 3 |
 | all-routers | 0.892 | - | - | 0.976 | 0.976 | 0.800 | 2.62x | 39.8/43.3% | 5.0% | 3 |
 
-### `F-hoplimit` - hop-limit  `--scenario ridge`
+### `RT-hoplimit` - hop-limit  `--scenario ridge`
 
 *Hop limits past anything a release ships, to find where more hops stop helping.*
 
@@ -345,7 +345,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 15 | 0.930 | - | - | 0.977 | 0.978 | 0.785 | 1.40x | 25.5/28.3% | 5.0% | 3 |
 | 32 | 0.929 | - | - | 0.970 | 0.971 | 0.791 | 1.43x | 26.1/28.9% | 5.1% | 3 |
 
-### `F-loss` - extra-loss  `--scenario ridge`
+### `DG-loss` - extra-loss  `--scenario ridge`
 
 *A flat loss floor on every reception - degradation spread evenly across every bucket.*
 
@@ -358,7 +358,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > extra-loss=0.3: decode_failures 1
 
-### `F-outage` - burst-loss  `--scenario ridge`
+### `DG-outage` - burst-loss  `--scenario ridge`
 
 *Burst loss at half an hour rather than a minute - most of a bucket, which is the outage that actually matters to an archive.*
 
@@ -375,7 +375,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > burst-loss=0.3: decode_failures 41
 
-### `F-txpower` - tx-power  `--scenario ridge`
+### `RF-txpower` - tx-power  `--scenario ridge`
 
 *Transmit power in dBm - the region limit is a ceiling an operator may use, not one they must.*
 
@@ -388,7 +388,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > faster: 1.06 s per simulated hour against 2.33 over 3 prior run(s) - 2.2x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate
 
-### `G-allrouters` - servers  `--scenario ridge`
+### `SF-servers-allrouters` - servers  `--scenario ridge`
 
 *Every router as an archive against half of them - same mesh, same traffic, only who holds the archive changes.*
 
@@ -397,7 +397,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 3 | 0.854 | - | - | 0.983 | 0.986 | 0.596 | 1.27x | 24.3/27.8% | 5.0% | 3 |
 | 6 | 0.859 | - | - | 0.983 | 0.984 | 0.612 | 1.29x | 24.8/28.3% | 5.1% | 6 |
 
-### `G-hops` - hops-apart  `--scenario ridge`
+### `SF-hops-flat` - hops-apart  `--scenario ridge`
 
 *How many hops apart the archives are placed, under a flat hop limit.*
 
@@ -410,7 +410,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > hops-apart=4: decode_failures 19
 
-### `G-place` - place  `--scenario ridge`
+### `SF-place-flat` - place  `--scenario ridge`
 
 *Where the archives sit, under a flat hop limit.*
 
@@ -425,7 +425,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > place=spread: decode_failures 13
 
-### `G-servers` - servers  `--scenario ridge`
+### `SF-servers-flat` - servers  `--scenario ridge`
 
 *How many archives the mesh has, under a flat hop limit.*
 
@@ -436,7 +436,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 5 | 0.857 | - | - | 0.987 | 0.990 | 0.621 | 1.30x | 24.7/28.1% | 4.9% | 5 |
 | 8 | 0.862 | - | - | 0.988 | 0.990 | 0.595 | 1.34x | 25.0/28.6% | 5.1% | 8 |
 
-### `J-bucketmode` - bucket-mode  `--scenario ridge`
+### `SF-bucket-mode` - bucket-mode  `--scenario ridge`
 
 *What defines a bucket: a global counter (a fiction kept as an upper bound), the local count the firmware keeps, a time window, or a sliding window.*
 
@@ -453,7 +453,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > bucket-mode=window: misdecodes 28
 
-### `J-timewin` - time-bucket-s  `--scenario ridge`
+### `SF-bucket-time` - time-bucket-s  `--scenario ridge`
 
 *Width of the time bucket, when buckets are cut by the clock.*
 
@@ -469,7 +469,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > time-bucket-s=3600: misdecodes 6
 
-### `J-wincap` - capacity  `--scenario ridge`
+### `SF-capacity-window` - capacity  `--scenario ridge`
 
 *Sketch capacity under windowed buckets rather than counted ones.*
 
@@ -489,7 +489,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > capacity=32: misdecodes 28
 
-### `J-window` - window-size  `--scenario ridge`
+### `SF-window-size` - window-size  `--scenario ridge`
 
 *Objects in the sliding window, when buckets are windowed.*
 
@@ -505,7 +505,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > window-size=32: misdecodes 28
 
-### `K-density` - nodes  `--scenario ridge`
+### `MS-density` - nodes  `--scenario ridge`
 
 *The same node counts in a fixed area, so this is density rather than size. Running both is the only way to say which an effect belongs to.*
 
@@ -517,7 +517,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 120 | 0.968 | - | - | 1.000 | 1.000 | 0.601 | 2.11x | 43.9/47.3% | 5.2% | 3 |
 | 150 | 0.969 | - | - | 0.999 | 0.999 | 0.910 | 2.54x | 41.0/47.4% | 5.6% | 3 |
 
-### `K-hopspread` - hop-limit  `--scenario ridge`
+### `RT-hopspread` - hop-limit  `--scenario ridge`
 
 *One hop limit for everyone, swept. The per-node spread must be off or --hop-limit is never read.*
 
@@ -527,7 +527,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 5 | 0.860 | - | - | 0.961 | 0.963 | 0.603 | 1.31x | 24.2/27.4% | 4.9% | 3 |
 | 7 | 0.913 | - | - | 0.975 | 0.975 | 0.746 | 1.42x | 25.8/28.8% | 5.1% | 3 |
 
-### `K-size` - nodes  `--scenario ridge`
+### `MS-size` - nodes  `--scenario ridge`
 
 *Mesh size with density held constant - the area grows with the node count.*
 
@@ -539,7 +539,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 120 | 0.740 | - | - | 0.954 | 0.956 | 0.287 | 2.20x | 29.0/35.1% | 5.0% | 3 |
 | 150 | 0.719 | - | - | 0.932 | 0.934 | 0.399 | 2.79x | 27.0/32.5% | 4.9% | 3 |
 
-### `K-spread` - hop-spread  `--scenario ridge`
+### `RT-spread` - hop-spread  `--scenario ridge`
 
 *A uniform hop limit against per-node limits of 3-7 assigned by centrality.*
 
@@ -548,7 +548,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | False | 0.711 | - | - | 0.918 | 0.919 | 0.309 | 0.97x | 18.7/21.7% | 4.1% | 3 |
 | True | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 
-### `L-advert` - advert-transport  `--scenario ridge`
+### `SF-advert-transport` - advert-transport  `--scenario ridge`
 
 *Whether an archive advertises by broadcast or by DM to each known peer.*
 
@@ -557,7 +557,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | broadcast | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 | dm | 0.856 | - | - | 0.960 | 0.962 | 0.630 | 1.23x | 23.3/26.6% | 4.7% | 3 |
 
-### `L-provide` - provide-transport  `--scenario ridge`
+### `SF-provide-transport` - provide-transport  `--scenario ridge`
 
 *Whether a replay goes by DM or by broadcast, so bystanders in earshot can file it too.*
 
@@ -566,7 +566,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | dm | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 | broadcast | 0.878 | - | - | 0.946 | 0.946 | 0.630 | 1.34x | 24.8/28.4% | 5.0% | 3 |
 
-### `M-capacity` - capacity  `--scenario ridge`
+### `SF-capacity-local` - capacity  `--scenario ridge`
 
 *Sketch capacity under local numbering and the later defaults.*
 
@@ -582,7 +582,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > capacity=8: decode_failures 52
 
-### `M-combined` - replay-ordering  `--scenario ridge`
+### `SF-replay-order-broadcast` - replay-ordering  `--scenario ridge`
 
 *The same, with replays broadcast - the combination the replay header exists for.*
 
@@ -593,7 +593,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > replay-ordering=heard: misdecodes 10
 
-### `M-jitter` - advert-jitter-s  `--scenario ridge`
+### `SF-jitter-local` - advert-jitter-s  `--scenario ridge`
 
 *Advert spread under local numbering, where each archive seals its own bucket on its own count and the synchronisation jitter would break is largely absent.*
 
@@ -604,7 +604,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 120 | 0.853 | - | - | 0.954 | 0.955 | 0.603 | 1.26x | 23.7/27.4% | 4.9% | 3 |
 | 600 | 0.852 | - | - | 0.952 | 0.952 | 0.613 | 1.27x | 24.0/27.6% | 4.9% | 3 |
 
-### `M-replayorder` - replay-ordering  `--scenario ridge`
+### `SF-replay-order` - replay-ordering  `--scenario ridge`
 
 *Where a replayed object lands in the receiver's stream: at the tip, or back at its heard_ago.*
 
@@ -615,7 +615,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > replay-ordering=heard: misdecodes 21
 
-### `N-hops` - hops-apart  `--scenario ridge`
+### `SF-hops-spread` - hops-apart  `--scenario ridge`
 
 *How many hops apart the archives are, under real per-node hop limits.*
 
@@ -631,7 +631,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > hops-apart=5: decode_failures 19
 
-### `N-place` - place  `--scenario ridge`
+### `SF-place-spread` - place  `--scenario ridge`
 
 *Where the archives sit, under real per-node hop limits.*
 
@@ -646,7 +646,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > place=spread: decode_failures 13
 
-### `N-servers` - servers  `--scenario ridge`
+### `SF-servers-spread` - servers  `--scenario ridge`
 
 *How many archives the mesh has, under real per-node hop limits.*
 
@@ -657,7 +657,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 5 | 0.857 | - | - | 0.987 | 0.990 | 0.621 | 1.30x | 24.7/28.1% | 4.9% | 5 |
 | 8 | 0.862 | - | - | 0.988 | 0.990 | 0.595 | 1.34x | 25.0/28.6% | 5.1% | 8 |
 
-### `P-bw500` - preset  `--scenario ridge`
+### `RF-bw500` - preset  `--scenario ridge`
 
 *Spreading factor with bandwidth held at 500 kHz, where North America is heading.*
 
@@ -669,7 +669,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > preset=MEDIUM_TURBO: decode_failures 1
 
-### `P-catchup` - catch-up-hours  `--scenario ridge`
+### `SF-catchup` - catch-up-hours  `--scenario ridge`
 
 *The quiet-hours window reconciliation defers to, which only means anything once traffic has a time of day.*
 
@@ -687,7 +687,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > catch-up-hours=00-08: decode_failures 32
 
-### `P-congestion` - no-congestion-scaling  `--scenario ridge`
+### `TH-congestion` - no-congestion-scaling  `--scenario ridge`
 
 *The firmware's node-count interval scaling, on against off.*
 
@@ -700,7 +700,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > no-congestion-scaling=True: decode_failures 100
 
-### `P-diurnal` - diurnal  `--scenario ridge`
+### `LD-diurnal` - diurnal  `--scenario ridge`
 
 *Time of day. Text, position and DMs follow the clock; telemetry and nodeinfo are device timers and do not.*
 
@@ -710,7 +710,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | sinusoid | 0.855 | - | - | 0.947 | 0.951 | 0.638 | 1.15x | 21.6/24.9% | 4.4% | 3 |
 | commuter | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 
-### `P-eu-presets` - preset  `--scenario ridge`
+### `RF-eu-presets` - preset  `--scenario ridge`
 
 *The presets Europe runs, including the narrow ones EU_866 and EU_N_868 default to.*
 
@@ -721,7 +721,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | LITE_FAST | 0.805 | - | - | 0.949 | 0.950 | 0.485 | 0.92x | 15.0/17.8% | 3.8% | 3 |
 | NARROW_SLOW | 0.801 | - | - | 0.922 | 0.922 | 0.573 | 1.21x | 21.0/24.1% | 4.5% | 3 |
 
-### `P-preset` - preset  `--scenario ridge`
+### `RF-preset` - preset  `--scenario ridge`
 
 *The presets deployed meshes actually run: the default, the fast end, and the slow end still in use.*
 
@@ -733,7 +733,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > preset=LONG_MODERATE: decode_failures 9
 
-### `Q-control` - protocol  `--scenario ridge`
+### `BL-control` - protocol  `--scenario ridge`
 
 *The same nodes in the same places with the archive off then on, separating what serving costs a node from where it sits.*
 
@@ -742,7 +742,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | none | 0.850 | - | - | 0 | 0.000 | 0.613 | 1.23x | 23.5/26.8% | 4.8% | 3 |
 | sr | 0.872 | - | - | 0.981 | 0.984 | 0.598 | 1.25x | 23.9/27.3% | 4.8% | 3 |
 
-### `Q-hopassign` - hop-assign  `--scenario ridge`
+### `RT-hopassign` - hop-assign  `--scenario ridge`
 
 *Whether raised hop limits land on central nodes as operators do it, or at random - the control that separates the limit's effect from the siting of the nodes that raised it.*
 
@@ -751,7 +751,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | centrality | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 | random | 0.852 | - | - | 0.948 | 0.950 | 0.645 | 1.31x | 24.4/27.4% | 4.9% | 3 |
 
-### `Q-interval` - broadcast-interval-s  `--scenario ridge`
+### `LD-interval` - broadcast-interval-s  `--scenario ridge`
 
 *The device broadcast interval - the denominator every SF++ airtime share is quoted against.*
 
@@ -762,7 +762,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 10800 | 0.896 | - | - | 0.979 | 0.980 | 0.674 | 0.59x | 11.1/12.8% | 2.2% | 3 |
 | 43200 | 0.901 | - | - | 0.982 | 0.982 | 0.692 | 0.45x | 8.3/9.6% | 1.7% | 3 |
 
-### `Q-protocol` - protocol  `--scenario ridge`
+### `PR-protocol` - protocol  `--scenario ridge`
 
 *Nothing, the incumbent chain walk, and the sketch - with `none` a paired baseline, so every other cell is a difference rather than a comparison.*
 
@@ -772,7 +772,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | chain | 0.833 | - | - | 0.904 | 0.955 | 0.593 | 1.47x | 27.2/31.3% | 5.5% | 3 |
 | sr | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 
-### `Q-topology` - topology  `--scenario ridge`
+### `MS-topology` - topology  `--scenario ridge`
 
 *The shape of the mesh, at fixed node count and seed.*
 
@@ -785,7 +785,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > topology=hub: misdecodes 1
 
-### `R-adopt` - no-adopt-hop-recommendation  `--scenario ridge`
+### `RT-adopt` - no-adopt-hop-recommendation  `--scenario ridge`
 
 *The hop-recommendation feedback loop closed against held open, traced, because a converged mean and an oscillating one look identical at the end.*
 
@@ -794,7 +794,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | False | 0.968 | - | - | 1.000 | 1.000 | 0.601 | 2.11x | 43.9/47.3% | 5.2% | 3 |
 | True | 0.961 | - | - | 0.999 | 0.999 | 0.617 | 2.44x | 48.9/52.6% | 5.7% | 3 |
 
-### `R-congestion-input` - congestion-input  `--scenario ridge`
+### `TH-congestion-input` - congestion-input  `--scenario ridge`
 
 *Which quantity drives the throttle: what the firmware can see and which saturates, or the unbounded ideal.*
 
@@ -807,7 +807,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > congestion-input=truesize: decode_failures 8
 
-### `R-congestion-mode` - congestion-mode  `--scenario ridge`
+### `TH-congestion-mode` - congestion-mode  `--scenario ridge`
 
 *Each node throttling on its own online count against one coefficient for the whole mesh. The firmware does the former.*
 
@@ -816,7 +816,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | static | 0.970 | - | - | 0.999 | 0.999 | 0.607 | 1.97x | 41.0/44.2% | 4.8% | 3 |
 | adaptive | 0.968 | - | - | 1.000 | 1.000 | 0.601 | 2.11x | 43.9/47.3% | 5.2% | 3 |
 
-### `R-crladder` - coding-rate-ladder  `--scenario ridge`
+### `PR-crladder` - coding-rate-ladder  `--scenario ridge`
 
 *Raising the coding rate on each retransmission - airtime spent to make each attempt likelier to land.*
 
@@ -825,7 +825,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | False | 0.807 | - | - | 0.930 | 0.933 | 0.556 | 1.58x | 29.4/33.6% | 5.9% | 3 |
 | True | 0.800 | - | - | 0.928 | 0.931 | 0.590 | 1.58x | 29.4/33.6% | 5.9% | 3 |
 
-### `R-dmmode` - dm-mode  `--scenario ridge`
+### `DM-mode` - dm-mode  `--scenario ridge`
 
 *How a DM escalates to flooding.*
 
@@ -835,7 +835,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | directed-with-late-flood | 0.807 | - | - | 0.930 | 0.933 | 0.556 | 1.58x | 29.4/33.6% | 5.9% | 3 |
 | m4-early-flood | 0.812 | - | - | 0.928 | 0.929 | 0.551 | 1.58x | 29.4/33.5% | 5.9% | 3 |
 
-### `R-dmmode-cr` - dm-mode  `--scenario ridge`
+### `PR-dmmode-cr` - dm-mode  `--scenario ridge`
 
 *DM escalation with the coding-rate ladder already on, since both spend the same retry budget.*
 
@@ -844,7 +844,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | directed-with-late-flood | 0.800 | - | - | 0.928 | 0.931 | 0.590 | 1.58x | 29.4/33.6% | 5.9% | 3 |
 | m4-early-flood | 0.813 | - | - | 0.935 | 0.940 | 0.575 | 1.59x | 29.3/33.6% | 5.9% | 3 |
 
-### `R-favourites` - favourite-routers  `--scenario ridge`
+### `RT-favourites` - favourite-routers  `--scenario ridge`
 
 *Router-like nodes favouriting each other, so relays between them keep their hop limit.*
 
@@ -853,7 +853,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | False | 0.850 | - | - | 0.956 | 0.958 | 0.692 | 1.34x | 27.7/30.7% | 4.8% | 3 |
 | True | 0.867 | - | - | 0.951 | 0.952 | 0.733 | 1.38x | 28.1/31.1% | 4.7% | 3 |
 
-### `R-firmware` - profile  `--scenario ridge`
+### `FW-firmware` - profile  `--scenario ridge`
 
 *The pre-fold-in transport against 2.8 - same seed, same mesh, only the MAC and routing rules change.*
 
@@ -866,7 +866,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > slower: 7.35 s per simulated hour against 1.93 over 3 prior run(s) - 3.8x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
 
-### `R-hopscale` - nodes  `--scenario ridge`
+### `MS-hopscale` - nodes  `--scenario ridge`
 
 *How far the firmware's hop estimator sits from the exhaustive count it approximates, as the mesh outgrows its 128 entries.*
 
@@ -881,7 +881,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > nodes=500: decode_failures 101
 
-### `R-hotstore` - max-num-nodes  `--scenario ridge`
+### `DB-hotstore` - max-num-nodes  `--scenario ridge`
 
 *The modelled MAX_NUM_NODES - the size of the hot store.*
 
@@ -892,7 +892,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 120 | 0.876 | - | - | 0.958 | 0.961 | 0.699 | 1.50x | 31.9/36.1% | 4.9% | 3 |
 | 250 | 0.876 | - | - | 0.958 | 0.961 | 0.699 | 1.50x | 31.9/36.1% | 4.9% | 3 |
 
-### `R-hotstore-stress` - max-num-nodes  `--scenario ridge`
+### `DB-hotstore-stress` - max-num-nodes  `--scenario ridge`
 
 *The store size against a fixed 250-node mesh, so eviction is constant.*
 
@@ -908,7 +908,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > max-num-nodes=250: decode_failures 73
 
-### `R-mixed` - legacy-fraction  `--scenario ridge`
+### `FW-mixed` - legacy-fraction  `--scenario ridge`
 
 *A mesh part-way through upgrading, the older share on 2.5.*
 
@@ -921,7 +921,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > legacy-fraction=0.5: decode_failures 3
 
-### `R-mixed-26` - legacy-fraction  `--scenario ridge`
+### `FW-mixed-26` - legacy-fraction  `--scenario ridge`
 
 *The same with the older share on 2.6.*
 
@@ -936,7 +936,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > slower: 3.62 s per simulated hour against 1.71 over 3 prior run(s) - 2.1x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
 
-### `R-oversubscribed` - nodes  `--scenario ridge`
+### `MS-oversubscribed` - nodes  `--scenario ridge`
 
 *Mesh size against a store that has to hold it, over a full day.*
 
@@ -950,7 +950,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > nodes=500: decode_failures 4
 
-### `R-platform` - platform-mix  `--scenario ridge`
+### `DB-platform` - platform-mix  `--scenario ridge`
 
 *The board mix, which decides each node's hot-store size.*
 
@@ -962,7 +962,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > platform-mix=constrained: decode_failures 1
 
-### `R-rebroadcast` - rebroadcast-mode  `--scenario ridge`
+### `RT-rebroadcast` - rebroadcast-mode  `--scenario ridge`
 
 *The rebroadcast mode - what a node relays.*
 
@@ -972,7 +972,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | KNOWN_ONLY | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 | CORE_PORTNUMS_ONLY | 0.861 | - | - | 0.930 | 0.965 | 0.625 | 1.20x | 22.8/26.2% | 4.7% | 3 |
 
-### `R-repeats` - extra-repeats  `--scenario ridge`
+### `PR-repeats` - extra-repeats  `--scenario ridge`
 
 *The cheapest rival to an archive: one extra relay of a text rather than replicating it afterwards.*
 
@@ -981,7 +981,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | False | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 | True | 0.861 | - | - | 0.966 | 0.966 | 0.611 | 1.27x | 24.1/27.5% | 4.9% | 3 |
 
-### `R-repeats-busy` - extra-repeats  `--scenario ridge`
+### `PR-repeats-busy` - extra-repeats  `--scenario ridge`
 
 *The same, on a mesh busy enough for the suppression thresholds to be deciding it.*
 
@@ -990,7 +990,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | False | 0.968 | - | - | 1.000 | 1.000 | 0.601 | 2.11x | 43.9/47.3% | 5.2% | 3 |
 | True | 0.968 | - | - | 1.000 | 1.000 | 0.627 | 2.11x | 43.7/47.0% | 5.1% | 3 |
 
-### `R-roles` - role-mix  `--scenario ridge`
+### `MS-roles` - role-mix  `--scenario ridge`
 
 *The legacy default role census against a real mesh's.*
 
@@ -999,7 +999,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | legacy-default | 0.853 | - | - | 0.945 | 0.948 | 0.655 | 1.31x | 24.9/28.2% | 5.0% | 3 |
 | baymesh-2026-08 | 0.793 | - | - | 0.911 | 0.912 | 0.597 | 1.11x | 23.9/26.0% | 4.9% | 3 |
 
-### `R-roles-fav` - role-mix  `--scenario ridge`
+### `MS-roles-fav` - role-mix  `--scenario ridge`
 
 *The same with router favourites on.*
 
@@ -1008,7 +1008,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | legacy-default | 0.853 | - | - | 0.941 | 0.942 | 0.678 | 1.33x | 25.1/28.4% | 5.0% | 3 |
 | baymesh-2026-08 | 0.815 | - | - | 0.927 | 0.932 | 0.637 | 1.23x | 27.2/30.3% | 4.9% | 3 |
 
-### `R-routerlate` - router-late-fraction  `--scenario ridge`
+### `MS-router-late` - router-late-fraction  `--scenario ridge`
 
 *The share of nodes on ROUTER_LATE.*
 
@@ -1019,7 +1019,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 0.1 | 0.853 | - | - | 0.956 | 0.957 | 0.692 | 1.47x | 32.0/36.1% | 4.8% | 3 |
 | 0.2 | 0.865 | - | - | 0.952 | 0.955 | 0.705 | 1.65x | 33.0/38.1% | 4.6% | 3 |
 
-### `R-signing` - signature-policy  `--scenario ridge`
+### `SC-signing` - signature-policy  `--scenario ridge`
 
 *The receive-side signature policy - what a node does with an unsigned packet.*
 
@@ -1031,7 +1031,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > signature-policy=STRICT: decode_failures 2
 
-### `R-signing-cost` - profile-flag  `--scenario ridge`
+### `FW-signing-cost` - profile-flag  `--scenario ridge`
 
 *Signing itself, on against off inside 2.8. The only arm that separates 'signing costs reach' from '2.8 costs reach'.*
 
@@ -1040,7 +1040,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | signing=false | 0.892 | - | - | 0.976 | 0.976 | 0.643 | 0.67x | 13.1/15.2% | 2.7% | 3 |
 | signing=true | 0.861 | - | - | 0.961 | 0.963 | 0.630 | 1.26x | 23.8/27.3% | 4.8% | 3 |
 
-### `R-siting` - siting-mix  `--scenario ridge`
+### `MS-siting` - siting-mix  `--scenario ridge`
 
 *Where nodes physically are. A roof node and a basement one are 26 dB apart, wider than most parameters here.*
 
@@ -1051,7 +1051,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | event | 0.255 | - | - | 0.461 | 0.461 | 0.000 | 1.52x | 26.1/33.2% | 6.1% | 3 |
 | backbone | 0.980 | - | - | 0.999 | 1.000 | 0.873 | 0.99x | 34.1/36.7% | 5.5% | 3 |
 
-### `R-srretries` - sr-retries  `--scenario ridge`
+### `SF-sr-retries` - sr-retries  `--scenario ridge`
 
 *Retries per addressed reconciliation hop, to find where delivery stops improving.*
 
@@ -1062,7 +1062,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 2 | 0.853 | - | - | 0.949 | 0.950 | 0.624 | 1.22x | 22.8/26.3% | 4.6% | 3 |
 | 4 | 0.853 | - | - | 0.949 | 0.950 | 0.624 | 1.22x | 22.8/26.3% | 4.6% | 3 |
 
-### `R-traceroute` - traceroute-per-hour  `--scenario ridge`
+### `LD-traceroute` - traceroute-per-hour  `--scenario ridge`
 
 *Route discoveries per node per hour - whether traceroute learning pays for its own airtime.*
 
@@ -1073,7 +1073,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 1.0 | 0.833 | - | - | 0.941 | 0.945 | 0.584 | 1.51x | 28.4/32.4% | 5.7% | 3 |
 | 4.0 | 0.793 | - | - | 0.913 | 0.917 | 0.545 | 1.86x | 35.5/39.9% | 7.1% | 3 |
 
-### `R-traceroute-small` - traceroute-per-hour  `--scenario ridge`
+### `LD-traceroute-small` - traceroute-per-hour  `--scenario ridge`
 
 *The same on a mesh whose hot store cannot hold it, where the overflow cache is all that keeps a route for the long tail.*
 
@@ -1090,7 +1090,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > traceroute-per-hour=1.0: decode_failures 57
 
-### `R-versions` - profile  `--scenario ridge`
+### `FW-versions` - profile  `--scenario ridge`
 
 *The release series in order, each at its final release - what a mesh gained or lost per upgrade, not what one rule is worth.*
 
@@ -1112,7 +1112,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > slower: 11.4 s per simulated hour against 1.92 over 3 prior run(s) - 6.0x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright
 
-### `R-warm` - warm-num-nodes  `--scenario ridge`
+### `DB-warm` - warm-num-nodes  `--scenario ridge`
 
 *The warm tier on a mesh larger than the hot store: 0 is the pre-2.8 behaviour of forgetting an evicted peer outright.*
 
@@ -1139,7 +1139,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > warm-num-nodes=2000: decode_failures 81
 
-### `X-amplifiers` - amplifier-mix  `--scenario ridge`
+### `AD-amplifiers` - amplifier-mix  `--scenario ridge`
 
 *Power amplifiers as separate transmit and receive gain, sprinkled or in an arms race.*
 
@@ -1149,7 +1149,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | sprinkled | 0.890 | - | - | 0.987 | 0.990 | 0.606 | 1.22x | 22.9/26.0% | 5.0% | 3 |
 | arms-race | 0.953 | - | - | 0.992 | 0.993 | 0.785 | 1.01x | 24.9/28.8% | 5.5% | 3 |
 
-### `X-amplify-worst` - amplify-worst  `--scenario ridge`
+### `AD-amplify-worst` - amplify-worst  `--scenario ridge`
 
 *A high amplifier fitted to the worst-connected nodes after the links exist - the field pathology where the node nobody could hear is then heard by everyone while still hearing almost nobody.*
 
@@ -1159,7 +1159,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 0.1 | 0.869 | - | - | 0.937 | 0.939 | 0.739 | 1.07x | 22.2/24.3% | 4.6% | 3 |
 | 0.3 | 0.960 | - | - | 0.995 | 0.995 | 0.821 | 0.91x | 26.9/29.9% | 4.9% | 3 |
 
-### `X-badrouters` - role-placement  `--scenario ridge`
+### `AD-badrouters` - role-placement  `--scenario ridge`
 
 *Where the router roles land - on the best-connected nodes, the worst, or at random.*
 
@@ -1173,7 +1173,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > role-placement=random: decode_failures 2
 
-### `X-chatty` - broadcast-interval-s  `--scenario ridge`
+### `LD-chatty` - broadcast-interval-s  `--scenario ridge`
 
 *The device broadcast interval driven down to three times its default rate.*
 
@@ -1185,7 +1185,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > broadcast-interval-s=300: decode_failures 4
 
-### `X-chatty-hops` - broadcast-interval-s  `--scenario ridge`
+### `LD-chatty-hops` - broadcast-interval-s  `--scenario ridge`
 
 *The same, with every node on a flat hop limit of 7 so nothing damps the flood.*
 
@@ -1197,7 +1197,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > broadcast-interval-s=300: decode_failures 3
 
-### `X-duct` - duct-per-hour  `--scenario ridge`
+### `RF-duct` - duct-per-hour  `--scenario ridge`
 
 *Tropospheric ducting episodes per hour. Not a free gain - read ducted receptions beside collisions.*
 
@@ -1207,7 +1207,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | 0.25 | 0.867 | - | - | 0.955 | 0.956 | 0.678 | 1.18x | 26.0/28.8% | 5.0% | 3 |
 | 1.0 | 0.930 | - | - | 0.979 | 0.979 | 0.810 | 0.85x | 26.6/28.1% | 4.7% | 3 |
 
-### `X-noise` - noise-profile  `--scenario ridge`
+### `RF-noise` - noise-profile  `--scenario ridge`
 
 *The noise floor: none, a smooth field, episodic bursts, or a regular emitter that wipes whatever is in flight.*
 
@@ -1218,7 +1218,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | transient | 0.848 | - | - | 0.956 | 0.957 | 0.616 | 1.25x | 23.4/26.9% | 4.8% | 3 |
 | periodic | 0.679 | - | - | 0.792 | 0.799 | 0.401 | 1.15x | 21.9/24.6% | 4.2% | 3 |
 
-### `X-nomute` - role-mix  `--scenario ridge`
+### `AD-nomute` - role-mix  `--scenario ridge`
 
 *The role census: a real mesh's mix, the same without muted clients, and everything a router.*
 
@@ -1228,7 +1228,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | no-mute | 0.847 | - | - | 0.950 | 0.950 | 0.696 | 1.24x | 21.2/24.6% | 5.0% | 3 |
 | all-routers | 0.892 | - | - | 0.976 | 0.976 | 0.800 | 2.62x | 39.8/43.3% | 5.0% | 3 |
 
-### `X-pulse` - noise-pulse-interval-ms  `--scenario ridge`
+### `RF-pulse` - noise-pulse-interval-ms  `--scenario ridge`
 
 *How often the periodic emitter fires.*
 
@@ -1241,7 +1241,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > noise-pulse-interval-ms=4000: decode_failures 3
 
-### `X-siting` - siting-mix  `--scenario ridge`
+### `AD-siting` - siting-mix  `--scenario ridge`
 
 *Siting against a real role census, including a basement-heavy mesh.*
 
@@ -1251,7 +1251,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 | local-typical | 0.562 | - | - | 0.752 | 0.753 | 0.000 | 1.24x | 22.1/29.7% | 5.1% | 3 |
 | basement-heavy | 0.089 | - | - | 0.316 | 0.317 | 0.000 | 0.62x | 8.4/13.3% | 3.4% | 3 |
 
-### `X-stretch` - stretch  `--scenario ridge`
+### `MS-stretch` - stretch  `--scenario ridge`
 
 *Every distance scaled about the centroid: the same nodes in the same arrangement, further apart.*
 
@@ -1266,7 +1266,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > stretch=1.5: decode_failures 1
 
-### `X-stretch-duct` - duct-per-hour  `--scenario ridge`
+### `RF-stretch-duct` - duct-per-hour  `--scenario ridge`
 
 *Ducting on a stretched mesh, where the long links it creates are the ones that were missing.*
 
@@ -1279,7 +1279,7 @@ Not the same as having done nothing: several arms hold delivery flat by design a
 
 > duct-per-hour=1.0: decode_failures 30
 
-### `X-worst` - role-placement  `--scenario ridge`
+### `AD-worst` - role-placement  `--scenario ridge`
 
 *Router roles on the worst-connected nodes of an already badly sited mesh - the adversarial case.*
 

@@ -2,7 +2,7 @@
  "blocks": [
   {
    "arm": "trigger",
-   "block": "D-cadence",
+   "block": "SF-cadence",
    "cells": [
     {
      "metrics": {
@@ -240,7 +240,7 @@
   },
   {
    "arm": "advert-jitter-s",
-   "block": "D-jitter",
+   "block": "SF-jitter-global",
    "cells": [
     {
      "metrics": {
@@ -472,7 +472,7 @@
   },
   {
    "arm": "resolve",
-   "block": "D-resolve",
+   "block": "SF-resolve",
    "cells": [
     {
      "metrics": {
@@ -658,7 +658,7 @@
   },
   {
    "arm": "capacity",
-   "block": "E-capacity",
+   "block": "SF-capacity",
    "cells": [
     {
      "metrics": {
@@ -942,7 +942,7 @@
   },
   {
    "arm": "signed",
-   "block": "E-signed",
+   "block": "SF-signed",
    "cells": [
     {
      "metrics": {
@@ -1082,7 +1082,7 @@
   },
   {
    "arm": "short-id-bits",
-   "block": "E-width",
+   "block": "SF-width",
    "cells": [
     {
      "metrics": {
@@ -1314,7 +1314,7 @@
   },
   {
    "arm": "burst-loss",
-   "block": "F-burst",
+   "block": "DG-burst",
    "cells": [
     {
      "metrics": {
@@ -1551,7 +1551,7 @@
   },
   {
    "arm": "role-mix",
-   "block": "F-flooding",
+   "block": "AD-flooding",
    "cells": [
     {
      "metrics": {
@@ -1691,7 +1691,7 @@
   },
   {
    "arm": "hop-limit",
-   "block": "F-hoplimit",
+   "block": "RT-hoplimit",
    "cells": [
     {
      "metrics": {
@@ -1923,7 +1923,7 @@
   },
   {
    "arm": "extra-loss",
-   "block": "F-loss",
+   "block": "DG-loss",
    "cells": [
     {
      "metrics": {
@@ -2155,7 +2155,7 @@
   },
   {
    "arm": "burst-loss",
-   "block": "F-outage",
+   "block": "DG-outage",
    "cells": [
     {
      "metrics": {
@@ -2393,7 +2393,7 @@
   },
   {
    "arm": "tx-power",
-   "block": "F-txpower",
+   "block": "RF-txpower",
    "cells": [
     {
      "metrics": {
@@ -2630,7 +2630,7 @@
   },
   {
    "arm": "servers",
-   "block": "G-allrouters",
+   "block": "SF-servers-allrouters",
    "cells": [
     {
      "metrics": {
@@ -2774,7 +2774,7 @@
   },
   {
    "arm": "hops-apart",
-   "block": "G-hops",
+   "block": "SF-hops-flat",
    "cells": [
     {
      "metrics": {
@@ -3011,7 +3011,7 @@
   },
   {
    "arm": "place",
-   "block": "G-place",
+   "block": "SF-place-flat",
    "cells": [
     {
      "metrics": {
@@ -3340,7 +3340,7 @@
   },
   {
    "arm": "servers",
-   "block": "G-servers",
+   "block": "SF-servers-flat",
    "cells": [
     {
      "metrics": {
@@ -3576,7 +3576,7 @@
   },
   {
    "arm": "bucket-mode",
-   "block": "J-bucketmode",
+   "block": "SF-bucket-mode",
    "cells": [
     {
      "metrics": {
@@ -3814,7 +3814,7 @@
   },
   {
    "arm": "time-bucket-s",
-   "block": "J-timewin",
+   "block": "SF-bucket-time",
    "cells": [
     {
      "metrics": {
@@ -4006,7 +4006,7 @@
   },
   {
    "arm": "capacity",
-   "block": "J-wincap",
+   "block": "SF-capacity-window",
    "cells": [
     {
      "metrics": {
@@ -4200,7 +4200,7 @@
   },
   {
    "arm": "window-size",
-   "block": "J-window",
+   "block": "SF-window-size",
    "cells": [
     {
      "metrics": {
@@ -4392,7 +4392,7 @@
   },
   {
    "arm": "nodes",
-   "block": "K-density",
+   "block": "MS-density",
    "cells": [
     {
      "metrics": {
@@ -4670,7 +4670,7 @@
   },
   {
    "arm": "hop-limit",
-   "block": "K-hopspread",
+   "block": "RT-hopspread",
    "cells": [
     {
      "metrics": {
@@ -4856,7 +4856,7 @@
   },
   {
    "arm": "nodes",
-   "block": "K-size",
+   "block": "MS-size",
    "cells": [
     {
      "metrics": {
@@ -5141,7 +5141,7 @@
   },
   {
    "arm": "hop-spread",
-   "block": "K-spread",
+   "block": "RT-spread",
    "cells": [
     {
      "metrics": {
@@ -5281,7 +5281,7 @@
   },
   {
    "arm": "advert-transport",
-   "block": "L-advert",
+   "block": "SF-advert-transport",
    "cells": [
     {
      "metrics": {
@@ -5421,7 +5421,7 @@
   },
   {
    "arm": "provide-transport",
-   "block": "L-provide",
+   "block": "SF-provide-transport",
    "cells": [
     {
      "metrics": {
@@ -5561,7 +5561,7 @@
   },
   {
    "arm": "capacity",
-   "block": "M-capacity",
+   "block": "SF-capacity-local",
    "cells": [
     {
      "metrics": {
@@ -5845,7 +5845,7 @@
   },
   {
    "arm": "replay-ordering",
-   "block": "M-combined",
+   "block": "SF-replay-order-broadcast",
    "cells": [
     {
      "metrics": {
@@ -5989,7 +5989,7 @@
   },
   {
    "arm": "advert-jitter-s",
-   "block": "M-jitter",
+   "block": "SF-jitter-local",
    "cells": [
     {
      "metrics": {
@@ -6221,7 +6221,7 @@
   },
   {
    "arm": "replay-ordering",
-   "block": "M-replayorder",
+   "block": "SF-replay-order",
    "cells": [
     {
      "metrics": {
@@ -6365,7 +6365,7 @@
   },
   {
    "arm": "hops-apart",
-   "block": "N-hops",
+   "block": "SF-hops-spread",
    "cells": [
     {
      "metrics": {
@@ -6649,7 +6649,7 @@
   },
   {
    "arm": "place",
-   "block": "N-place",
+   "block": "SF-place-spread",
    "cells": [
     {
      "metrics": {
@@ -6978,7 +6978,7 @@
   },
   {
    "arm": "servers",
-   "block": "N-servers",
+   "block": "SF-servers-spread",
    "cells": [
     {
      "metrics": {
@@ -7214,7 +7214,7 @@
   },
   {
    "arm": "preset",
-   "block": "P-bw500",
+   "block": "RF-bw500",
    "cells": [
     {
      "metrics": {
@@ -7404,7 +7404,7 @@
   },
   {
    "arm": "catch-up-hours",
-   "block": "P-catchup",
+   "block": "SF-catchup",
    "cells": [
     {
      "metrics": {
@@ -7599,7 +7599,7 @@
   },
   {
    "arm": "no-congestion-scaling",
-   "block": "P-congestion",
+   "block": "TH-congestion",
    "cells": [
     {
      "metrics": {
@@ -7745,7 +7745,7 @@
   },
   {
    "arm": "diurnal",
-   "block": "P-diurnal",
+   "block": "LD-diurnal",
    "cells": [
     {
      "metrics": {
@@ -7931,7 +7931,7 @@
   },
   {
    "arm": "preset",
-   "block": "P-eu-presets",
+   "block": "RF-eu-presets",
    "cells": [
     {
      "metrics": {
@@ -8167,7 +8167,7 @@
   },
   {
    "arm": "preset",
-   "block": "P-preset",
+   "block": "RF-preset",
    "cells": [
     {
      "metrics": {
@@ -8358,7 +8358,7 @@
   },
   {
    "arm": "protocol",
-   "block": "Q-control",
+   "block": "BL-control",
    "cells": [
     {
      "metrics": {
@@ -8502,7 +8502,7 @@
   },
   {
    "arm": "hop-assign",
-   "block": "Q-hopassign",
+   "block": "RT-hopassign",
    "cells": [
     {
      "metrics": {
@@ -8642,7 +8642,7 @@
   },
   {
    "arm": "broadcast-interval-s",
-   "block": "Q-interval",
+   "block": "LD-interval",
    "cells": [
     {
      "metrics": {
@@ -8874,7 +8874,7 @@
   },
   {
    "arm": "protocol",
-   "block": "Q-protocol",
+   "block": "PR-protocol",
    "cells": [
     {
      "metrics": {
@@ -9060,7 +9060,7 @@
   },
   {
    "arm": "topology",
-   "block": "Q-topology",
+   "block": "MS-topology",
    "cells": [
     {
      "metrics": {
@@ -9296,7 +9296,7 @@
   },
   {
    "arm": "no-adopt-hop-recommendation",
-   "block": "R-adopt",
+   "block": "RT-adopt",
    "cells": [
     {
      "metrics": {
@@ -9436,7 +9436,7 @@
   },
   {
    "arm": "congestion-input",
-   "block": "R-congestion-input",
+   "block": "TH-congestion-input",
    "cells": [
     {
      "metrics": {
@@ -9580,7 +9580,7 @@
   },
   {
    "arm": "congestion-mode",
-   "block": "R-congestion-mode",
+   "block": "TH-congestion-mode",
    "cells": [
     {
      "metrics": {
@@ -9720,7 +9720,7 @@
   },
   {
    "arm": "coding-rate-ladder",
-   "block": "R-crladder",
+   "block": "PR-crladder",
    "cells": [
     {
      "metrics": {
@@ -9860,7 +9860,7 @@
   },
   {
    "arm": "dm-mode",
-   "block": "R-dmmode",
+   "block": "DM-mode",
    "cells": [
     {
      "metrics": {
@@ -10046,7 +10046,7 @@
   },
   {
    "arm": "dm-mode",
-   "block": "R-dmmode-cr",
+   "block": "PR-dmmode-cr",
    "cells": [
     {
      "metrics": {
@@ -10186,7 +10186,7 @@
   },
   {
    "arm": "favourite-routers",
-   "block": "R-favourites",
+   "block": "RT-favourites",
    "cells": [
     {
      "metrics": {
@@ -10326,7 +10326,7 @@
   },
   {
    "arm": "profile",
-   "block": "R-firmware",
+   "block": "FW-firmware",
    "cells": [
     {
      "metrics": {
@@ -10466,7 +10466,7 @@
   },
   {
    "arm": "nodes",
-   "block": "R-hopscale",
+   "block": "MS-hopscale",
    "cells": [
     {
      "metrics": {
@@ -10703,7 +10703,7 @@
   },
   {
    "arm": "max-num-nodes",
-   "block": "R-hotstore",
+   "block": "DB-hotstore",
    "cells": [
     {
      "metrics": {
@@ -10939,7 +10939,7 @@
   },
   {
    "arm": "max-num-nodes",
-   "block": "R-hotstore-stress",
+   "block": "DB-hotstore-stress",
    "cells": [
     {
      "metrics": {
@@ -11129,7 +11129,7 @@
   },
   {
    "arm": "legacy-fraction",
-   "block": "R-mixed",
+   "block": "FW-mixed",
    "cells": [
     {
      "metrics": {
@@ -11365,7 +11365,7 @@
   },
   {
    "arm": "legacy-fraction",
-   "block": "R-mixed-26",
+   "block": "FW-mixed-26",
    "cells": [
     {
      "metrics": {
@@ -11597,7 +11597,7 @@
   },
   {
    "arm": "nodes",
-   "block": "R-oversubscribed",
+   "block": "MS-oversubscribed",
    "cells": [
     {
      "metrics": {
@@ -11788,7 +11788,7 @@
   },
   {
    "arm": "platform-mix",
-   "block": "R-platform",
+   "block": "DB-platform",
    "cells": [
     {
      "metrics": {
@@ -11978,7 +11978,7 @@
   },
   {
    "arm": "rebroadcast-mode",
-   "block": "R-rebroadcast",
+   "block": "RT-rebroadcast",
    "cells": [
     {
      "metrics": {
@@ -12164,7 +12164,7 @@
   },
   {
    "arm": "extra-repeats",
-   "block": "R-repeats",
+   "block": "PR-repeats",
    "cells": [
     {
      "metrics": {
@@ -12304,7 +12304,7 @@
   },
   {
    "arm": "extra-repeats",
-   "block": "R-repeats-busy",
+   "block": "PR-repeats-busy",
    "cells": [
     {
      "metrics": {
@@ -12444,7 +12444,7 @@
   },
   {
    "arm": "role-mix",
-   "block": "R-roles",
+   "block": "MS-roles",
    "cells": [
     {
      "metrics": {
@@ -12584,7 +12584,7 @@
   },
   {
    "arm": "role-mix",
-   "block": "R-roles-fav",
+   "block": "MS-roles-fav",
    "cells": [
     {
      "metrics": {
@@ -12724,7 +12724,7 @@
   },
   {
    "arm": "router-late-fraction",
-   "block": "R-routerlate",
+   "block": "MS-router-late",
    "cells": [
     {
      "metrics": {
@@ -12956,7 +12956,7 @@
   },
   {
    "arm": "signature-policy",
-   "block": "R-signing",
+   "block": "SC-signing",
    "cells": [
     {
      "metrics": {
@@ -13142,7 +13142,7 @@
   },
   {
    "arm": "profile-flag",
-   "block": "R-signing-cost",
+   "block": "FW-signing-cost",
    "cells": [
     {
      "metrics": {
@@ -13282,7 +13282,7 @@
   },
   {
    "arm": "siting-mix",
-   "block": "R-siting",
+   "block": "MS-siting",
    "cells": [
     {
      "metrics": {
@@ -13518,7 +13518,7 @@
   },
   {
    "arm": "sr-retries",
-   "block": "R-srretries",
+   "block": "SF-sr-retries",
    "cells": [
     {
      "metrics": {
@@ -13750,7 +13750,7 @@
   },
   {
    "arm": "traceroute-per-hour",
-   "block": "R-traceroute",
+   "block": "LD-traceroute",
    "cells": [
     {
      "metrics": {
@@ -13982,7 +13982,7 @@
   },
   {
    "arm": "traceroute-per-hour",
-   "block": "R-traceroute-small",
+   "block": "LD-traceroute-small",
    "cells": [
     {
      "metrics": {
@@ -14130,7 +14130,7 @@
   },
   {
    "arm": "profile",
-   "block": "R-versions",
+   "block": "FW-versions",
    "cells": [
     {
      "metrics": {
@@ -14408,7 +14408,7 @@
   },
   {
    "arm": "warm-num-nodes",
-   "block": "R-warm",
+   "block": "DB-warm",
    "cells": [
     {
      "metrics": {
@@ -14649,7 +14649,7 @@
   },
   {
    "arm": "amplifier-mix",
-   "block": "X-amplifiers",
+   "block": "AD-amplifiers",
    "cells": [
     {
      "metrics": {
@@ -14839,7 +14839,7 @@
   },
   {
    "arm": "amplify-worst",
-   "block": "X-amplify-worst",
+   "block": "AD-amplify-worst",
    "cells": [
     {
      "metrics": {
@@ -15029,7 +15029,7 @@
   },
   {
    "arm": "role-placement",
-   "block": "X-badrouters",
+   "block": "AD-badrouters",
    "cells": [
     {
      "metrics": {
@@ -15219,7 +15219,7 @@
   },
   {
    "arm": "broadcast-interval-s",
-   "block": "X-chatty",
+   "block": "LD-chatty",
    "cells": [
     {
      "metrics": {
@@ -15409,7 +15409,7 @@
   },
   {
    "arm": "broadcast-interval-s",
-   "block": "X-chatty-hops",
+   "block": "LD-chatty-hops",
    "cells": [
     {
      "metrics": {
@@ -15599,7 +15599,7 @@
   },
   {
    "arm": "duct-per-hour",
-   "block": "X-duct",
+   "block": "RF-duct",
    "cells": [
     {
      "metrics": {
@@ -15785,7 +15785,7 @@
   },
   {
    "arm": "noise-profile",
-   "block": "X-noise",
+   "block": "RF-noise",
    "cells": [
     {
      "metrics": {
@@ -16021,7 +16021,7 @@
   },
   {
    "arm": "role-mix",
-   "block": "X-nomute",
+   "block": "AD-nomute",
    "cells": [
     {
      "metrics": {
@@ -16207,7 +16207,7 @@
   },
   {
    "arm": "noise-pulse-interval-ms",
-   "block": "X-pulse",
+   "block": "RF-pulse",
    "cells": [
     {
      "metrics": {
@@ -16443,7 +16443,7 @@
   },
   {
    "arm": "siting-mix",
-   "block": "X-siting",
+   "block": "AD-siting",
    "cells": [
     {
      "metrics": {
@@ -16635,7 +16635,7 @@
   },
   {
    "arm": "stretch",
-   "block": "X-stretch",
+   "block": "MS-stretch",
    "cells": [
     {
      "metrics": {
@@ -16873,7 +16873,7 @@
   },
   {
    "arm": "duct-per-hour",
-   "block": "X-stretch-duct",
+   "block": "RF-stretch-duct",
    "cells": [
     {
      "metrics": {
@@ -17018,7 +17018,7 @@
   },
   {
    "arm": "role-placement",
-   "block": "X-worst",
+   "block": "AD-worst",
    "cells": [
     {
      "metrics": {
@@ -17169,104 +17169,104 @@
   "failures": [],
   "ok": true,
   "warnings": [
-   "D-cadence: trigger=interval: misdecodes 26",
-   "D-cadence: trigger=aimd: misdecodes 1",
-   "D-cadence: trigger=bucket+interval: misdecodes 32",
-   "E-capacity: capacity=4: decode_failures 78",
-   "E-capacity: capacity=8: decode_failures 55",
-   "E-capacity: capacity=16: decode_failures 3",
-   "F-burst: burst-loss=0.2: decode_failures 3",
-   "F-burst: burst-loss=0.3: decode_failures 20",
-   "F-outage: burst-loss=0.1: decode_failures 30",
-   "F-outage: burst-loss=0.2: decode_failures 46",
-   "F-outage: burst-loss=0.3: decode_failures 33",
-   "F-txpower: tx-power=22: decode_failures 22",
-   "F-txpower: tx-power=14: decode_failures 4",
-   "G-allrouters: servers=6: misdecodes 2",
-   "G-hops: hops-apart=3: decode_failures 11",
-   "G-hops: hops-apart=4: decode_failures 20",
-   "G-place: place=spread: decode_failures 34",
-   "G-place: place=random-clients: decode_failures 34",
-   "G-servers: servers=8: misdecodes 1",
-   "J-bucketmode: bucket-mode=global: misdecodes 42",
-   "J-bucketmode: bucket-mode=time: misdecodes 44",
-   "J-bucketmode: bucket-mode=window: misdecodes 20",
-   "J-timewin: time-bucket-s=600: misdecodes 106",
-   "J-timewin: time-bucket-s=1800: misdecodes 44",
-   "J-timewin: time-bucket-s=3600: misdecodes 11",
-   "J-wincap: capacity=8: misdecodes 18",
-   "J-wincap: capacity=8: decode_failures 21",
-   "J-wincap: capacity=16: misdecodes 24",
-   "J-wincap: capacity=16: decode_failures 1",
-   "J-wincap: capacity=32: misdecodes 20",
-   "J-window: window-size=8: misdecodes 149",
-   "J-window: window-size=16: misdecodes 72",
-   "J-window: window-size=32: misdecodes 20",
-   "K-size: nodes=120: decode_failures 68",
-   "K-size: nodes=150: decode_failures 9",
-   "K-size: slower: 8.61 s per simulated hour against 3.4 over 4 prior run(s) - 2.5x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright",
-   "M-capacity: capacity=4: decode_failures 78",
-   "M-capacity: capacity=8: decode_failures 55",
-   "M-capacity: capacity=16: decode_failures 3",
-   "M-combined: replay-ordering=heard: misdecodes 14",
-   "M-replayorder: replay-ordering=heard: misdecodes 21",
-   "N-hops: hops-apart=3: decode_failures 11",
-   "N-hops: hops-apart=4: decode_failures 20",
-   "N-hops: hops-apart=5: decode_failures 19",
-   "N-place: place=spread: decode_failures 34",
-   "N-place: place=random-clients: decode_failures 34",
-   "N-servers: servers=8: misdecodes 1",
-   "P-bw500: preset=MEDIUM_TURBO: decode_failures 13",
-   "P-catchup: catch-up-hours=: misdecodes 32",
-   "P-catchup: catch-up-hours=02-06: decode_failures 5",
-   "P-catchup: catch-up-hours=00-08: misdecodes 1",
-   "P-catchup: catch-up-hours=00-08: decode_failures 5",
-   "P-catchup: faster: 4.79 s per simulated hour against 10.1 over 4 prior run(s) - 2.1x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate",
-   "P-congestion: no-congestion-scaling=True: queue drops 11.5% of transmissions - airtime here is measured through a cap",
-   "P-congestion: no-congestion-scaling=True: decode_failures 83",
-   "P-eu-presets: preset=SHORT_FAST: decode_failures 14",
-   "P-preset: preset=SHORT_FAST: decode_failures 14",
-   "P-preset: preset=LONG_MODERATE: decode_failures 3",
-   "Q-control: protocol=sr: decode_failures 11",
-   "Q-topology: topology=clustered: misdecodes 1",
-   "R-congestion-input: faster: 9.11 s per simulated hour against 18.5 over 4 prior run(s) - 2.0x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate",
-   "R-hopscale: nodes=120: decode_failures 68",
-   "R-hopscale: nodes=500: decode_failures 55",
-   "R-hotstore: max-num-nodes=10: decode_failures 1",
-   "R-hotstore-stress: max-num-nodes=10: decode_failures 3",
-   "R-mixed: legacy-fraction=0.75: misdecodes 1",
-   "R-oversubscribed: nodes=120: decode_failures 34",
-   "R-oversubscribed: nodes=500: decode_failures 76",
-   "R-platform: platform-mix=constrained: decode_failures 1",
-   "R-siting: siting-mix=backbone: misdecodes 1",
-   "R-traceroute-small: traceroute-per-hour=0.0: queue drops 12.9% of transmissions - airtime here is measured through a cap",
-   "R-traceroute-small: traceroute-per-hour=0.0: decode_failures 111",
-   "R-traceroute-small: traceroute-per-hour=1.0: queue drops 20.4% of transmissions - airtime here is measured through a cap",
-   "R-traceroute-small: traceroute-per-hour=1.0: decode_failures 85",
-   "R-warm: warm-num-nodes=0: queue drops 12.9% of transmissions - airtime here is measured through a cap",
-   "R-warm: warm-num-nodes=0: decode_failures 111",
-   "R-warm: warm-num-nodes=25: queue drops 12.9% of transmissions - airtime here is measured through a cap",
-   "R-warm: warm-num-nodes=25: decode_failures 111",
-   "R-warm: warm-num-nodes=100: queue drops 12.9% of transmissions - airtime here is measured through a cap",
-   "R-warm: warm-num-nodes=100: decode_failures 111",
-   "R-warm: warm-num-nodes=2000: queue drops 12.9% of transmissions - airtime here is measured through a cap",
-   "R-warm: warm-num-nodes=2000: decode_failures 111",
-   "X-amplifiers: amplifier-mix=sprinkled: misdecodes 1",
-   "X-amplify-worst: amplify-worst=0.1: decode_failures 3",
-   "X-badrouters: role-placement=inverse: decode_failures 5",
-   "X-chatty-hops: broadcast-interval-s=300: decode_failures 4",
-   "X-chatty: broadcast-interval-s=300: decode_failures 13",
-   "X-noise: noise-profile=transient: misdecodes 1",
-   "X-pulse: noise-pulse-interval-ms=4000: decode_failures 2",
-   "X-siting: siting-mix=local-typical: decode_failures 13",
-   "X-siting: slower: 2.72 s per simulated hour against 1.3 over 4 prior run(s) - 2.1x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright",
-   "X-stretch-duct: duct-per-hour=0.0: decode_failures 8",
-   "X-stretch-duct: duct-per-hour=1.0: decode_failures 1",
-   "X-stretch: stretch=1.25: decode_failures 40",
-   "X-stretch: stretch=1.5: decode_failures 8",
-   "X-stretch: stretch=2.0: decode_failures 1",
-   "X-worst: role-placement=inverse: decode_failures 3",
-   "X-worst: faster: 4.84 s per simulated hour against 10.7 over 4 prior run(s) - 2.2x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate"
+   "SF-cadence: trigger=interval: misdecodes 26",
+   "SF-cadence: trigger=aimd: misdecodes 1",
+   "SF-cadence: trigger=bucket+interval: misdecodes 32",
+   "SF-capacity: capacity=4: decode_failures 78",
+   "SF-capacity: capacity=8: decode_failures 55",
+   "SF-capacity: capacity=16: decode_failures 3",
+   "DG-burst: burst-loss=0.2: decode_failures 3",
+   "DG-burst: burst-loss=0.3: decode_failures 20",
+   "DG-outage: burst-loss=0.1: decode_failures 30",
+   "DG-outage: burst-loss=0.2: decode_failures 46",
+   "DG-outage: burst-loss=0.3: decode_failures 33",
+   "RF-txpower: tx-power=22: decode_failures 22",
+   "RF-txpower: tx-power=14: decode_failures 4",
+   "SF-servers-allrouters: servers=6: misdecodes 2",
+   "SF-hops-flat: hops-apart=3: decode_failures 11",
+   "SF-hops-flat: hops-apart=4: decode_failures 20",
+   "SF-place-flat: place=spread: decode_failures 34",
+   "SF-place-flat: place=random-clients: decode_failures 34",
+   "SF-servers-flat: servers=8: misdecodes 1",
+   "SF-bucket-mode: bucket-mode=global: misdecodes 42",
+   "SF-bucket-mode: bucket-mode=time: misdecodes 44",
+   "SF-bucket-mode: bucket-mode=window: misdecodes 20",
+   "SF-bucket-time: time-bucket-s=600: misdecodes 106",
+   "SF-bucket-time: time-bucket-s=1800: misdecodes 44",
+   "SF-bucket-time: time-bucket-s=3600: misdecodes 11",
+   "SF-capacity-window: capacity=8: misdecodes 18",
+   "SF-capacity-window: capacity=8: decode_failures 21",
+   "SF-capacity-window: capacity=16: misdecodes 24",
+   "SF-capacity-window: capacity=16: decode_failures 1",
+   "SF-capacity-window: capacity=32: misdecodes 20",
+   "SF-window-size: window-size=8: misdecodes 149",
+   "SF-window-size: window-size=16: misdecodes 72",
+   "SF-window-size: window-size=32: misdecodes 20",
+   "MS-size: nodes=120: decode_failures 68",
+   "MS-size: nodes=150: decode_failures 9",
+   "MS-size: slower: 8.61 s per simulated hour against 3.4 over 4 prior run(s) - 2.5x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright",
+   "SF-capacity-local: capacity=4: decode_failures 78",
+   "SF-capacity-local: capacity=8: decode_failures 55",
+   "SF-capacity-local: capacity=16: decode_failures 3",
+   "SF-replay-order-broadcast: replay-ordering=heard: misdecodes 14",
+   "SF-replay-order: replay-ordering=heard: misdecodes 21",
+   "SF-hops-spread: hops-apart=3: decode_failures 11",
+   "SF-hops-spread: hops-apart=4: decode_failures 20",
+   "SF-hops-spread: hops-apart=5: decode_failures 19",
+   "SF-place-spread: place=spread: decode_failures 34",
+   "SF-place-spread: place=random-clients: decode_failures 34",
+   "SF-servers-spread: servers=8: misdecodes 1",
+   "RF-bw500: preset=MEDIUM_TURBO: decode_failures 13",
+   "SF-catchup: catch-up-hours=: misdecodes 32",
+   "SF-catchup: catch-up-hours=02-06: decode_failures 5",
+   "SF-catchup: catch-up-hours=00-08: misdecodes 1",
+   "SF-catchup: catch-up-hours=00-08: decode_failures 5",
+   "SF-catchup: faster: 4.79 s per simulated hour against 10.1 over 4 prior run(s) - 2.1x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate",
+   "TH-congestion: no-congestion-scaling=True: queue drops 11.5% of transmissions - airtime here is measured through a cap",
+   "TH-congestion: no-congestion-scaling=True: decode_failures 83",
+   "RF-eu-presets: preset=SHORT_FAST: decode_failures 14",
+   "RF-preset: preset=SHORT_FAST: decode_failures 14",
+   "RF-preset: preset=LONG_MODERATE: decode_failures 3",
+   "BL-control: protocol=sr: decode_failures 11",
+   "MS-topology: topology=clustered: misdecodes 1",
+   "TH-congestion-input: faster: 9.11 s per simulated hour against 18.5 over 4 prior run(s) - 2.0x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate",
+   "MS-hopscale: nodes=120: decode_failures 68",
+   "MS-hopscale: nodes=500: decode_failures 55",
+   "DB-hotstore: max-num-nodes=10: decode_failures 1",
+   "DB-hotstore-stress: max-num-nodes=10: decode_failures 3",
+   "FW-mixed: legacy-fraction=0.75: misdecodes 1",
+   "MS-oversubscribed: nodes=120: decode_failures 34",
+   "MS-oversubscribed: nodes=500: decode_failures 76",
+   "DB-platform: platform-mix=constrained: decode_failures 1",
+   "MS-siting: siting-mix=backbone: misdecodes 1",
+   "LD-traceroute-small: traceroute-per-hour=0.0: queue drops 12.9% of transmissions - airtime here is measured through a cap",
+   "LD-traceroute-small: traceroute-per-hour=0.0: decode_failures 111",
+   "LD-traceroute-small: traceroute-per-hour=1.0: queue drops 20.4% of transmissions - airtime here is measured through a cap",
+   "LD-traceroute-small: traceroute-per-hour=1.0: decode_failures 85",
+   "DB-warm: warm-num-nodes=0: queue drops 12.9% of transmissions - airtime here is measured through a cap",
+   "DB-warm: warm-num-nodes=0: decode_failures 111",
+   "DB-warm: warm-num-nodes=25: queue drops 12.9% of transmissions - airtime here is measured through a cap",
+   "DB-warm: warm-num-nodes=25: decode_failures 111",
+   "DB-warm: warm-num-nodes=100: queue drops 12.9% of transmissions - airtime here is measured through a cap",
+   "DB-warm: warm-num-nodes=100: decode_failures 111",
+   "DB-warm: warm-num-nodes=2000: queue drops 12.9% of transmissions - airtime here is measured through a cap",
+   "DB-warm: warm-num-nodes=2000: decode_failures 111",
+   "AD-amplifiers: amplifier-mix=sprinkled: misdecodes 1",
+   "AD-amplify-worst: amplify-worst=0.1: decode_failures 3",
+   "AD-badrouters: role-placement=inverse: decode_failures 5",
+   "LD-chatty-hops: broadcast-interval-s=300: decode_failures 4",
+   "LD-chatty: broadcast-interval-s=300: decode_failures 13",
+   "RF-noise: noise-profile=transient: misdecodes 1",
+   "RF-pulse: noise-pulse-interval-ms=4000: decode_failures 2",
+   "AD-siting: siting-mix=local-typical: decode_failures 13",
+   "AD-siting: slower: 2.72 s per simulated hour against 1.3 over 4 prior run(s) - 2.1x, and a runtime regression is invisible to `timeout-minutes` until it fails a job outright",
+   "RF-stretch-duct: duct-per-hour=0.0: decode_failures 8",
+   "RF-stretch-duct: duct-per-hour=1.0: decode_failures 1",
+   "MS-stretch: stretch=1.25: decode_failures 40",
+   "MS-stretch: stretch=1.5: decode_failures 8",
+   "MS-stretch: stretch=2.0: decode_failures 1",
+   "AD-worst: role-placement=inverse: decode_failures 3",
+   "AD-worst: faster: 4.84 s per simulated hour against 10.7 over 4 prior run(s) - 2.2x quicker, which is worth a look: a fragmented mesh or an arm that stopped being read both cost less to simulate"
   ],
   "warnings_by_kind": {
    "faster": {
@@ -17289,7 +17289,7 @@
  },
  "generated": "2026-08-25T05:55:18+00:00",
  "missing_blocks": [
-  "F-preset-turbo"
+  "RF-preset-turbo"
  ],
  "run_id": "blocks-2026-08-25-6335397",
  "scenario_observed": [

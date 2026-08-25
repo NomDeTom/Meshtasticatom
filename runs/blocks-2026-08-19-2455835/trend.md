@@ -19,12 +19,12 @@ Ranked by how far the arm moves whichever success it moves most. The four measur
 
 | block | arm | moved | low → high | spread | text | dir | cells |
 | --- | --- | --- | --- | --: | --- | :-: | --: |
-| `D-resolve` | resolve | **held** | 0.857 → 0.861 | 0.004 | 0.632 → 0.635 | = | 3 |
-| `E-signed` | signed | **text** | 0.632 → 0.632 | 0.000 | 0.632 → 0.632 | = | 2 |
+| `SF-resolve` | resolve | **held** | 0.857 → 0.861 | 0.004 | 0.632 → 0.635 | = | 3 |
+| `SF-signed` | signed | **text** | 0.632 → 0.632 | 0.000 | 0.632 → 0.632 | = | 2 |
 
 ## Every block
 
-### `D-resolve` - resolve  `--scenario ridge`
+### `SF-resolve` - resolve  `--scenario ridge`
 
 | value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |
@@ -32,7 +32,7 @@ Ranked by how far the arm moves whichever success it moves most. The four measur
 | enum | 0.635 | - | - | 0.861 | 0.874 | 0.000 | 1.80x | 35.4/37.3% | 8.5% | 3 |
 | hybrid | 0.632 | - | - | 0.857 | 0.861 | 0.000 | 1.81x | 36.0/37.5% | 8.3% | 3 |
 
-### `E-signed` - signed  `--scenario ridge`
+### `SF-signed` - signed  `--scenario ridge`
 
 | value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |
