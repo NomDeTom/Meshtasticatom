@@ -2813,6 +2813,29 @@ print(",".join(failed))
             "LEGACY_BLOCKS names a block that no longer exists",
         )
 
+    def test_a_scheduled_run_id_cannot_collide_with_the_same_day(self):
+        """collate writes runs/<run_id> with no merge, so a repeated id overwrites a whole digest.
+
+        The matrix sweep was `matrix-<date>` alone - its seeds are fixed, so it had no seed base to
+        disambiguate with - and a second run on one day replaced the first. It carries only its two
+        stalest cells, so the survivor would not even have held the same ones.
+        """
+        import pathlib
+        import re
+
+        root = pathlib.Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        for wf in ("sim_sweep_blocks.yml", "sim_sweep_matrix.yml", "sim_design.yml"):
+            text = (root / wf).read_text()
+            ids = re.findall(r'run_id=(\S+?)"', text)
+            self.assertTrue(ids, f"{wf} sets no run_id")
+            for expr in ids:
+                # A date alone repeats. Something per-run has to be in the name: the seed base the
+                # run drew, or the minute it started.
+                self.assertTrue(
+                    "seed_base" in expr or "%H%M" in expr,
+                    f"{wf} builds run_id from a date alone ({expr}); two runs in one day collide",
+                )
+
     def test_every_batch_names_a_block_that_exists(self):
         """A batch is the only place a name is repeated, and nothing else checks it.
 

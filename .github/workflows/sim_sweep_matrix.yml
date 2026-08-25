@@ -137,7 +137,14 @@ jobs:
           # Cell names alone, never the shards: this is what the digest is checked against, and all
           # five shards of a cell carry the same `block` and collate as one.
           print(f"cells={' '.join(chosen)}")
-          print(f"run_id=matrix-{datetime.date.today().isoformat()}")
+          # UTC minute, not just the date. The blocks and design sweeps disambiguate a same-day
+          # re-run with their seed base; this one has no seed base to use - its five seeds are fixed
+          # so the cells stay paired - so a bare date meant two runs on one day wrote the same
+          # directory and collate overwrote the first, with no merge and no warning. A rotation run
+          # carries only its two stalest cells, so the survivor would not even hold the same ones.
+          # Zero-padded, so a name still sorts chronologically.
+          stamp = datetime.datetime.now(datetime.timezone.utc)
+          print(f"run_id=matrix-{stamp:%Y-%m-%d-%H%M}")
           PY
 
   matrix:
