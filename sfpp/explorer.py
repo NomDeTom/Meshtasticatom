@@ -991,6 +991,72 @@ if (sc) sc.addEventListener('change', apply);
 """
 
 
+def render_making():
+    """What produced the runs on this page: two styles of question, three workflows asking them.
+
+    Static prose, not derived from the archive. It is here because the page mixes producers - one
+    block list holds both `<DD>-subject` and `batumi-...` cells - and nothing else on the page says
+    why, or which of the two a row came from.
+    """
+    return [
+        '<section class="tab-panel" data-tab="making" hidden>',
+        "<h2>How these runs are made</h2>",
+        '<p class="sub">Everything here is written by scheduled workflows into one archive branch, '
+        "and this page is rebuilt from that archive. They ask <b>two different kinds of question</b>, "
+        "which is why one block list holds two naming conventions: a synthetic mesh moving one flag "
+        "at a time, and a real mesh over real ground.</p>",
+        '<div class="panel">',
+        "<div class=\"blockhead\"><h3>1. The mechanism sweep</h3>"
+        '<span class="arm">synthetic mesh</span><span class="pill">nightly 02:10 UTC</span>'
+        '<span class="pill">runs/blocks-&lt;date&gt;-&lt;seed&gt;</span></div>',
+        "<p><b>What does this one variable do to a mesh?</b> Every block <code>sfpp.sweep</code> "
+        "declares - 87 of them - against a generated mesh, with one landform and one seed base drawn "
+        "for the whole night so every block that night saw the same draw. One arm moves per block; "
+        "everything else is held. Each block is its own job, because a single job running all 87 in "
+        "sequence is about six hours of simulator time and one slow block would take the night down "
+        "with it.</p>",
+        "<p>Cells are named <code class=\"mono\">&lt;DD&gt;-subject</code> - a two-letter domain and a "
+        "kebab tail, <code>RF-preset-turbo</code>, <code>SF-capacity</code>, <code>DG-outage</code>. "
+        "The archive is switched <b>on in every cell</b>, so this style can say what a variable does "
+        "and can never say what the archive itself is worth.</p>",
+        "</div>",
+        '<div class="panel">',
+        "<div class=\"blockhead\"><h3>2. Real ground</h3>"
+        '<span class="arm">Batumi, real geometry and terrain</span>'
+        '<span class="pill">two workflows</span>'
+        '<span class="pill">runs/matrix-&lt;date&gt;, runs/design-&lt;date&gt;-&lt;seed&gt;</span></div>',
+        "<p>Both run over a real node snapshot with matching terrain, so their cells are named for the "
+        "ground rather than a domain: <code class=\"mono\">batumi-x1-LONG_FAST</code>, "
+        "<code class=\"mono\">batumi-coding-rate-ladder</code> - scenario, mirror count, then the thing "
+        "being varied. They predate the domain scheme and are not governed by it.</p>",
+        "<p>They are heavier than the mechanism sweep: the link build is O(n&sup2;) with a terrain "
+        "profile and a clutter walk per pair, so a mirrored cell spends most of its time before the "
+        "simulation starts. Neither runs its whole grid nightly - each night takes the stalest cells "
+        "it has not covered recently, so a full pass completes over roughly a week.</p>",
+        '<p class="sub" style="margin:.8rem 0 .3rem"><b>Sim Sweep (matrix)</b> &middot; 03:40 UTC &middot; '
+        "three presets, two scales, three placements, three archive counts, five seeds, with a "
+        "no-archive baseline per seed per scale. Asks whether a preset ordering survives scaling, and "
+        "whether any deliberate placement beats picking nodes at random.</p>",
+        '<p class="sub" style="margin:.3rem 0 0"><b>Sim Design (cross)</b> &middot; 04:40 UTC &middot; a '
+        "three-axis cross: what the archive is configured as, against what could be deployed instead "
+        "of it, on each mesh in the round. This is the one that <b>can</b> answer what the archive is "
+        "worth, because the archive sits on an axis rather than being on everywhere.</p>",
+        "</div>",
+        '<div class="panel">',
+        "<div class=\"blockhead\"><h3>What joins them up</h3></div>",
+        "<p><b>Sim Collate</b> is called by all three rather than scheduled. It reduces a run to the "
+        "two files this page reads - <code>summary.json</code> and <code>trend.md</code> - and applies "
+        "the standing gates, so a run that produced an impossible number is caught where it was made.</p>",
+        "<p><b>Sim Results Explorer</b> rebuilds this page at 06:20 UTC, after all three producers have "
+        "finished. It reads <b>only the digests, never the raw block JSONs</b>, so the archive can drop "
+        "raw runs without the page losing its history - and a figure that lives beside a dropped JSON "
+        "can never be shown here at all, which is why the charts are drawn in the browser from numbers "
+        "embedded in the page.</p>",
+        "</div>",
+        "</section>",
+    ]
+
+
 def render_schedule(sched):
     """The declared test matrix against what the archive holds - what is done, and what is not."""
     out = [
@@ -1375,6 +1441,7 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
         + (f' <span class="count">{flagged} flags</span>' if flagged else "")
         + "</button>",
         '<button data-tab="runs" role="tab" aria-selected="false">Runs</button>',
+        '<button data-tab="making" role="tab" aria-selected="false">How runs are made</button>',
         "</nav>",
     ]
 
@@ -1517,6 +1584,7 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
     out += ["</section>"]
     out += render_schedule(sched)
     out += render_health(health)
+    out += render_making()
     out += [
         '<section class="tab-panel" data-tab="runs" hidden>',
         "<h2>Runs</h2>",
