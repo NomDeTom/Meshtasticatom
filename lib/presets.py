@@ -11,7 +11,6 @@ from pathlib import Path
 
 import yaml
 
-from lib.node import node_configs_from_yaml, origin_from_yaml
 from lib.terrain import TerrainGrid
 
 
@@ -58,6 +57,9 @@ def load_preset_raw(name):
 
 
 def load_preset_node_configs(name, period):
+    # Lazy: only the node/mesh simulation stack needs simpy, and most preset readers don't.
+    from lib.node import node_configs_from_yaml
+
     return node_configs_from_yaml(load_preset_raw(name), period)
 
 
@@ -144,6 +146,8 @@ def preset_calibration_envelope_m(name):
 
 
 def preset_origin(name):
+    from lib.node import origin_from_yaml
+
     return origin_from_yaml(load_preset_raw(name))
 
 

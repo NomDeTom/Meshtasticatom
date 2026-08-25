@@ -102,9 +102,9 @@ def derive(blocks):
     metrics = []
 
     # --- already answered well enough to state, from rounds two and three ---
-    place = _arm(blocks, "N-place") + _arm(blocks, "G-place")
-    hops = _arm(blocks, "N-hops") + _arm(blocks, "G-hops")
-    servers = _arm(blocks, "N-servers") + _arm(blocks, "G-servers")
+    place = _arm(blocks, "SF-place-spread") + _arm(blocks, "SF-place-flat")
+    hops = _arm(blocks, "SF-hops-spread") + _arm(blocks, "SF-hops-flat")
+    servers = _arm(blocks, "SF-servers-spread") + _arm(blocks, "SF-servers-flat")
     if hops and servers:
         metrics.append(
             Metric(
@@ -133,7 +133,7 @@ def derive(blocks):
         )
 
     cad = (
-        _arm(blocks, "D-cadence") + _arm(blocks, "M-jitter") + _arm(blocks, "D-jitter")
+        _arm(blocks, "SF-cadence") + _arm(blocks, "SF-jitter-local") + _arm(blocks, "SF-jitter-global")
     )
     if cad:
         metrics.append(
@@ -150,7 +150,7 @@ def derive(blocks):
             )
         )
 
-    cap = _arm(blocks, "M-capacity") + _arm(blocks, "E-capacity")
+    cap = _arm(blocks, "SF-capacity-local") + _arm(blocks, "SF-capacity")
     if cap:
         metrics.append(
             Metric(
@@ -166,7 +166,7 @@ def derive(blocks):
         )
 
     # --- round four's own, only when its blocks exist ---
-    ci = _arm(blocks, "R-congestion-input")
+    ci = _arm(blocks, "TH-congestion-input")
     if ci:
         cells = _cells(blocks[ci[0]])
         hot = _mean(cells.get("hotstore", []), ("traffic", "channel_utilisation"))
@@ -186,7 +186,7 @@ def derive(blocks):
                 )
             )
 
-    rp = _arm(blocks, "R-srretries")
+    rp = _arm(blocks, "SF-sr-retries")
     if rp:
         cells = _cells(blocks[rp[0]])
         best, best_v = None, -1
@@ -207,7 +207,7 @@ def derive(blocks):
                 )
             )
 
-    over = _arm(blocks, "R-oversubscribed") + _arm(blocks, "R-hotstore-stress")
+    over = _arm(blocks, "MS-oversubscribed") + _arm(blocks, "DB-hotstore-stress")
     if over:
         metrics.append(
             Metric(
@@ -246,10 +246,10 @@ def report(runs_dir, markdown=False):
         missing = [
             b
             for b in (
-                "R-oversubscribed",
-                "R-congestion-input",
-                "R-srretries",
-                "R-hotstore-stress",
+                "MS-oversubscribed",
+                "TH-congestion-input",
+                "SF-sr-retries",
+                "DB-hotstore-stress",
             )
             if not _arm(blocks, b)
         ]

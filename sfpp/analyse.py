@@ -6,7 +6,7 @@ own text reception in each cell. That column is the one that shows reconciliatio
 in the wrong currency - a chattier cadence congests the channel the archive is fed from.
 
 Usage, from sim/:
-    python3 -m sfpp.analyse --runs <dir> [--block D-cadence]
+    python3 -m sfpp.analyse --runs <dir> [--block SF-cadence]
 """
 
 import argparse

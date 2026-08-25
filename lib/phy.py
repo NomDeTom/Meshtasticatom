@@ -10,8 +10,10 @@ NUM_SYM_CAD_24GHZ = 4
 
 # Demodulator floor per spreading factor, from the SX1262 datasheet (rev 2.1, table 13-11). These
 # are the numbers the preset sensitivities are built from: a preset's sensitivity is kTB for its
-# bandwidth, plus the receiver noise figure, plus the figure below.
-REQUIRED_SNR_DB = {6: -5.0, 7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
+# bandwidth, plus the receiver noise figure, plus the figure below. SF5 is not in that table - it
+# extends the SF6 figure by the same 2.5 dB/step the datasheet uses elsewhere, matching the
+# EXTRA_SHORT_TURBO sensitivity mesh.py already hand-derives (see EXTRA_PRESETS, TRANSPORT.md).
+REQUIRED_SNR_DB = {5: -2.5, 6: -5.0, 7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
 
 THERMAL_NOISE_DBM_PER_HZ = -174.0
 RECEIVER_NOISE_FIGURE_DB = 6.0

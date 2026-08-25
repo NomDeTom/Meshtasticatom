@@ -6,7 +6,7 @@ run produces once a month - a silent loss, a block whose job never wrote a file,
 nothing. Each is built directly.
 
 The inert check has its own regression: the first version compared only the metrics the digest
-displays and called `E-signed` inert, when that arm moves `advert_bytes` by 43% and nothing else.
+displays and called `SF-signed` inert, when that arm moves `advert_bytes` by 43% and nothing else.
 `test_inert_sees_a_metric_it_does_not_display` is that case.
 
 Run from `sim/`:  python3 -m unittest sfpp.test_collate -v
@@ -115,7 +115,7 @@ class SafeNames(unittest.TestCase):
             self.assertEqual(cleaned, os.path.basename(cleaned))
 
     def test_an_ordinary_block_name_is_left_alone(self):
-        for name in ("B-adopt", "R-hotstore-stress", "P-archive-sr", "E-signed"):
+        for name in ("RT-adopt", "DB-hotstore-stress", "SF-archive-sr", "SF-signed"):
             self.assertEqual(C.safe_name(name), name)
             self.assertTrue(C.is_safe_name(name))
 
@@ -258,7 +258,7 @@ class Inert(unittest.TestCase):
         self.assertTrue(C._inert(grouped))
 
     def test_inert_sees_a_metric_it_does_not_display(self):
-        # E-signed: held, text, airtime and every displayed metric identical; only the byte counters
+        # SF-signed: held, text, airtime and every displayed metric identical; only the byte counters
         # move. The arm is live and must not be reported as inert.
         grouped = {
             "False": [report(value=False)],
@@ -1294,7 +1294,7 @@ class PriceOfAnArm(unittest.TestCase):
         return C.summarise_block([report(value="a"), report(value="b", **second)])
 
     def test_a_flat_arm_that_moves_bytes_is_priced(self):
-        # D-resolve: enum advertises with a fifth of sketch's bytes and delivers the same.
+        # SF-resolve: enum advertises with a fifth of sketch's bytes and delivers the same.
         block = self._block(sfpp__advert_bytes=2538)
         self.assertIsNone(block["moved"])
         self.assertEqual(block["cost"]["metric"], "advert_bytes")

@@ -345,7 +345,7 @@ delivery measure still reported `moved: text, spread 0.000`, which reads as a fi
 opposite of one.
 
 **Cost is a ratio, not a difference.** Several blocks - reconciliation strategy, signing, advert
-transport - deliberately hold delivery flat and differ only in what they spend. `D-resolve` is the
+transport - deliberately hold delivery flat and differ only in what they spend. `SF-resolve` is the
 clear case: enum advertises with a fifth of sketch's advert bytes then pays two thirds more in
 total traffic, while `held` moves by 0.004. These span orders of magnitude, so "5.7×" is the
 readable figure where "11877 bytes" is not.
@@ -360,7 +360,7 @@ sweep has no such cell and its arms are read against each other.
 
 **Inert detection.** Cells differing by less than `INERT_EPSILON` on *every* recorded number are
 the same cell. Relative, because the numbers span reception fractions and byte counters in the
-millions. Two mistakes are recorded here: comparing only the displayed metrics called `E-signed`
+millions. Two mistakes are recorded here: comparing only the displayed metrics called `SF-signed`
 inert when it moves `advert_bytes` by 43% (hence: every number, not a chosen few), and leaving
 `value` out of `NOT_A_MEASUREMENT`, which disabled the check for 40 of the 87 blocks (TRAPS 11).
 

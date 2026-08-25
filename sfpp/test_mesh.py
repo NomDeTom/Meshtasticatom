@@ -2527,18 +2527,20 @@ print(",".join(failed))
         )
         # And the block lookup must not pull in a longer name, as the runner's did.
         blocks = {
-            "R-repeats": 1,
-            "R-repeats-busy": 1,
-            "R-signing": 1,
-            "R-signing-cost": 1,
+            "PR-repeats": 1,
+            "PR-repeats-busy": 1,
+            "DB-hotstore": 1,
+            "DB-hotstore-stress": 1,
         }
-        self.assertEqual(_arm(blocks, "R-repeats"), ["R-repeats"])
-        self.assertEqual(_arm(blocks, "R-signing"), ["R-signing"])
+        self.assertEqual(_arm(blocks, "PR-repeats"), ["PR-repeats"])
+        self.assertEqual(_arm(blocks, "DB-hotstore"), ["DB-hotstore"])
 
     def test_the_runner_checks_for_a_block_by_exact_name(self):
-        """Seven block names are a prefix of another, so a glob skips the shorter one.
+        """Some block names are a prefix of another, so a glob skips the shorter one.
 
-        R-signing was skipped because R-signing-cost.json satisfied `ls R-signing*.json`.
+        Under the round letters this cost a block: R-signing was skipped because R-signing-cost.json
+        satisfied `ls R-signing*.json`. The domain names inherit the hazard - DB-hotstore sits under
+        DB-hotstore-stress the same way.
         """
         from .sweep import BLOCKS
 
@@ -2566,7 +2568,7 @@ print(",".join(failed))
     def test_every_block_cell_actually_differs_from_its_neighbours(self):
         """Two cells of one block must parse to different values for the arm they sweep.
 
-        Weaker and more general than the enabling-condition test below, and it caught K-spread.
+        Weaker and more general than the enabling-condition test below, and it caught RT-spread.
         """
         from .campaign import build_parser
         from .sweep import BLOCKS, cell_argv
@@ -2784,10 +2786,10 @@ print(",".join(failed))
                 self.assertTrue(tag.startswith("v"), f"{feature} tag is not a release tag: {tag}")
 
     def test_a_new_block_name_carries_its_domain(self):
-        """The letters are rounds, so F holds degradation and, much later, future radio.
+        """The letters were rounds, so F held degradation and, much later, future radio.
 
-        New names say what they are instead. The 87 that predate the scheme are grandfathered by
-        name, not by pattern, so one more cannot join them by accident.
+        Every name says what it is now. LEGACY_BLOCKS is empty and exempts by name rather than by
+        pattern, so an exemption cannot be granted by accident.
         """
         import re
 
@@ -2810,6 +2812,18 @@ print(",".join(failed))
             [],
             "LEGACY_BLOCKS names a block that no longer exists",
         )
+
+    def test_every_batch_names_a_block_that_exists(self):
+        """A batch is the only place a name is repeated, and nothing else checks it.
+
+        A rename that misses one here is silent until someone runs --batch and hits the KeyError.
+        """
+        from .sweep import BATCHES, BLOCKS
+
+        stale = sorted(
+            {(batch, name) for batch, names in BATCHES.items() for name in names if name not in BLOCKS}
+        )
+        self.assertEqual(stale, [], "a batch names a block that does not exist")
 
     def test_no_two_block_names_differ_only_in_case_or_hold_a_double_dash(self):
         """The two things a name cannot be, whatever scheme it follows.

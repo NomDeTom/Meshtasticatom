@@ -33,7 +33,7 @@ OUT = "figures3"
 RUNS = "runs3"
 
 # The pinned run the protocol comparison and the coverage gap are both read from.
-PROTOCOL_RUN = "Q-protocol-hours-48.json"
+PROTOCOL_RUN = "PR-protocol-hours-48.json"
 
 
 def style(ax, t, x, y):
@@ -142,7 +142,7 @@ def _pinned_run():
     """The pinned protocol block both later figures read, or None when it is not present."""
     path = os.path.join(RUNS, PROTOCOL_RUN)
     if not os.path.exists(path):
-        print(f"skipped: {path} not present - run Q-protocol first, or pass --runs")
+        print(f"skipped: {path} not present - run PR-protocol first, or pass --runs")
         return None
     return json.load(open(path))
 
@@ -154,7 +154,7 @@ def mean_of(d, value, section, key):
 
 def draw_protocol_comparison(d):
     """Airtime, adverts and reception for no archive, the chain walk, and the sketch."""
-    d = json.load(open(f"{RUNS}/Q-protocol-hours-48.json"))
+    d = json.load(open(f"{RUNS}/PR-protocol-hours-48.json"))
     labels = ["none\n(no archive)", "chain\n(today's SF++)", "sr\n(sketch)"]
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.3), facecolor=BG)
     for a in axes:

@@ -122,10 +122,10 @@ python3 -m sfpp.campaign --hours 24 --seed 1 --protocol sr --out /tmp/r/run.json
 
 # a swept arm, three seeds; same three outputs per block
 python3 -m sfpp.sweep --list
-python3 -m sfpp.sweep --block Q-protocol --seeds 3 --seed-base 990001 --out /tmp/r
+python3 -m sfpp.sweep --block PR-protocol --seeds 3 --seed-base 990001 --out /tmp/r
 
 # long work that must survive the shell that started it
-./run-blocks.sh /tmp/r 440001 R-oversubscribed R-congestion-input R-srretries
+./run-blocks.sh /tmp/r 440001 MS-oversubscribed TH-congestion-input SF-sr-retries
 ./run-blocks.sh --status /tmp/r
 ```
 
@@ -622,15 +622,15 @@ to within **0.041 dB** and is what licenses deriving the rest the same way.
 **Which of these a result should be about:**
 
 - **Deployed meshes run `SHORT_FAST` through `LONG_MODERATE`**, with `LONG_FAST` the default and the
-  middle. That is the range `P-preset` sweeps.
+  middle. That is the range `RF-preset` sweeps.
 - **Above about 30 nodes nothing slower than `LONG_MODERATE` is used**, and meshes that do use one
   suffer for it. `LONG_SLOW` holds the channel for 21 s at a full payload; §5.8's periodic profile
   shows `LONG_MODERATE` already losing 100% of full payloads to a 10 s interferer.
-- **North America is heading for 500 kHz across the board** - `P-bw500` holds bandwidth there and
+- **North America is heading for 500 kHz across the board** - `RF-bw500` holds bandwidth there and
   varies spreading factor.
 - **Europe stays on 250 kHz and adds the narrow presets.** `EU_866` defaults to `LITE_FAST` and
   `EU_N_868` to `NARROW_SLOW` (`src/mesh/RadioInterface.cpp:144-145`), so a European result covering
-  only the 250 kHz presets is a result about the past. That is `P-eu-presets`.
+  only the 250 kHz presets is a result about the past. That is `RF-eu-presets`.
 - `LONG_SLOW`, `VERY_LONG_SLOW` and the two `EXTRA_` presets remain available to `--preset`. A result
   on them is a result about a mesh nobody runs, and the report says so: `outside_deployed_range` is
   null for a combination a real mesh is in and carries a sentence naming the problem otherwise. Not a
@@ -719,7 +719,7 @@ optimistic about weak-link delivery by the margin above. The turbo presets are t
 drawn. `--area` cannot do this: changing the area redraws the placement, so an 8 km mesh and a 16 km
 mesh at one seed are two different meshes and the difference between them is a different draw as much
 as a longer link. A stretch keeps node *k* the same node in the same arrangement. It consumes no
-randomness, so every arm of `X-stretch` carries the identical traffic schedule.
+randomness, so every arm of `MS-stretch` carries the identical traffic schedule.
 
 **Quote the result against the unstretched link set, not the live one.** The share of live links that
 are bad *improves* at high stretch, because the worst links stop being links:
@@ -1179,39 +1179,46 @@ report it hashes for exactly that reason.
 
 A block name is three things at once: the **row identity** the rolling page tracks across runs, a
 **path component** (`figures/<block>.svg`, `reports/<block>.txt`, `<block>.json`), and a label a
-reader has to place at a glance. The letters on the 87 existing names are **rounds** - the order the
-questions were asked - which is why `F` holds the degradation blocks and, much later, the
-future-radio ones, and why `R` holds twenty-nine unrelated things. Those names are grandfathered in
-`sweep.LEGACY_BLOCKS`: their trend rows on the results branch are the only history there is, and a
-rename orphans every one of them.
+reader has to place at a glance.
 
-New names carry their domain instead: **`<DD>-<subject>[-<qualifier>]`**, two-letter uppercase
-domain and a lowercase kebab tail. Lowercase tails make two names that differ only in case
-impossible, which is the one collision `collate.safe_name` cannot resolve for itself; and no name
-may hold a double dash, because `explorer.py` reads `<block>--<label>.svg` as a block's extra
-figure.
+A name carries its domain: **`<DD>-<subject>[-<qualifier>]`**, two-letter uppercase domain and a
+lowercase kebab tail. Lowercase tails make two names that differ only in case impossible, which is
+the one collision `collate.safe_name` cannot resolve for itself; and no name may hold a double dash,
+because `explorer.py` reads `<block>--<label>.svg` as a block's extra figure. `sweep.LEGACY_BLOCKS`
+is the by-name exemption list and is **empty**: every block matches the grammar.
 
-| Domain | Holds | Where the legacy names sit |
+The names were once round letters - the order the questions were asked - so `F` held the degradation
+blocks and, much later, the future-radio ones, and `R` held twenty-nine unrelated things. All 87
+were migrated to the scheme below, and the trend rows on the results branch were rewritten with
+them, so no history was stranded. The round letters appear only in `TRAPS.md`, which describes bugs
+found while they were still the names.
+
+| Domain | Holds | Blocks |
 | --- | --- | --- |
-| `BL` | baseline and paired controls: the shipped default on a given mesh | `Q-control` |
-| `MS` | mesh composition and scale: count, density, area, topology, mirroring, siting, **roles** | `K-size`, `K-density`, `R-hopscale`, `Q-topology`, `R-roles`, `R-routerlate` |
-| `RF` | radio and propagation: path loss, noise, ducting, calibration, presets, power, gain | `P-preset`, `P-bw500`, `X-noise`, `X-pulse`, `X-duct`, `F-txpower`, `F-preset-turbo` |
-| `RT` | routing and reach: hop limits and their assignment, adoption, rebroadcast | `K-hopspread`, `K-spread`, `Q-hopassign`, `F-hoplimit`, `R-adopt`, `R-rebroadcast` |
-| `DM` | how an addressed message **behaves**: escalation, transport, acknowledgement | `R-dmmode` |
-| `TH` | **throttles**: what the firmware does to offered load - interval scaling, reach target, per-class multipliers | `P-congestion`, `R-congestion-mode`, `R-congestion-input` |
-| `DB` | the node database: hot store cap, warm tier, and the board mix that sizes them | `R-hotstore`, `R-hotstore-stress`, `R-warm`, `R-platform` |
-| `LD` | offered load: what the application asks for before any throttle acts on it, broadcast and addressed alike - intervals, diurnal shape, DM and traceroute and admin rates | `Q-interval`, `P-diurnal`, `X-chatty`, `R-traceroute` |
-| `FW` | firmware version mix: which release each node runs, and the proportion on an older one | `R-firmware`, `R-versions`, `R-mixed`, `R-mixed-26`, `R-signing-cost` |
-| `SC` | security policy: packet signing, and the admin and key rules that will join it | `R-signing` |
-| `DG` | imposed degradation: a failure applied, not a model | `F-loss`, `F-burst`, `F-outage` |
-| `AD` | adversarial meshes: removing what is known to help, one thing at a time | `X-nomute`, `X-badrouters`, `X-siting`, `X-worst`, `X-amplifiers` |
-| `SF` | SF++ archive internals: how the sketch is tuned, not whether to have it | `D`, `E`, `G`, `J`, `L`, `M`, `N` |
-| `PR` | proposals no release ships | `R-repeats`, `R-crladder`, `R-dmmode-cr`, `Q-protocol` |
+| `BL` | baseline and paired controls: the shipped default on a given mesh | `BL-control` |
+| `MS` | mesh composition and scale: count, density, area, topology, mirroring, siting, **roles** | `MS-density`, `MS-hopscale`, `MS-oversubscribed`, `MS-roles`, `MS-roles-fav`, `MS-router-late`, `MS-siting`, `MS-size`, `MS-stretch`, `MS-topology` |
+| `RF` | radio and propagation: path loss, noise, ducting, calibration, presets, power, gain | `RF-bw500`, `RF-duct`, `RF-eu-presets`, `RF-noise`, `RF-preset`, `RF-preset-turbo`, `RF-pulse`, `RF-stretch-duct`, `RF-txpower` |
+| `RT` | routing and reach: hop limits and their assignment, adoption, rebroadcast | `RT-adopt`, `RT-favourites`, `RT-hopassign`, `RT-hoplimit`, `RT-hopspread`, `RT-rebroadcast`, `RT-spread` |
+| `DM` | how an addressed message **behaves**: escalation, transport, acknowledgement | `DM-mode` |
+| `TH` | **throttles**: what the firmware does to offered load - interval scaling, reach target, per-class multipliers | `TH-congestion`, `TH-congestion-input`, `TH-congestion-mode` |
+| `DB` | the node database: hot store cap, warm tier, and the board mix that sizes them | `DB-hotstore`, `DB-hotstore-stress`, `DB-platform`, `DB-warm` |
+| `LD` | offered load: what the application asks for before any throttle acts on it, broadcast and addressed alike - intervals, diurnal shape, DM and traceroute and admin rates | `LD-chatty`, `LD-chatty-hops`, `LD-diurnal`, `LD-interval`, `LD-traceroute`, `LD-traceroute-small` |
+| `FW` | firmware version mix: which release each node runs, and the proportion on an older one | `FW-firmware`, `FW-mixed`, `FW-mixed-26`, `FW-signing-cost`, `FW-versions` |
+| `SC` | security policy: packet signing, and the admin and key rules that will join it | `SC-signing` |
+| `DG` | imposed degradation: a failure applied, not a model | `DG-burst`, `DG-loss`, `DG-outage` |
+| `AD` | adversarial meshes: removing what is known to help, one thing at a time | `AD-amplifiers`, `AD-amplify-worst`, `AD-badrouters`, `AD-flooding`, `AD-nomute`, `AD-siting`, `AD-worst` |
+| `SF` | SF++ archive internals: how the sketch is tuned, not whether to have it | `SF-advert-transport`, `SF-bucket-mode`, `SF-bucket-time`, `SF-cadence`, `SF-capacity`, `SF-capacity-local`, `SF-capacity-window`, `SF-catchup`, `SF-hops-flat`, `SF-hops-spread`, `SF-jitter-global`, `SF-jitter-local`, `SF-place-flat`, `SF-place-spread`, `SF-provide-transport`, `SF-replay-order`, `SF-replay-order-broadcast`, `SF-resolve`, `SF-servers-allrouters`, `SF-servers-flat`, `SF-servers-spread`, `SF-signed`, `SF-sr-retries`, `SF-width`, `SF-window-size` |
+| `PR` | proposals no release ships | `PR-crladder`, `PR-dmmode-cr`, `PR-protocol`, `PR-repeats`, `PR-repeats-busy` |
 
 **A domain that needs the word "firmware" to describe itself, or that holds more than about a fifth
-of the blocks, is a dumping ground.** That is what the letters became - `R` holds twenty-nine
+of the blocks, is a dumping ground.** That is what the letters became - `R` held twenty-nine
 unrelated things - and it is why there is no `FW` domain for "firmware mechanisms": nearly everything
 here is one. `FW` is the version mix and nothing else.
+
+`SF` is the deliberate exception at 25 of 87. It is not a dumping ground by the test that matters:
+every block in it varies one parameter of the same mechanism, and a reader looking for "how the
+sketch is tuned" wants exactly that list. Splitting it would put `SF-capacity` and
+`SF-capacity-window` in different domains, which is the opposite of what a domain is for.
 
 **`PR-dm-telemetry` and `PR-dm-position`, specified.** A periodic class is broadcast today, so every
 node that hears it learns from it and every relay pays for it. Addressed to one gateway, the packet

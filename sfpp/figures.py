@@ -90,7 +90,7 @@ def bar_pair(ax, labels, left, right, left_label, right_label):
 
 
 def fig_cadence(runs_dir, out_dir):
-    reports = load(runs_dir, "D-cadence")
+    reports = load(runs_dir, "SF-cadence")
     if not reports:
         return
     grouped = cells(reports)
@@ -114,7 +114,7 @@ def fig_cadence(runs_dir, out_dir):
 
 
 def fig_resolve(runs_dir, out_dir):
-    reports = load(runs_dir, "D-resolve")
+    reports = load(runs_dir, "SF-resolve")
     if not reports:
         return
     grouped = cells(reports)
@@ -138,7 +138,7 @@ def fig_resolve(runs_dir, out_dir):
 
 
 def fig_capacity(runs_dir, out_dir):
-    reports = load(runs_dir, "E-capacity")
+    reports = load(runs_dir, "SF-capacity")
     if not reports:
         return
     grouped = cells(reports)
@@ -172,7 +172,7 @@ def fig_loss(runs_dir, out_dir):
     """The paired capacity-by-loss grid: what loss does, and what it conspicuously does not do."""
     groups = {}
     for capacity in (8, 16, 32):
-        reports = load(runs_dir, f"F-loss-capacity-{capacity}")
+        reports = load(runs_dir, f"DG-loss-capacity-{capacity}")
         if reports:
             groups[capacity] = cells(reports)
     if not groups:
@@ -237,8 +237,8 @@ def recovery(reports):
 
 
 def fig_topology(runs_dir, out_dir):
-    place = load(runs_dir, "G-place")
-    hops = load(runs_dir, "G-hops")
+    place = load(runs_dir, "SF-place-flat")
+    hops = load(runs_dir, "SF-hops-flat")
     if not place and not hops:
         return
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6), facecolor=BG)
@@ -297,7 +297,7 @@ def fig_topology(runs_dir, out_dir):
     save(fig, out_dir, "topology")
 
 
-def fig_baseline(runs_dir, out_dir, block="Q-control"):
+def fig_baseline(runs_dir, out_dir, block="BL-control"):
     """Reach against the routing ceiling, per seed.
 
     Reads only `baseline`, which every report carries, so any block will do.
@@ -431,7 +431,7 @@ def main(argv=None):
     )
     ap.add_argument(
         "--baseline-block",
-        default="Q-control",
+        default="BL-control",
         help="which block's `baseline` section the reach figure is drawn from; any block will do",
     )
     opts = ap.parse_args(argv)

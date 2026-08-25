@@ -94,7 +94,7 @@ jobs:
         # rather than by the next scheduled sweep.
         run: |
           set -euo pipefail
-          python3 -m sfpp.sweep --block E-signed --seeds 1 --seed-base 4242 \
+          python3 -m sfpp.sweep --block SF-signed --seeds 1 --seed-base 4242 \
             --grid "--scenario ridge" --out /tmp/smoke >/dev/null
           python3 -m sfpp.collate --runs /tmp/smoke --out /tmp/smoke --run-id ci-smoke \
             --scenario ridge --fail-on-gate
