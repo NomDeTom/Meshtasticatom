@@ -3262,6 +3262,12 @@ def run_once(opts, seed):
 
 def main(argv=None):
     opts = build_parser().parse_args(argv)
+    # Opt-in, off by default, and loud when it is on: the C++ decoder is a claim about speed only,
+    # and a run that took it has to say so or two runs become incomparable without anyone noticing.
+    from . import native_sketch
+
+    if native_sketch.enabled_by_environment():
+        print("sketch decoding: native (SFPP_NATIVE_SKETCH)")
     reports = []
     for repeat in range(opts.repeats):
         seed = (

@@ -77,6 +77,23 @@ int main()
                 printSketch(s);
             else
                 printDecode(s);
+        } else if (cmd == "decodesyn") {
+            // Decode from raw syndromes rather than from members. A merged sketch is the XOR of
+            // two others and has no member list to replay, which is every sketch the simulator
+            // actually decodes. deserialize is the public way in; syndromes itself is private.
+            size_t cap;
+            in >> cap;
+            std::vector<uint8_t> buf;
+            uint32_t s;
+            while (in >> s) {
+                buf.push_back(s & 0xFF);
+                buf.push_back((s >> 8) & 0xFF);
+                buf.push_back((s >> 16) & 0xFF);
+                buf.push_back((s >> 24) & 0xFF);
+            }
+            pinsketch::Sketch sk(cap);
+            sk.deserialize(buf.data(), buf.size());
+            printDecode(sk);
         } else if (cmd == "diff") {
             size_t cap, n;
             in >> cap >> n;

@@ -1,0 +1,116 @@
+# Is the C++ decoder worth adopting? Manual, because it answers a question rather than guarding
+# anything - nothing here writes to the archive or the rolling page.
+#
+# `Sketch.decode` is where a sketch costs anything: 62.9% of a 12-hour 150-node run, 75.5 s across
+# 199 calls. This runs the same cell twice, once each way, and asks two questions in order. Do the
+# two decoders agree, case for case and then over a whole run's fingerprint; and only if they do,
+# how much faster is it. A speed number from a run that decoded differently measures nothing.
+name: Native sketch decoder (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      nodes:
+        description: Node count for the paired run. 150 is the largest MS-size cell
+        type: string
+        required: false
+        default: "150"
+      hours:
+        description: Simulated hours. 12 is where the 62.9% was measured
+        type: string
+        required: false
+        default: "12"
+      verify_scale:
+        description: Multiplier on the per-capacity case counts in native_sketch.PLAN
+        type: string
+        required: false
+        default: "1.0"
+
+permissions: {}
+
+concurrency:
+  group: sim-native-sketch
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: python against native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the scenario loader
+        run: pip install --quiet "PyYAML>=6.0"
+
+      # The vendored PinSketch is what makes this runnable on a runner at all - there is no firmware
+      # checkout here. check_oracle first, so a compiler or source problem is named as itself rather
+      # than surfacing later as a decoder that disagrees.
+      - name: The transcription still matches the C++
+        run: python3 -m sfpp.check_oracle --require
+
+      - name: The two decoders agree, case for case
+        env:
+          SCALE: ${{ inputs.verify_scale }}
+        run: python3 -m sfpp.native_sketch --scale "$SCALE"
+
+      - name: The same cell, decoded both ways
+        env:
+          NODES: ${{ inputs.nodes }}
+          HOURS: ${{ inputs.hours }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess, sys, time
+          from sfpp.test_series import fingerprint
+
+          base = ("--place hops-apart --hops-apart 2 --servers 3 --capacity 32 --trigger bucket "
+                  "--bucket-mode local --resolve hybrid --hop-spread --scale-area").split()
+          nodes, hours = os.environ["NODES"], os.environ["HOURS"]
+          results = {}
+          for label, native in (("python", None), ("native", "1")):
+              env = dict(os.environ)
+              if native:
+                  env["SFPP_NATIVE_SKETCH"] = native
+              else:
+                  env.pop("SFPP_NATIVE_SKETCH", None)
+              out = f"/tmp/{label}.json"
+              start = time.time()
+              run = subprocess.run(
+                  [sys.executable, "-m", "sfpp.campaign", "--nodes", nodes, "--hours", hours,
+                   "--seed", "4242", *base, "--out", out],
+                  capture_output=True, text=True, env=env)
+              if run.returncode:
+                  sys.exit(f"{label} run failed:\n{run.stderr[-2000:]}")
+              results[label] = (time.time() - start, fingerprint(json.load(open(out))))
+
+          lines = ["| decoder | wall | fingerprint |", "| --- | --: | --- |"]
+          for label, (seconds, fp) in results.items():
+              lines.append(f"| {label} | {seconds:.1f}s | `{fp[:16]}` |")
+
+          same = results["python"][1] == results["native"][1]
+          if same:
+              ratio = results["python"][0] / max(results["native"][0], 1e-9)
+              lines.append("")
+              lines.append(f"**Identical fingerprints.** Native is {ratio:.2f}x on this cell "
+                           f"({nodes} nodes, {hours} h).")
+          else:
+              lines.append("")
+              lines.append("**The fingerprints differ**, so the speed number below means nothing: "
+                           "the two decoders did not agree over a whole run even though they agreed "
+                           "case for case. Do not adopt on this result.")
+
+          summary = "\n".join(lines)
+          print(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("## Native sketch decoder\n\n" + summary + "\n")
+          sys.exit(0 if same else 1)
+          PY
