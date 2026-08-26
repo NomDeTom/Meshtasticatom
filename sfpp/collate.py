@@ -183,6 +183,56 @@ def admin_sessions(admin):
     return sum((v or {}).get("sessions", 0) for v in admin.values()) or None
 
 
+# campaign._dist's six. A mean alone hides the tail, and the tail is the point: on a stretched mesh
+# the worst-served node is the one the archive exists for.
+DIST_KEYS = ("min", "p10", "median", "mean", "p90", "max")
+
+
+def distributions(report):
+    """Every `_dist` block in a report, keyed by its dotted path.
+
+    Found by shape, not by a list of paths. The six keys are `_dist`'s signature, and five of the
+    twelve are `by_class.<class>.per_node_reception` - keyed by a class name, so any hand-written
+    list would have to be reissued whenever a class or a report section was added. `metric()` reads
+    single numbers and returns None for a dict, which is where these used to stop.
+    """
+    out = {}
+
+    def walk(node, path):
+        if not isinstance(node, dict):
+            return
+        if all(k in node for k in DIST_KEYS):
+            out[".".join(path)] = {k: node[k] for k in DIST_KEYS}
+            return  # a distribution has no distributions inside it
+        for key, value in node.items():
+            walk(value, path + [key])
+
+    walk(report, [])
+    return out
+
+
+def mean_distributions(reports):
+    """One distribution per path, each statistic meaned over the seeds that carry it.
+
+    Meaned the same way `metrics` is, and for the same reason: a cell is its seeds together. A path
+    absent from some seeds is meaned over the ones that have it rather than being dropped.
+    """
+    seen = {}
+    for report in reports:
+        for path, dist in distributions(report).items():
+            seen.setdefault(path, []).append(dist)
+    out = {}
+    for path, dists in seen.items():
+        row = {}
+        for key in DIST_KEYS:
+            values = [d[key] for d in dists if d.get(key) is not None]
+            if values:
+                row[key] = round(sum(values) / len(values), 4)
+        if row:
+            out[path] = row
+    return out
+
+
 def derived(report):
     """Compute the figures that are not read straight out of the report.
 
@@ -273,6 +323,10 @@ def cells_of(reports, per_node=False, maps=None):
             "value": value,
             "seeds": [g.get("seed") for g in group],
             "metrics": {k: _mean([metric(g, k) for g in group]) for k in METRICS},
+            # The six-number distributions behind the single numbers above. The digest is the only
+            # thing the rolling page reads, so a statistic that stops here is one nothing can ever
+            # show - and unlike a figure it cannot be regenerated once the raw run is dropped.
+            "dist": mean_distributions(group),
         }
         # Opt-in: one vector per class per cell is small for one run and 30 MB across a season of
         # them, and the scheduled page is rolled from these digests.

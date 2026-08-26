@@ -163,6 +163,12 @@ def index_by_block(runs):
                     "scenario": run.get("scenario_requested") or "flat",
                     "seed_base": run.get("seed_base"),
                     "cells": {c["value"]: c["metrics"] for c in b["cells"]},
+                    # The six-number distributions behind the single numbers, where the digest was
+                    # collated recently enough to carry them. Older digests have none, so every
+                    # reader of this has to treat it as absent rather than empty.
+                    "dist": {
+                        c["value"]: c["dist"] for c in b["cells"] if c.get("dist")
+                    },
                     # Only present when the digest was collated with --per-node.
                     "per_node": {
                         c["value"]: c["per_node"] for c in b["cells"] if c.get("per_node")
@@ -492,6 +498,11 @@ p.sub { color: var(--muted); margin: 0 0 1.5rem; }
 .chartpick label:hover { color: var(--text); }
 .chartpick input { margin: 0; cursor: pointer; }
 .chartpick .wide { flex-basis: 100%; }
+/* One group per unit family, and the family is what the chart splits on, so a group is one chart's
+   worth of ticks. The rule keeps the boundary visible when the row wraps mid-group. */
+.chartgroup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .15rem .9rem;
+  padding: .1rem .55rem .1rem .5rem; border-left: 2px solid var(--border); }
+.chartgroup .unit { font-weight: 600; color: var(--text); font-size: .95em; }
 .chart { min-height: 2rem; }
 .chart .axislabel { font-size: .75rem; color: var(--muted); margin: .5rem 0 -.2rem; }
 .figure svg { background: #FCFCFA; border: 1px solid var(--border); border-radius: 6px; margin-top: .4rem; }
@@ -989,6 +1000,46 @@ function apply() {
 if (q) q.addEventListener('input', apply);
 if (sc) sc.addEventListener('change', apply);
 """
+
+
+def render_distributions(run):
+    """The six-number distributions for one run's cells, as a range per cell.
+
+    Six columns per statistic would be forty-odd columns a reader has to scan; a range with the
+    median marked is the same information in the shape the question is asked in - how far apart are
+    the best and worst served node, and where does the middle sit between them. min and max are the
+    ends, p10 and p90 the inner ticks, and the mean is given as a number because a mean that sits
+    off the median is the finding.
+    """
+    cells = run.get("dist") or {}
+    if not cells:
+        return []
+    paths = sorted({p for row in cells.values() for p in row})
+    out = [
+        '<p class="sub" style="margin:.75rem 0 .35rem;font-size:.8rem">'
+        "distributions, same run - min <span class=\"mono\">|</span> p10 &middot; median "
+        "&middot; p90 <span class=\"mono\">|</span> max, mean in brackets</p>",
+        '<div class="scroll"><table><thead><tr><th>value</th>',
+    ]
+    out += [f'<th>{_esc(p.split(".")[-1])}<br><span class="sub">{_esc(p)}</span></th>' for p in paths]
+    out.append("</tr></thead><tbody>")
+    for value, row in cells.items():
+        out.append(f'<tr><td class="mono">{_esc(value)}</td>')
+        for path in paths:
+            d = row.get(path)
+            if not d:
+                out.append('<td class="never">-</td>')
+                continue
+            out.append(
+                '<td class="mono" style="white-space:nowrap">'
+                f'{_fmt(d.get("min"), 3)} <span class="sub">|</span> {_fmt(d.get("p10"), 3)} '
+                f'&middot; <b>{_fmt(d.get("median"), 3)}</b> &middot; {_fmt(d.get("p90"), 3)} '
+                f'<span class="sub">|</span> {_fmt(d.get("max"), 3)} '
+                f'<span class="sub">({_fmt(d.get("mean"), 3)})</span></td>'
+            )
+        out.append("</tr>")
+    out.append("</tbody></table></div>")
+    return out
 
 
 def render_making():
@@ -1523,14 +1574,24 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
         # One checkbox per metric, because the question a reader arrives with is nearly always
         # comparative - did DM hold up where text did not - and a control that shows one metric at a
         # time answers it only by memory of the previous click.
-        # Ticked on arrival: whatever collate said this block moves, so the first chart is the
-        # useful one. A `moved` naming something outside SHOWN would tick nothing, so fall back.
-        opening = measure if measure in {k for k, _, _ in SHOWN} else "held"
-        picks = [
-            f'<label><input type="checkbox" class="metric" value="{k}"'
-            f'{" checked" if k == opening else ""}> {_esc(label)}</label>'
-            for k, label, _ in SHOWN
-        ]
+        #
+        # Grouped by unit and ticked on arrival, so the control removes rather than adds. A reader
+        # who does not know the metric names cannot add what they cannot name, and one metric ticked
+        # by default made the other eleven invisible unless guessed at. The unit is the grouping
+        # because it is already the one the chart must obey: a family is a promise that heights
+        # within it mean the same thing, so a group is exactly one chart's worth of ticks.
+        picks = []
+        for unit in dict.fromkeys(UNITS.get(k, "other") for k, _, _ in SHOWN):
+            members = [
+                f'<label><input type="checkbox" class="metric" value="{k}" checked> '
+                f"{_esc(label)}</label>"
+                for k, label, _ in SHOWN
+                if UNITS.get(k, "other") == unit
+            ]
+            picks.append(
+                f'<span class="chartgroup"><b class="unit">{_esc(unit)}</b>'
+                f'{"".join(members)}</span>'
+            )
         # Offered only where the digest carried the vectors, so the control cannot promise a chart
         # the page has no numbers for.
         if any(r.get("per_node") for r in entry["runs"]):
@@ -1577,6 +1638,7 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
                 + "</tr>"
             )
         out.append("</tbody></table></div>")
+        out += render_distributions(latest)
         for f in {f for r in entry["runs"] for f in r["flags"]}:
             out.append(f'<p class="flag">{_esc(f)}</p>')
         out.append("</div>")
