@@ -1471,18 +1471,62 @@ things nothing else here does, and neither can go in `requirements.txt`:
 
 - **A C++ compiler.** `g++` is invoked directly. The binary it produces, `sfpp/oracle`, is not in the
   tree and is not built by the test suite, so a fresh checkout has no oracle until you run the check.
-- **A firmware checkout**, named by `MESHTASTIC_FIRMWARE_ROOT`:
+- **PinSketch source**, from one of two places:
 
   ```bash
   MESHTASTIC_FIRMWARE_ROOT=/path/to/firmware python3 -m sfpp.check_oracle --require
   ```
 
-  Without it a sibling checkout is tried (`../MeshtasticFirmware`, `../firmware`) and, failing that,
-  the check reports it and exits 0 - a tree that cannot see the firmware has not failed anything.
-  **`--require` turns that into a failure, which is what a CI job that means to run it must pass**:
-  an explicit path is answered with itself or with an error, never with somewhere else, because
-  falling back to a sibling once gave 628 passing checks against a tree the caller had not asked for
-  (TRAPS 16's shape, found in the firmware-discovery helper).
+  A firmware checkout is preferred and is what the check is *for*. Named by
+  `MESHTASTIC_FIRMWARE_ROOT`, else a sibling (`../MeshtasticFirmware`, `../firmware`). An explicit
+  path is answered with itself or with an error, never with somewhere else, because falling back to
+  a sibling once gave 628 passing checks against a tree the caller had not asked for (TRAPS 16's
+  shape, found in the firmware-discovery helper).
+
+  Failing that, **the copy in `sfpp/native/`**, which is why this now runs on a runner - CI has no
+  firmware checkout, so the one thing standing between the simulator and invented wire bytes used to
+  run only on a developer's machine and only when remembered. The fallback says in as many words
+  that it is the weaker statement: it proves the transcription matches the copy in this repository,
+  not the firmware's current source.
+
+  **A copy that has drifted is worse than no copy at all** - the oracle would compile against it,
+  agree with `pinsketch.py`, and report 628 passing checks proving only that two files here match
+  each other, the cross-repository guarantee having become a tautology with nothing failing. So
+  wherever a firmware checkout is present the two are diffed first and any difference is fatal.
+  `sfpp/native/PROVENANCE` records the commit, the sha256 of each file, and the two commands that
+  refresh the pair.
+
+  `--require` refuses to skip. It does not make the vendored fallback into a stronger statement,
+  and a CI job that means to run this must pass it.
+
+### 9.3 The native decoder, and why it is off
+
+`Sketch.decode` is where a sketch costs anything: Berlekamp-Massey and root-finding over
+GF(2^32), measured at **62.9% of a 12-hour 150-node run** - 75.5 s across 199 calls. `sfpp.native_sketch`
+routes those 199 calls to the vendored C++ over a pipe. 199 is what makes a pipe viable at all; the
+10.1M `mul` calls underneath it would have spent more on IPC than they saved, which is why the
+boundary is `decode` and not the arithmetic under it.
+
+```bash
+SFPP_NATIVE_SKETCH=1 python3 -m sfpp.campaign ...   # opt in; the run prints that it did
+python3 -m sfpp.native_sketch --scale 1.0           # diff both decoders, exit 1 on disagreement
+```
+
+The C++ is not free either, and the gap widens with capacity - 12x at capacity 2, 89x at capacity
+32, 276x on a capacity-32 sketch held past its capacity, which takes Python 21.6 s to fail to
+decode. `BASE` runs capacity 32.
+
+**It is off unless asked for, and the Python stays the reference.** The transcription is what §9.2
+holds to the firmware and what runs where no compiler is reachable, so enabling this is a claim
+about speed only - never about results. It never falls back quietly: a decoder that failed to build
+raises rather than leaving "the run was slow" as the only symptom. `verify()` weights its cases by
+what they cost in Python rather than evenly, and includes over-capacity sketches on purpose: those
+misdecode to a wrong set at about 1/c!, and both sides have to reach the *same* wrong answer,
+because a misdecode the firmware makes is one the simulator has to make too.
+
+Adopting it by default is not a free change: `seconds_per_sim_hour` is the number `collate --history`
+compares each block against its own past, and a run that decodes 89x faster is not comparable with
+one that did not. That is a `sim_version` bump, which resets trend depth to nothing.
 
 ## 10. What is simplified, assumed, or not there at all
 
