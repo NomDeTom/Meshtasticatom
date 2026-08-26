@@ -51,6 +51,17 @@ jobs:
       - name: Run the transport suite
         run: python3 -m unittest discover -s sfpp -t . -p 'test_*.py'
 
+      - name: The sketch is the one the firmware would send
+        # pinsketch.py is a transcription of the firmware's PinSketch.cpp, and a transcription that
+        # has drifted produces sketches no radio would ever put on the air - plausible numbers, and
+        # wrong. This compiles the C++ and diffs the two case for case.
+        #
+        # It runs here at all because the source is vendored: the check needed a firmware checkout,
+        # which a runner does not have, so the one thing standing between the simulator and invented
+        # wire bytes ran only on a developer's machine and only when remembered. --require, so a
+        # tree that cannot run it fails rather than reporting a skip nobody reads.
+        run: python3 -m sfpp.check_oracle --require
+
       - name: A flat run is deterministic
         # The permanent gate. Two runs at one seed with no scenario must be identical in every
         # number: draws are hashed on (seed, constant, window) rather than pulled from a sequential

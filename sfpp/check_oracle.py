@@ -30,6 +30,11 @@ ORACLE = os.path.join(HERE, "oracle")
 # Where the firmware's PinSketch lives inside a firmware checkout.
 FIRMWARE_SOURCE = os.path.join("src", "modules", "Native")
 
+# The copy carried here, so the check runs without a firmware checkout - CI has none. It is a
+# fallback and never a preference: see sfpp/native/PROVENANCE for why that distinction is the whole
+# value of the check.
+VENDORED = os.path.join(HERE, "native")
+
 
 def firmware_root():
     """Find the firmware checkout to compile against, or None if none is reachable."""
@@ -60,9 +65,41 @@ def firmware_root():
     return None
 
 
+def check_vendored_matches(root):
+    """Diff the vendored copy against the firmware's, byte for byte. Returns a list of complaints.
+
+    The copy exists so this check can run where no firmware is reachable. That is only worth having
+    while the copy is a copy: a drifted one would compile, agree with pinsketch.py, and report every
+    check passing while proving nothing but that two files in this repository match each other. So
+    wherever a real checkout is present, the copy is held to it.
+    """
+    problems = []
+    for name in ("PinSketch.cpp", "PinSketch.h"):
+        theirs = os.path.join(root, FIRMWARE_SOURCE, name)
+        ours = os.path.join(VENDORED, name)
+        if not os.path.isfile(ours):
+            problems.append(f"{name}: not vendored")
+            continue
+        with open(theirs, "rb") as f:
+            a = f.read()
+        with open(ours, "rb") as f:
+            b = f.read()
+        if a != b:
+            problems.append(
+                f"{name}: the vendored copy differs from {root} - refresh it and re-run "
+                f"(see sfpp/native/PROVENANCE)"
+            )
+    return problems
+
+
+def source_dir(root):
+    """Where to compile PinSketch from: the firmware if there is one, else the vendored copy."""
+    return os.path.join(root, FIRMWARE_SOURCE) if root else VENDORED
+
+
 def build_oracle(root):
-    """Compile the vector generator against the firmware's own PinSketch.cpp."""
-    native = os.path.join(root, FIRMWARE_SOURCE)
+    """Compile the vector generator against PinSketch.cpp."""
+    native = source_dir(root)
     cmd = [
         "g++",
         "-O2",
@@ -247,15 +284,30 @@ def main(argv=None):
     require = "--require" in (argv if argv is not None else sys.argv[1:])
     root = firmware_root()
     if root is None:
-        message = (
-            "no Meshtastic firmware checkout found, so the Python sketch cannot be diffed against "
-            "the C++ it transcribes. Set MESHTASTIC_FIRMWARE_ROOT to a firmware checkout."
+        # The vendored copy, so the check still runs. It is a weaker statement and says so: it
+        # proves the transcription matches the C++ this repository carries, not the C++ the
+        # firmware is currently building. --require does not make it stronger, it only refuses
+        # to let the check be skipped.
+        if not os.path.isfile(os.path.join(VENDORED, "PinSketch.cpp")):
+            message = (
+                "no firmware checkout and no vendored PinSketch, so the Python sketch cannot be "
+                "diffed against the C++ it transcribes. Set MESHTASTIC_FIRMWARE_ROOT."
+            )
+            if require:
+                sys.exit(f"FAIL: {message}")
+            print(f"SKIP: {message}")
+            return 0
+        print(
+            f"oracle: compiling against the vendored copy in {VENDORED}\n"
+            "  NOTE: no firmware checkout reachable, so this proves the transcription matches the\n"
+            "  copy in this repository, not the firmware's current source. Set "
+            "MESHTASTIC_FIRMWARE_ROOT\n  to check against the firmware itself."
         )
-        if require:
-            sys.exit(f"FAIL: {message}")
-        print(f"SKIP: {message}")
-        return 0
-    print(f"oracle: compiling against {root}")
+    else:
+        drift = check_vendored_matches(root)
+        if drift:
+            sys.exit("FAIL: " + "\n      ".join(drift))
+        print(f"oracle: compiling against {root} (vendored copy matches)")
     build_oracle(root)
 
     rng = random.Random(20260816)

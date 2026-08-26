@@ -1,0 +1,39 @@
+PinSketch.cpp and PinSketch.h are copies, not forks. Do not edit them here.
+
+    source      https://github.com/meshtastic/firmware
+    path        src/modules/Native/
+    commit      d015c9ee9b2c737543f06061a1473d8a06337c0d
+    dated       2026-08-15
+    subject     feat(sfpp): add a PinSketch set reconciliation primitive
+    licence     GPL-3.0, the same as this repository
+
+    sha256      41e10c06506d0c511ef54c2a5a5e1b11325b1e4c3175adca75006bd1706dc803  PinSketch.cpp
+                5f46ccd32a0d45c2ecf657a6e23cf63f9e8f82c5bd414e43784afa4ba36b3cee  PinSketch.h
+
+WHY A COPY IS HERE
+
+check_oracle.py compiles the firmware's PinSketch against oracle.cpp and diffs it against
+pinsketch.py case for case. That check could only run where a firmware checkout was reachable,
+which is a developer's machine and not CI, so the one thing standing between the simulator and
+sketches the firmware would never put on the air ran rarely and by hand.
+
+WHAT THE COPY COSTS, AND WHAT PAYS FOR IT
+
+A copy can drift, and a drifted copy is worse than no copy at all: the oracle would compile against
+this directory, agree with pinsketch.py, and report 628 passing checks that prove only that two
+files in this repository agree with each other. The cross-repository guarantee would have become a
+tautology without anything failing.
+
+So the firmware still wins whenever it is reachable. check_oracle prefers a real checkout, uses
+this only as a fallback, and when both are present diffs them and fails on any difference. The copy
+is what makes the check runnable everywhere; the firmware is still what makes it mean something.
+
+REFRESHING
+
+    cp $MESHTASTIC_FIRMWARE_ROOT/src/modules/Native/PinSketch.{h,cpp} sfpp/native/
+    sha256sum sfpp/native/PinSketch.cpp sfpp/native/PinSketch.h   # update the hashes above
+    git -C $MESHTASTIC_FIRMWARE_ROOT log -1 --format='%H %ad %s' --date=short -- \
+        src/modules/Native/PinSketch.cpp                          # update commit/dated/subject
+
+Then run `MESHTASTIC_FIRMWARE_ROOT=... python3 -m sfpp.check_oracle --require`, which is what
+proves the refreshed copy still agrees with pinsketch.py.
