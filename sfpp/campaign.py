@@ -166,6 +166,27 @@ class Placement:
         return rng.sample(range(len(mesh.nodes)), min(count, len(mesh.nodes)))
 
     @staticmethod
+    def every_nth(mesh, count, rng, hops=None, stride=3):
+        """Every stride-th node along the mesh's own principal axis, ends included.
+
+        The deliberate arrangement a line or a corridor asks for, and the one `spread` cannot
+        make: farthest-point walks outwards from a corner rather than along the axis.
+        """
+        n = len(mesh.nodes)
+        # Whichever coordinate the mesh is actually long in, so the order is along it and not
+        # across it. On a line that is placement order; on a square either is arbitrary anyway.
+        xs = [node.x for node in mesh.nodes]
+        ys = [node.y for node in mesh.nodes]
+        along = (
+            (lambda i: (mesh.nodes[i].x, mesh.nodes[i].y))
+            if max(xs) - min(xs) >= max(ys) - min(ys)
+            else (lambda i: (mesh.nodes[i].y, mesh.nodes[i].x))
+        )
+        order = sorted(range(n), key=along)
+        chosen = order[:: max(1, int(stride))]
+        return chosen[:count] if count else chosen
+
+    @staticmethod
     def hops_apart(mesh, count, rng, hops=3):
         """Servers whose pairwise separation is as close to `hops` as the graph allows."""
         n = len(mesh.nodes)
@@ -196,6 +217,7 @@ class Placement:
         "random-clients": random_clients.__func__,
         "random-any": random_any.__func__,
         "hops-apart": hops_apart.__func__,
+        "every-nth": every_nth.__func__,
     }
 
     # Strategies whose reach is set by the mesh rather than by the request, so asking for more than
@@ -389,7 +411,7 @@ class Campaign:
         self.opts = opts
         self.seed = seed
         self.rng = random.Random(seed)
-        self.conf = M.make_config(preset=opts.preset, model=getattr(opts, 'path_loss_model', '3gpp-suburban'), phy_loss=not opts.no_phy_loss, tx_power=getattr(opts, 'tx_power', None), noise_model=getattr(opts, 'noise_model', 'thermal'))
+        self.conf = M.make_config(preset=opts.preset, model=getattr(opts, 'path_loss_model', '3gpp-suburban'), phy_loss=not opts.no_phy_loss, tx_power=getattr(opts, 'tx_power', None), noise_model=getattr(opts, 'noise_model', 'thermal'), shadowing=not getattr(opts, 'no_link_shadowing', False))
         # Holding area fixed while node count moves measures density and calls it size, so the
         # side scales by sqrt(n/60) to keep nodes per square kilometre constant.
         self.area = (
@@ -521,6 +543,10 @@ class Campaign:
         self.counter_of = {}  # message_hash -> canonical chain counter
         self._counted = 0
         self.heard_text = {i: set() for i in range(opts.nodes)}
+        # Of those, the ones that arrived as an overheard replay rather than on the air. Kept per
+        # node, not just as a total, because the two delivery paths reach different nodes: the
+        # flood favours the middle of a mesh and a replay favours whoever sits beside an archive.
+        self.pickups_per_node = [0] * opts.nodes
         # Every class, not just the archived one: anything charged airtime needs its receptions
         # measured before an airtime share can be quoted against it.
         self.heard_by_class = {}
@@ -581,7 +607,13 @@ class Campaign:
         """
         strategy = Placement.BY_NAME[self.opts.place]
         wanted = self.server_count()
-        indexes = strategy(self.mesh, wanted, self.placement_rng, self.opts.hops_apart)
+        # Only the strided placement has a second parameter, as the line topology has the budget.
+        extra = (
+            {"stride": self.opts.place_stride} if self.opts.place == "every-nth" else {}
+        )
+        indexes = strategy(
+            self.mesh, wanted, self.placement_rng, self.opts.hops_apart, **extra
+        )
         self.designated = sorted(indexes)
         # Both figures, because a role-bounded strategy returning a shorter list silently is how
         # "6 servers" and "4 servers" become one row. TRAPS 6.
@@ -693,6 +725,12 @@ class Campaign:
         elif packet.kind and packet.kind.startswith("chain:"):
             if node.index in self.servers:
                 self._on_sr(node, packet)
+            elif packet.kind == "chain:link_provide" and packet.payload is not None:
+                # A walked link carries the same replay header as an SR provide (chain.py's
+                # `on_link_request` puts it there on purpose), so whoever overhears it can file it
+                # on the same terms. Without this the chain arm reported no bystander pickup at
+                # all - not because it cannot produce one, but because nothing was listening.
+                self._on_overheard_replay(node, packet)
         elif packet.kind and packet.kind.startswith("sr:"):
             self._on_sr(node, packet)
 
@@ -796,6 +834,7 @@ class Campaign:
         if message_hash not in self.heard_text[node.index]:
             self.heard_text[node.index].add(message_hash)
             self.counters.bystander_pickups += 1
+            self.pickups_per_node[node.index] += 1
             if watch is not None:
                 watch["overheard"].add(message_hash)
                 # How far out the replay header's account is. The claim is the archive's receive
@@ -1733,6 +1772,15 @@ class Campaign:
             if total
             else []
         )
+        # The same texts split by how they arrived. `rates` counts a text a node holds by any
+        # route, which is the user-facing answer; on its own it credits the archive's replays to
+        # the flood, so an arm can move it without the broadcast reaching one node more.
+        overheard = (
+            [self.pickups_per_node[i] / total for i in range(self.opts.nodes)]
+            if total
+            else []
+        )
+        on_air = [rates[i] - overheard[i] for i in range(len(rates))]
         reach = self._reach_ceiling()
 
         report = {
@@ -1830,6 +1878,15 @@ class Campaign:
                     str(k): round(v / 1000.0, 1)
                     for k, v in self.mesh.airtime_by_kind.items()
                 },
+                # The same split by what was carried and by how often the mesh contended for the
+                # channel. Every kind, archive traffic included, so a share can be taken against
+                # the whole offered load rather than against the archive's own total.
+                "packets_by_kind": {
+                    str(k): v for k, v in self.mesh.packets_by_kind.items()
+                },
+                "bytes_by_kind": {
+                    str(k): v for k, v in self.mesh.bytes_by_kind.items()
+                },
                 **{k: v for k, v in self.mesh.stats.items() if k != "airtime_ms"},
             },
             "baseline": {
@@ -1839,6 +1896,20 @@ class Campaign:
                 ),
                 "text_reception_min": round(min(rates), 4) if rates else 0,
                 "text_reception_max": round(max(rates), 4) if rates else 0,
+                # First chance: what the broadcast itself delivered. This is the reach an arm has
+                # to move to have changed the mesh rather than added a second delivery path.
+                "text_on_air_mean": round(statistics.mean(on_air), 4) if on_air else 0,
+                "text_on_air_median": (
+                    round(statistics.median(on_air), 4) if on_air else 0
+                ),
+                "text_on_air_min": round(min(on_air), 4) if on_air else 0,
+                "text_on_air_max": round(max(on_air), 4) if on_air else 0,
+                # Second chance: filed from an overheard replay. Zero for every protocol that
+                # never puts one on the air, which is what makes the split readable.
+                "text_overheard_mean": (
+                    round(statistics.mean(overheard), 4) if overheard else 0
+                ),
+                "text_overheard_max": round(max(overheard), 4) if overheard else 0,
                 "reach_ceiling_mean": round(statistics.mean(reach), 4) if reach else 0,
                 "missed_beyond_hop_limit": (
                     round(statistics.mean([1 - r for r in reach]), 4) if reach else 0
@@ -2121,6 +2192,13 @@ class Campaign:
             # the question. Node order is this run's own, so it means nothing across seeds.
             if self.opts.nodes <= PER_NODE_DETAIL_MAX_NODES:
                 out[name]["per_node"] = [round(s, 4) for s in shares]
+                # `per_node` is what the radio delivered, so text carries the replay pickups
+                # beside it rather than inside it: a scatter that adds them silently would show a
+                # node hearing more of the mesh than it did.
+                if name == "text" and sent:
+                    out[name]["per_node_overheard"] = [
+                        round(c / sent, 4) for c in self.pickups_per_node
+                    ]
         # One row across every class: a per-class table answers "did text get through" but not
         # "did this node hear the mesh at all", and an arm that trades one for another hides there.
         total_sent = sum(self.generator.originated.values())
@@ -3076,7 +3154,7 @@ def build_parser():
     ap.add_argument(
         "--topology",
         default="uniform",
-        choices=("uniform", "clustered", "corridor", "hub", "chain", "mixed"),
+        choices=("uniform", "clustered", "corridor", "hub", "chain", "line", "mixed"),
         help="mesh shape; `mixed` draws the generator from the seed so a sweep samples shapes",
     )
     ap.add_argument(
@@ -3125,6 +3203,11 @@ def build_parser():
     ap.add_argument("--preset", default="LONG_FAST")
     ap.add_argument("--no-phy-loss", action="store_true")
     ap.add_argument(
+        "--no-link-shadowing",
+        action="store_true",
+        help="decide the link graph by distance alone: no per-pair shadowing, no radio skew",
+    )
+    ap.add_argument(
         "--extra-loss",
         type=float,
         default=0.0,
@@ -3168,6 +3251,12 @@ def build_parser():
     )
     ap.add_argument("--place", default="spread", choices=sorted(Placement.BY_NAME))
     ap.add_argument("--hops-apart", type=int, default=3)
+    ap.add_argument(
+        "--place-stride",
+        type=int,
+        default=3,
+        help="the step --place every-nth takes along the mesh's principal axis",
+    )
 
     ap.add_argument(
         "--bucket-mode",

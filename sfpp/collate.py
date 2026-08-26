@@ -42,6 +42,11 @@ import statistics
 METRICS = {
     # --- the four successes. Different denominators; see the module docstring and README §7.3 ---
     "text": ("baseline", "text_reception_mean"),
+    # The same texts split by how they arrived. `text` counts a text a node holds by any route,
+    # so an archive replaying an object raises it without the broadcast reaching one node more -
+    # which is why the price axis below reads `text_on_air` and not `text`.
+    "text_on_air": ("baseline", "text_on_air_mean"),
+    "text_overheard": ("baseline", "text_overheard_mean"),
     "dm": ("dm", "reception"),
     "admin": (
         "admin",
@@ -61,8 +66,46 @@ METRICS = {
     "union": ("sfpp", "union_fraction"),
     # --- load. `demand` is a multiple with no ceiling; the chutil pair is a percentage ---
     "demand": ("traffic", "channel_utilisation"),
+    # Both utilisations at four points of their own distribution, not just the tail: a mesh whose
+    # median node is idle while one is saturated is a different mesh from one where every node is
+    # half busy, and a max alone reads them the same.
+    # Sketch failures as figures rather than only as warnings: a count nobody can chart is a
+    # finding nobody compares. `decode_failures` is an exchange that did not decode, `misdecodes`
+    # is one that decoded to the wrong set - a far more serious thing, and it should read zero.
+    # The protocol's own message traffic - what it spends to catch an archive up - and what that
+    # spend carried. Airtime alone cannot separate "few large messages" from "many small ones".
+    # The offered load by type: what the archive's traffic is a share *of*.
+    **{
+        f"mix_{group}_{suffix}": ("_derived", f"mix_{group}_{suffix}")
+        for group in ("position", "telemetry", "nodeinfo", "text", "dm", "sfpp")
+        for suffix in ("count", "bytes")
+    },
+    "sr_messages": ("_derived", "sr_messages"),
+    "messages_per_object": ("_derived", "messages_per_object"),
+    "bytes_per_object": ("_derived", "bytes_per_object"),
+    "adverts": ("sfpp", "adverts"),
+    "advert_bytes": ("sfpp", "advert_bytes"),
+    "item_request_bytes": ("sfpp", "item_request_bytes"),
+    "provide_bytes": ("sfpp", "provide_bytes"),
+    "enum_requests": ("sfpp", "enum_requests"),
+    "enum_request_bytes": ("sfpp", "enum_request_bytes"),
+    "enum_provides": ("sfpp", "enum_provides"),
+    "enum_provide_bytes": ("sfpp", "enum_provide_bytes"),
+    "item_requests": ("sfpp", "item_requests"),
+    "provides": ("sfpp", "provides"),
+    "objects_moved": ("sfpp", "objects_moved"),
+    "chain_round_trips": ("sfpp", "chain_round_trips"),
+    "sr_bytes": ("sfpp", "sr_bytes"),
+    "decode_failures": ("sfpp", "decode_failures"),
+    "misdecodes": ("sfpp", "misdecodes"),
+    "decode_fail_share": ("_derived", "decode_fail_share"),
+    "exchanges": ("sfpp", "exchanges"),
+    "chutil_p10": ("traffic", "node_channel_util_percent", "p10"),
+    "chutil_median": ("traffic", "node_channel_util_percent", "median"),
     "chutil_p90": ("traffic", "node_channel_util_percent", "p90"),
     "chutil_max": ("traffic", "node_channel_util_percent", "max"),
+    "airutil_p10": ("traffic", "node_air_util_tx_percent", "p10"),
+    "airutil_median": ("traffic", "node_air_util_tx_percent", "median"),
     "airutil_p90": ("traffic", "node_air_util_tx_percent", "p90"),
     "airutil_max": ("traffic", "node_air_util_tx_percent", "max"),
     # --- what the archive cost and did ---
@@ -93,8 +136,11 @@ METRICS = {
 # Ranking on `held` alone would rate an arm that halves DM success as inert. MODEL.md.
 SUCCESSES = ("text", "dm", "admin", "held")
 
-# What an arm costs, read beside whichever success it moved.
-COST = "text"
+# What an arm costs, read beside whichever success it moved. First chance only: an arm that adds a
+# second delivery path has not made the mesh carry more, and charging it against the total would
+# let it look like it had. Measured on a 20-node line, `sr` moved `text` by +0.088 while its
+# per-node broadcast reach was identical to the archive-off control at every node.
+COST = "text_on_air"
 
 # The arm a cell is a difference against, where a block declares one; first name present wins.
 # A block sweep has no control cell and its arms are read against each other. MODEL.md.
@@ -241,7 +287,55 @@ def derived(report):
     ground = report.get("ground") or {}
     mesh = report.get("mesh") or {}
     nodes = ground.get("nodes") if ground.get("fixed_geometry") else None
-    return {"nodes": nodes or mesh.get("nodes")}
+    sfpp = report.get("sfpp") or {}
+    # A failure count on its own ranks whichever cell ran the most traffic. The share says how
+    # often an exchange that was attempted did not decode, which is the thing a sketch is judged on.
+    exchanges = sfpp.get("exchanges")
+    failures = sfpp.get("decode_failures")
+    share = (
+        failures / exchanges
+        if exchanges and failures is not None
+        else (0.0 if failures == 0 and exchanges == 0 else None)
+    )
+    # The protocol's own traffic, as messages rather than as airtime: an advert stating what an
+    # archive has, a request for what a peer lacks, and the replay that answers it. Chain's walk
+    # counts here too - `item_requests` is where `chain.walk` books its link requests.
+    overhead_parts = [
+        sfpp.get(k)
+        for k in ("adverts", "item_requests", "provides", "enum_requests", "enum_provides")
+    ]
+    overhead = (
+        sum(v for v in overhead_parts if v is not None)
+        if any(v is not None for v in overhead_parts)
+        else None
+    )
+    moved = sfpp.get("objects_moved")
+    # What the overhead bought. A protocol carrying one object per hundred messages and one
+    # carrying one per three are the same row on every other measure in this digest.
+    per_object = overhead / moved if overhead is not None and moved else None
+    bytes_per_object = (
+        sfpp["sr_bytes"] / moved if moved and sfpp.get("sr_bytes") is not None else None
+    )
+    # The offered load by message type, as counts and as bytes on the air, with every archive
+    # message folded into one `sfpp` group. Six groups rather than the raw kinds, because a reader
+    # wants the archive's share against the traffic it shares a channel with, not a list of nine.
+    traffic = report.get("traffic") or {}
+    mix = {}
+    for field, suffix in (("packets_by_kind", "count"), ("bytes_by_kind", "bytes")):
+        for kind, value in (traffic.get(field) or {}).items():
+            group = "sfpp" if kind.startswith(("sr:", "chain:")) else kind
+            if group not in TRAFFIC_GROUPS:
+                continue
+            key = f"mix_{group}_{suffix}"
+            mix[key] = mix.get(key, 0) + value
+    return {
+        "nodes": nodes or mesh.get("nodes"),
+        "decode_fail_share": share,
+        **mix,
+        "sr_messages": overhead,
+        "messages_per_object": per_object,
+        "bytes_per_object": bytes_per_object,
+    }
 
 
 def metric(report, key):
@@ -285,13 +379,55 @@ def per_node_of(report):
     One seed's own node order, so it is taken from a single report and never averaged: node 7 of one
     seed is a different node from node 7 of the next, and a mean over them would be a fiction with a
     plausible shape.
+
+    A class carrying a second delivery path becomes `{"on_air": [...], "overheard": [...]}` rather
+    than the bare vector, so the page can draw what the radio delivered apart from what an archive
+    replayed. Readers must accept both shapes: every digest collated before this carries the list.
     """
     out = {}
     for name, row in (report.get("by_class") or {}).items():
         vector = row.get("per_node")
-        if vector:
-            out[name] = vector
+        if not vector:
+            continue
+        overheard = row.get("per_node_overheard")
+        out[name] = (
+            {"on_air": vector, "overheard": overheard} if overheard else vector
+        )
     return out
+
+
+# What decided the mesh, as opposed to what was being varied on it. Kept apart from the arm: two
+# blocks sweeping different flags over the same manufactured mesh should say so in one place rather
+# than leave a reader to infer it from the cell names.
+# The message types a mix pie is cut into. Everything the archive sends is one group: its share
+# against ordinary traffic is the question, and its internal split has its own picture.
+TRAFFIC_GROUPS = ("position", "telemetry", "nodeinfo", "text", "dm", "sfpp")
+
+
+RECIPE_FIELDS = (
+    "topology", "nodes", "area", "stretch", "scenario", "mirror",
+    "preset", "tx_power", "path_loss_model", "noise_model", "no_link_shadowing", "no_phy_loss",
+    "hop_limit", "hop_spread", "hop_assign",
+    "role_mix", "router_fraction", "siting_mix", "platform_mix", "role_placement",
+    "servers", "place", "place_stride", "hops_apart",
+    "hours", "diurnal", "profile",
+)
+
+
+def recipe_of(report, registry):
+    """How this run's mesh was made, entered once under the hash of its own contents.
+
+    The same deduplication the geometry gets, and for the same reason: a campaign is usually one
+    recipe across every cell, and storing it per cell would be the same dictionary a hundred times.
+    """
+    opts = report.get("opts") or {}
+    recipe = {k: opts[k] for k in RECIPE_FIELDS if k in opts and opts[k] is not None}
+    if not recipe:
+        return None
+    blob = json.dumps(recipe, separators=(",", ":"), sort_keys=True)
+    key = hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
+    registry.setdefault(key, recipe)
+    return key
 
 
 def map_of(report, registry):
@@ -311,7 +447,7 @@ def map_of(report, registry):
     return {"geom": key, "overlay": overlay, "seed": report.get("seed")}
 
 
-def cells_of(reports, per_node=False, maps=None):
+def cells_of(reports, per_node=False, maps=None, recipes=None):
     """One entry per arm value, averaged over whatever seeds the run drew for it.
 
     Grouped on the requested value; `placement_capped` records where the achieved one differs.
@@ -341,6 +477,10 @@ def cells_of(reports, per_node=False, maps=None):
             reference = map_of(group[0], maps)
             if reference:
                 cell["map"] = reference
+        if recipes is not None:
+            key = recipe_of(group[0], recipes)
+            if key:
+                cell["recipe"] = key
         # Only when a value was run more than once - a single-seed run has no spread, and writing
         # 0.0 there would let the explorer average a fiction into a real one later.
         spread = {k: _sd([metric(g, k) for g in group]) for k in METRICS}
@@ -700,9 +840,9 @@ def check_timing(blocks, history):
             )
 
 
-def summarise_block(reports, per_node=False, maps=None):
+def summarise_block(reports, per_node=False, maps=None, recipes=None):
     first = reports[0]
-    cells = cells_of(reports, per_node=per_node, maps=maps)
+    cells = cells_of(reports, per_node=per_node, maps=maps, recipes=recipes)
     against_control(cells)
     block = {
         "block": first.get("block", "?"),
@@ -836,8 +976,11 @@ def collate(
             f"sanitised wherever one is needed: {', '.join(repr(n) for n in unsafe)}"
         )
     registry = {} if maps else None
+    # Always collected, unlike the geometry: it is one small dictionary for a whole campaign, and
+    # a digest that cannot say how its mesh was made cannot be read a year later.
+    recipes = {}
     blocks = [
-        summarise_block(reports, per_node=per_node, maps=registry)
+        summarise_block(reports, per_node=per_node, maps=registry, recipes=recipes)
         for reports in by_block.values()
     ]
     # Against this block's own past, not against a figure written into a comment once. Skipped
@@ -875,6 +1018,8 @@ def collate(
         # Deduplicated geometry, referenced by the cells that share it. Absent unless --maps, so a
         # digest that nobody draws a map from stays the size it was.
         **({"maps": registry} if registry else {}),
+        # How the mesh under every cell was made, deduplicated. Usually one entry for a campaign.
+        **({"recipes": recipes} if recipes else {}),
     }
 
 
@@ -1026,10 +1171,11 @@ def markdown(summary):
         "",
         "Ranked by how far the arm moves whichever success it moves most. The four measures have "
         "four denominators and are **not comparable to each other** (README §7.3) - `moved` names "
-        "which one this block travels in. `text` is the broadcast reach in the same cells, so an arm "
-        "buying its measure while `text` falls is paying in the currency the mesh exists to spend.",
+        "which one this block travels in. `text on air` is the broadcast reach in the same cells - "
+        "first chance only, so an archive replaying an object cannot be credited with it - and an "
+        "arm buying its measure while that falls is paying in the currency the mesh exists to spend.",
         "",
-        "| block | arm | moved | low → high | spread | text | price | dir | cells |",
+        "| block | arm | moved | low → high | spread | text on air | price | dir | cells |",
         "| --- | --- | --- | --- | --: | --- | --- | :-: | --: |",
     ]
     for b in ranked:
@@ -1078,17 +1224,34 @@ def markdown(summary):
         if b.get("explains"):
             out += [f"*{b['explains']}*", ""]
         out += [
-            "| value | text | DM | admin | held | union | worst node | demand | chutil p90/max | airutil max | placed |",
-            "| --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |",
+            "| value | seeds | text | on air | overheard | DM | admin | held | union | "
+            "worst node | demand | chutil p50/p90/max | airutil p50/max | placed |",
+            "| --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |",
         ]
         for c in b["cells"]:
             m = c["metrics"]
+            sd = c.get("sd") or {}
+
+            def pm(key, places=3):
+                """A cell's mean and, where it was run more than once, its seed-to-seed spread.
+
+                Without it three seeds are reported as one number and a difference smaller than
+                the draw reads exactly like a difference larger than it.
+                """
+                value = _fmt(m.get(key), places)
+                spread = sd.get(key)
+                return value if spread is None else f"{value} ±{spread:.{places}f}"
+
             out.append(
-                f"| {c['value']} | {_fmt(m.get('text'))} | {_fmt(m.get('dm'))} | "
-                f"{_fmt(m.get('admin'))} | {_fmt(m.get('held'))} | {_fmt(m.get('union'))} | "
-                f"{_fmt(m.get('text_worst'))} | {_fmt(m.get('demand'), 2)}x | "
-                f"{_fmt(m.get('chutil_p90'), 1)}/{_fmt(m.get('chutil_max'), 1)}% | "
-                f"{_fmt(m.get('airutil_max'), 1)}% | {_fmt(m.get('servers_placed'), 0)} |"
+                f"| {c['value']} | {len(c.get('seeds') or [])} | {pm('text')} | "
+                f"{pm('text_on_air')} | {pm('text_overheard')} | "
+                f"{pm('dm')} | "
+                f"{pm('admin')} | {pm('held')} | {pm('union')} | "
+                f"{pm('text_worst')} | {pm('demand', 2)}x | "
+                f"{_fmt(m.get('chutil_median'), 1)}/{_fmt(m.get('chutil_p90'), 1)}/"
+                f"{_fmt(m.get('chutil_max'), 1)}% | "
+                f"{_fmt(m.get('airutil_median'), 1)}/{_fmt(m.get('airutil_max'), 1)}% | "
+                f"{_fmt(m.get('servers_placed'), 0)} |"
             )
         for f in b["fatal"]:
             out.append(f"\n> FAIL {f}")

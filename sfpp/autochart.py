@@ -233,6 +233,24 @@ class Panel:
                 colours[i] if isinstance(colours, list) else colours,
             )
 
+    def stacked(self, layers, colours, offset=0.0, width_frac=0.66):
+        """Bars of several layers, each sitting on the sum of the ones below it.
+
+        For quantities that add up to something meaningful - two delivery paths to one reach -
+        rather than for two measurements that merely share an axis, which `bars` puts side by side.
+        """
+        bottom = PANEL_H - PAD_B
+        w = self.band_width() * width_frac
+        base = [0.0] * len(layers[0])
+        for layer, colour in zip(layers, colours):
+            for i, v in enumerate(layer):
+                if not v:
+                    continue
+                cx = self.x(i) + offset * self.band_width()
+                top = self.y(base[i] + v)
+                self.rect(cx - w / 2, top, w, self.y(base[i]) - top, colour)
+                base[i] += v
+
     def legend(self, entries):
         x = self.plot_left + 6
         for label, colour in entries:
@@ -465,10 +483,21 @@ def render_block(reports, out_dir, name):
     for r in reports:
         arms.setdefault(str(r.get("value", "-")), []).append(r)
     labels = list(arms)
-    mean_reach = [
-        sum(g["baseline"]["text_reception_mean"] for g in arms[k]) / len(arms[k])
-        for k in labels
-    ]
+    # Split by how the text arrived, because they are two different claims: the flood delivering
+    # more, and an archive replaying what the flood never carried. Stacked rather than side by
+    # side - they sum to the reach the run reports, and the total is what a user holds.
+    def mean_of(pick):
+        return [sum(pick(g) for g in arms[k]) / len(arms[k]) for k in labels]
+
+    total_reach = mean_of(lambda g: g["baseline"]["text_reception_mean"])
+    # Per report, not per cell: a cell can hold seeds from either side of the split landing, and
+    # taking a missing figure as zero would drag the mean down rather than fall back. A report
+    # without the split reads its total as first chance - right for every protocol with no replay
+    # path, and what that figure already showed for the rest.
+    on_air = mean_of(
+        lambda g: g["baseline"].get("text_on_air_mean", g["baseline"]["text_reception_mean"])
+    )
+    overheard = [max(0.0, total_reach[i] - on_air[i]) for i in range(len(labels))]
     worst_reach = [
         min(g["baseline"]["text_reception_min"] for g in arms[k]) for k in labels
     ]
@@ -481,16 +510,20 @@ def render_block(reports, out_dir, name):
 
     reach = Panel(
         0,
-        "Text reach - mean against worst node",
+        "Text reach - first chance, replay, worst node",
         labels,
         0,
         1,
         "share of text received",
     )
     reach.frame()
-    reach.bars(mean_reach, COOL, offset=-0.19, width_frac=0.34)
+    reach.stacked(
+        [on_air, overheard], [COOL, WARN], offset=-0.19, width_frac=0.34
+    )
     reach.bars(worst_reach, ACCENT, offset=0.19, width_frac=0.34)
-    reach.legend([("mean node", COOL), ("worst node", ACCENT)])
+    reach.legend(
+        [("on air", COOL), ("overheard replay", WARN), ("worst node", ACCENT)]
+    )
 
     airtime = Panel(
         PANEL_W,

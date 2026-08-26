@@ -1688,6 +1688,48 @@ def place_hub(count, area, rng, min_dist, spokes=6):
     return points
 
 
+def line_spacing(conf):
+    """The spacing that puts a node in contact with its immediate neighbours and nobody else.
+
+    Halfway in dB between the neighbour link and the second neighbour, because an octave of
+    distance is all the room the budget has: at a suburban exponent that is about 13 dB, so
+    either margin can only be half of it. Bisected on the run's own budget rather than tabulated,
+    so the answer follows the preset, the power and the path-loss model.
+    """
+    import lib.phy as phy
+
+    sensitivity = phy.effective_sensitivity(conf)
+
+    def budget(d):
+        return conf.PTX + 2 * conf.GL - phy.estimate_path_loss(conf, d, conf.FREQ)
+
+    # budget() falls monotonically, so the sum of the two margins does too, and the crossing is
+    # the spacing whose neighbour margin equals the second neighbour's deficit.
+    def error(d):
+        return budget(d) + budget(2 * d) - 2 * sensitivity
+
+    lo, hi = 1.0, 1.0
+    while error(hi) > 0 and hi < 1_000_000.0:
+        hi *= 2
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        if error(mid) > 0:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def place_line(count, area, rng, min_dist, conf=None):
+    """Nodes evenly spaced along a straight line, each in contact with its neighbours alone.
+
+    A manufactured mesh rather than a shape a deployment has: the diameter is the node count, so
+    every hop limit binds, and `--area` decides nothing because the spacing comes from the budget.
+    """
+    spacing = max(min_dist, line_spacing(conf) if conf is not None else area / max(1, count - 1))
+    return [(i * spacing, area / 2) for i in range(count)]
+
+
 def place_chain(count, area, rng, min_dist, towns=None, spread=0.035):
     """Towns strung out in a line, each linked to the next. A valley, a rail line, a coast road.
 
@@ -1722,17 +1764,26 @@ TOPOLOGIES = {
     "corridor": place_corridor,
     "hub": place_hub,
     "chain": place_chain,
+    "line": place_line,
 }
 
+# What `mixed` draws from, pinned rather than taken from TOPOLOGIES: the draw is an index into a
+# sorted list, so adding a shape would have silently renamed every earlier `mixed` run's mesh.
+# `line` is manufactured rather than a shape a mesh has, so it does not belong in the sample.
+MIXED_TOPOLOGIES = ("chain", "clustered", "corridor", "hub", "uniform")
 
-def place(topology, count, area, rng, min_dist=300.0):
+
+def place(topology, count, area, rng, min_dist=300.0, conf=None):
     """Place nodes by the named generator. `mixed` draws the generator from the same seed.
 
     So a sweep samples across mesh shapes rather than across draws of one shape.
     """
     if topology == "mixed":
-        topology = sorted(TOPOLOGIES)[rng.randrange(len(TOPOLOGIES))]
-    return TOPOLOGIES[topology](count, area, rng, min_dist), topology
+        topology = MIXED_TOPOLOGIES[rng.randrange(len(MIXED_TOPOLOGIES))]
+    generator = TOPOLOGIES[topology]
+    # Only the line needs the budget: its whole definition is a distance in dB, not in metres.
+    extra = {"conf": conf} if generator is place_line else {}
+    return generator(count, area, rng, min_dist, **extra), topology
 
 
 def _mix64(x):
@@ -2081,6 +2132,7 @@ def make_config(
     phy_loss=True,
     tx_power=None,
     noise_model="thermal",
+    shadowing=True,
 ):
     from lib.config import Config
     from lib.phy import path_loss_model_id
@@ -2106,6 +2158,10 @@ def make_config(
         conf.NOISE_LEVEL = VENDORED_FIXED_NOISE_DBM
     else:
         raise ValueError(f"unknown noise model {noise_model!r}")
+    # Off, the link graph is decided by distance alone: no per-pair shadowing and no radio skew,
+    # so a manufactured shape survives into the mesh the run actually has. A control, not a
+    # deployment - real links are not that tidy.
+    conf.MODEL_ASYMMETRIC_LINKS = bool(shadowing)
     if tx_power is not None:
         # The region's power limit is the ceiling an operator may use, not one they must. Turning it
         # down while leaving the geometry alone asks what the mesh costs when everyone is polite.
@@ -2324,6 +2380,11 @@ class Mesh:
             "role_unavailable_in_version": 0,
         }
         self.airtime_by_kind = {}
+        # Packets and bytes on the air per kind, beside the airtime. Three different questions:
+        # airtime is what the channel was occupied for, bytes are what was carried, and packets are
+        # how many times the mesh had to contend for it at all.
+        self.packets_by_kind = {}
+        self.bytes_by_kind = {}
         # Filled by build() when per-node hop limits are in play; None means everyone uses the same.
         self.node_hop_limit = None
         self.on_receive = (
@@ -3110,6 +3171,8 @@ class Mesh:
         self.stats["bytes_on_air"] += packet.length
         key = packet.kind or packet.portnum
         self.airtime_by_kind[key] = self.airtime_by_kind.get(key, 0.0) + duration
+        self.packets_by_kind[key] = self.packets_by_kind.get(key, 0) + 1
+        self.bytes_by_kind[key] = self.bytes_by_kind.get(key, 0) + packet.length
         self.at(tx.end, lambda: self._deliver(tx))
 
     def _noise_excursion(self, node, start, end):
@@ -4740,7 +4803,7 @@ def build(
         node_count = len(points)
         resolved = f"scenario:{scenario.name}"
     else:
-        points, resolved = place(topology, node_count, area, rng, min_dist)
+        points, resolved = place(topology, node_count, area, rng, min_dist, conf=conf)
         points = stretch_points(points, stretch)
     # Real node numbers, so two nodes can share a last byte as they do on a real mesh; sequential
     # ids would hide the ambiguity path entirely.

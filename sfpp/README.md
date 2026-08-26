@@ -316,6 +316,7 @@ block sweep for mechanism and the cross for deployment advice.
 | `--congestion-mode`         | `adaptive`   | recompute the broadcast throttle per node from its own online count, or one mesh-wide value      |
 | `--congestion-pivot`        | 40           | node count below which nothing throttles at all - `Default.h`'s literal in `congestionScalingCoefficient`. Raising it lets a larger mesh keep its intervals. Scales the **interval**, not the reach |
 | `--no-phy-loss`             | off          | disable the empirical SNR-to-PER curve                                                           |
+| `--no-link-shadowing`       | off          | decide the link graph by distance alone - no per-pair shadowing, no radio skew. **A control, not a deployment**: it is what makes a manufactured shape such as `--topology line` survive into the mesh the run actually has, since 6 dB of shadowing is half an octave of distance. Read `models.asymmetric_links` |
 
 **On `--profile`.** Each value is a **release series taken at its final release**, dated by walking
 the firmware's own tags. `2.8` is this tree, read line by line; `2.4` through `2.7` turn off the
@@ -405,6 +406,7 @@ rest of the mesh keeps believing routes through a node that has gone. Not yet ex
 | `--servers`           | 3           | archive count                                                                                                          |
 | `--place`             | `spread`    | see §5.11. Placement draws from its own RNG stream, so a randomised strategy carries the same offered load as the control - it did not before 1.1.0 (TRAPS.md #12) |
 | `--hops-apart`        | 3           | target separation for `hops-apart`                                                                                     |
+| `--place-stride`      | 3           | the step `--place every-nth` takes along the mesh's principal axis                                                      |
 | `--bucket-mode`       | `local`     | `local` is what the firmware does; `global` is a labelled fiction; `time` and `window` need no agreement               |
 | `--capacity`          | 32          | sketch capacity                                                                                                        |
 | `--window-size`       | 32          | objects in the sliding window                                                                                          |
@@ -459,7 +461,18 @@ At 60 nodes, seed 990001, 8 km:
 | `corridor`  | long and thin, aspect 6:1      | 8.4         | 12       | a valley or coast road; hop limit binds hard, placement is nearly one-dimensional |
 | `hub`       | dense core plus radial spokes  | 18.2        | 5        | the core hears everything, the spoke ends almost nothing                          |
 | `chain`     | towns strung in a line         | 10.6 @16 km | **11**   | **the way to build a mesh wider than any hop limit that stays connected**         |
+| `line`      | evenly spaced along one axis   | 1.9 @20 n  | **19**   | manufactured: each node in contact with its neighbours and nobody else            |
 | `mixed`     | drawn from the seed            | -          | -        | a sweep samples across _shapes_ rather than draws of one shape                    |
+
+**`line` is a manufactured mesh, not a shape anybody has.** The spacing is not a distance in metres
+but one in dB: `mesh.line_spacing()` bisects the run's own link budget for the distance whose
+neighbour margin equals the second neighbour's deficit, so the answer follows `--preset`,
+`--tx-power` and `--path-loss-model` rather than being tabulated. An octave of distance is all the
+room there is - about 13 dB at a suburban exponent - so each margin is only half of it, and 6 dB of
+per-pair shadowing would take second neighbours in and neighbours out again. Pair it with
+`--no-link-shadowing` or the shape is a claim the mesh does not keep. `--area` decides nothing here
+except where the line sits, and `mixed` never draws it: it is a controlled experiment, not a sample
+of what meshes look like.
 
 **Use `chain`, not a stretched `uniform`, for wide meshes.** Stretching a uniform field far enough to
 exceed seven hops fragments it: at 16 km with 60 nodes it falls into 15 components at degree 2.6,
@@ -889,6 +902,7 @@ file. The live-map path (`--scenario map --bbox`) is the route to more.
 | `beside-router`     | a plain client one hop from each router                                 |
 | `random-clients`    | ordinary nodes at random - the control for every deliberate arrangement |
 | `hops-apart`        | targeting `--hops-apart` pairwise separation                            |
+| `every-nth`         | every `--place-stride`-th node along the mesh's principal axis, ends included - the arrangement a line or a corridor asks for and the one `spread` cannot make |
 
 **Known limitation:** `hops-apart` picks greedily from a high-degree start, which on a `chain` walks
 only a short way along it. On a 24 km chain with 8 archives it clusters them in the left third and
@@ -927,7 +941,7 @@ diameter column reads fragmented rather than a number.
 | `traffic`      | the largest section, and the one that grows. Includes **`cancelled_by_weaker_relay`** and **`cancelled_reach_lost`** - duplicate suppression backfiring, where the relay heard by fewer nodes silences the one heard by more. Offered load and airtime (originated per class, **`channel_utilisation`** and **`node_channel_util_percent`** - two different things, see below - transmissions, **`queue_drops`**, `dropped_to_backoff_cap`, receptions, collision, half-duplex and PHY losses, congestion coefficient), then one family per mechanism: next-hop routing (`next_hop_*`, `route_expired_*`, `routes_lost_to_eviction`), the NodeDB tiers (`nodedb_evictions`, `warm_*`, `dm_blocked_no_key`), signing (`packets_signed`, `dropped_unsigned_strict`, `dropped_unverifiable`, `dropped_downgrade`, `signature_bootstraps`), traceroute (`traceroutes_sent`, `traceroute_routes_learned`, `traceroute_uncorroborated`, `route_cache_*`), hop scaling (`hop_samples`, `hop_rolls`, `hop_limit_lowered`), and the unreleased mechanisms (`extra_repeats_*`, `early_floods`) |
 | `by_class`     | per portnum: sent, received, **per-node reception distribution**, `nodes_receiving_none`, airtime share, `archived`, and on a mesh of 256 nodes or fewer **`per_node`** - the vector the distribution was taken from, one share per node, in this run's own node order. Six statistics cannot show *which* node is deaf or that two classes fail at the same one; `explorer.py` draws it as a dot per node per class when the digest carried it                                                                                                   |
 | `by_hop_limit` | reception and hops traversed, split by the node's own limit                                                                                                                                                           |
-| `baseline`     | text reach min/median/mean/max, routing ceiling, and the loss split into beyond-hop-limit against lost-within-reach                                                                                                   |
+| `baseline`     | text reach min/median/mean/max, the same reach split by **how it arrived** (`text_on_air_*` and `text_overheard_*` - see §7.3), routing ceiling, and the loss split into beyond-hop-limit against lost-within-reach |
 | `designated`   | the archive-sited nodes' own reception, with the archive off or on, plus held and the reconciled gain                                                                                                                 |
 | `observers`    | per-observer direct against overheard, and replay placement error                                                                                                                                                     |
 | `sfpp`         | held, union, adverts, objects moved, bytes and airtime by message type, decode failures, misdecodes, escalations, bystander pickups, **`silent_losses`**, the at-rest audit, drift telemetry, and the stretch metrics |
@@ -1012,7 +1026,8 @@ report.
 
 | Metric | The question | Denominator |
 | --- | --- | --- |
-| `baseline.text_reception_mean` | of all nodes, what share received a broadcast? | every node, every broadcast |
+| `baseline.text_reception_mean` | of all nodes, what share **hold** a broadcast, by any route? | every node, every broadcast |
+| `baseline.text_on_air_mean` | of those, what share the **broadcast itself** delivered - first chance | every node, every broadcast |
 | `dm.reception` | did the DM reach **the one node it was addressed to**? | DMs that reached the air |
 | `admin.<hops>.success_rate` | did the operator's change take, within the attempts they made? | sessions the operator wanted |
 | `sfpp.held_fraction_mean` | what does an archive **hold**? | objects originated |
@@ -1021,6 +1036,21 @@ A worked example, one 3 h Batumi run: text reach 0.873, DM success 0.966, admin 
 archive held 0.933. The DM figure being higher than the broadcast figure does **not** mean DMs work
 better - a DM needs to reach one node and gets acknowledgements and retries, while text reach is the
 fraction of *all* nodes that heard it. Different denominators, not a comparison.
+
+**Text reach is two delivery paths, and only one of them is the mesh.** `text_reception_mean` counts
+a text a node holds however it got there, and an archive replaying an object files it into the same
+set through the replay header (`campaign._on_overheard_replay`). So a protocol that puts replays on
+the air raises that number without the broadcast reaching one node more, and it did: on a 20-node
+line at 3 hops, `--protocol sr` reads 0.4111 against the archive-off control's 0.3264 while its
+per-node broadcast reach is identical to the control **at every node** - the whole difference is the
+bystander pickup rate, to four decimals. `text_on_air_mean` is the first-chance half, `text_overheard_mean`
+the replayed half, and they sum to the total. The per-node vectors in `by_class.text.per_node` are
+the on-air half; `per_node_overheard` sits beside them rather than inside them.
+
+**Quote `text_on_air` when asking whether the mesh got better, and `text` when asking what a user
+ends up holding.** The digest carries all three, `collate.COST` is `text_on_air`, and the explorer
+draws the split two ways: the per-node scatter extends each node's dot by the reach its replays
+added, and `text delivery: on air vs overheard` is the stacked bar per cell.
 
 **Each question separates its own failure modes**, which is the part a single rate cannot do:
 

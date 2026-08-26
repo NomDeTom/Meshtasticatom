@@ -29,6 +29,10 @@ from .version import SIM_VERSION
 # thirty runs of 87 blocks a file a browser opens instantly.
 SHOWN = [
     ("text", "text", 3),
+    # The same texts by how they arrived. `text` is what a node holds; `text_on_air` is what the
+    # broadcast delivered, and the difference is an archive's replay rather than a better mesh.
+    ("text_on_air", "text on air", 3),
+    ("text_overheard", "text overheard", 3),
     ("dm", "DM", 3),
     ("admin", "admin", 3),
     ("held", "held", 3),
@@ -37,10 +41,33 @@ SHOWN = [
     # A multiple with no ceiling, and a percentage that cannot pass 100. Named apart on purpose:
     # reading the first as the second described genuine comparisons as rankings of collapse.
     ("demand", "demand x", 2),
+    # Both utilisations across their own distribution. A max alone cannot tell a mesh with one
+    # saturated node from one that is uniformly half busy, and those are different problems.
+    ("chutil_p10", "chutil p10 %", 1),
+    ("chutil_median", "chutil p50 %", 1),
     ("chutil_p90", "chutil p90 %", 1),
     ("chutil_max", "chutil max %", 1),
+    ("airutil_p10", "airutil p10 %", 1),
+    ("airutil_median", "airutil p50 %", 1),
+    ("airutil_p90", "airutil p90 %", 1),
     ("airutil_max", "airutil max %", 1),
     ("sr_airtime", "SR air", 3),
+    # Sketch failures, chartable rather than only listed as warnings. The share is the comparable
+    # one - a raw count ranks whichever cell ran the most exchanges.
+    # Overhead against catch-up: what the protocol said, and what got carried because it said it.
+    ("sr_messages", "protocol messages", 0),
+    ("objects_moved", "objects carried", 0),
+    ("messages_per_object", "messages per object", 2),
+    ("bytes_per_object", "bytes per object", 0),
+    ("adverts", "adverts", 0),
+    ("item_requests", "item requests", 0),
+    ("provides", "provides", 0),
+    ("chain_round_trips", "chain round trips", 0),
+    ("sr_bytes", "protocol bytes", 0),
+    ("decode_fail_share", "decode fail rate", 3),
+    ("decode_failures", "decode failures", 0),
+    ("misdecodes", "misdecodes", 0),
+    ("exchanges", "exchanges", 0),
     ("servers_placed", "placed", 0),
 ]
 # The axis each metric belongs on. Bars side by side invite reading one height against another, and
@@ -49,15 +76,35 @@ SHOWN = [
 # family is a promise that heights within it mean the same thing.
 UNITS = {
     "text": "share",
+    "text_on_air": "share",
+    "text_overheard": "share",
     "dm": "share",
     "admin": "share",
     "held": "share",
     "union": "share",
     "text_worst": "share",
     "sr_airtime": "share",
+    "decode_fail_share": "share",
+    "sr_messages": "events",
+    "objects_moved": "events",
+    "adverts": "events",
+    "item_requests": "events",
+    "provides": "events",
+    "chain_round_trips": "events",
+    "messages_per_object": "per-object",
+    "bytes_per_object": "bytes",
+    "sr_bytes": "bytes",
+    "decode_failures": "events",
+    "misdecodes": "events",
+    "exchanges": "events",
     "demand": "multiple",
+    "chutil_p10": "percent",
+    "chutil_median": "percent",
     "chutil_p90": "percent",
     "chutil_max": "percent",
+    "airutil_p10": "percent",
+    "airutil_median": "percent",
+    "airutil_p90": "percent",
     "airutil_max": "percent",
     "servers_placed": "count",
 }
@@ -79,21 +126,46 @@ UNIT_AXIS = {
     "multiple": "multiple of the unscaled interval (x)",
     "percent": "channel/air utilisation (%)",
     "count": "nodes",
+    "events": "count over the run",
+    "bytes": "bytes over the run",
+    "per-object": "protocol messages per object carried",
 }
 # Fixed per metric, not per position in the selection, so a colour means the same thing in every
 # panel and across a reload. Chosen to hold up on both themes and for red/green colour blindness.
 SERIES_COLOURS = {
     "text": "#2E5E7E",
+    "text_on_air": "#1F7A5A",
+    "text_overheard": "#B8860B",
     "dm": "#B4472A",
     "admin": "#7A8C3F",
     "held": "#4E86A8",
     "union": "#8A5A9E",
     "text_worst": "#C08A2E",
     "sr_airtime": "#3F8A7A",
+    "sr_messages": "#8A5A9E",
+    "objects_moved": "#4E86A8",
+    "messages_per_object": "#8A5A9E",
+    "bytes_per_object": "#7A8C3F",
+    "adverts": "#A57BB8",
+    "item_requests": "#C08A2E",
+    "provides": "#3F8A7A",
+    "chain_round_trips": "#B4472A",
+    "sr_bytes": "#7A8C3F",
+    "decode_fail_share": "#B4472A",
+    "decode_failures": "#B4472A",
+    "misdecodes": "#8C2F16",
+    "exchanges": "#7FA8C0",
     "demand": "#2E5E7E",
+    # One ramp per utilisation, darkening towards the tail, so the four read as one distribution
+    # rather than as four unrelated series - and the two types stay apart by hue.
+    "chutil_p10": "#9CC0D6",
+    "chutil_median": "#6296B8",
     "chutil_p90": "#2E5E7E",
-    "chutil_max": "#B4472A",
-    "airutil_max": "#C08A2E",
+    "chutil_max": "#1B3A50",
+    "airutil_p10": "#E0BE7E",
+    "airutil_median": "#C08A2E",
+    "airutil_p90": "#8F6413",
+    "airutil_max": "#5E4109",
     "servers_placed": "#4E86A8",
 }
 
@@ -163,6 +235,13 @@ def index_by_block(runs):
                     "scenario": run.get("scenario_requested") or "flat",
                     "seed_base": run.get("seed_base"),
                     "cells": {c["value"]: c["metrics"] for c in b["cells"]},
+                    # Seed-to-seed standard deviation per metric, where the cell was run more than
+                    # once. Collated since the digest existed and never rendered, so three seeds
+                    # were reported as one number and a difference smaller than the draw read
+                    # exactly like a difference larger than it.
+                    "sd": {
+                        c["value"]: c["sd"] for c in b["cells"] if c.get("sd")
+                    },
                     # The six-number distributions behind the single numbers, where the digest was
                     # collated recently enough to carry them. Older digests have none, so every
                     # reader of this has to treat it as absent rather than empty.
@@ -543,6 +622,16 @@ tbody tr:last-child td { border-bottom: 0; }
 code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .95em; }
 .spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
 .flag { color: var(--warn); font-size: .82rem; margin: .5rem 0 0; }
+.flags { margin-top: .6rem; }
+.flags > summary {
+  cursor: pointer; color: var(--warn); font-size: .82rem; list-style: none;
+  display: inline-block; border: 1px solid var(--border); border-radius: 999px;
+  padding: .1rem .6rem;
+}
+.flags > summary::-webkit-details-marker { display: none; }
+.flags > summary::before { content: "▸ "; }
+.flags[open] > summary::before { content: "▾ "; }
+.flags > summary:hover { border-color: var(--warn); }
 .flag.bad { color: var(--bad); }
 .pill { display: inline-block; padding: .1rem .5rem; border: 1px solid var(--border); border-radius: 999px; font-size: .75rem; color: var(--muted); }
 .controls { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0 1.5rem; }
@@ -557,7 +646,83 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 2p
 .attribution-block[hidden] { display: none; }
 .hidden { display: none; }
 footer { color: var(--muted); font-size: .8rem; margin-top: 3rem; }
-@media (max-width: 768px) { .meta { gap: .35rem 1rem; } }
+/* The making page reads as a manual rather than as a result, so it gets a manual's furniture:
+   an index that stays put while the prose scrolls past it. */
+.making { display: grid; grid-template-columns: 12.5rem minmax(0, 1fr); gap: 1.4rem; align-items: start; }
+.making-nav { position: sticky; top: 1rem; font-size: .85rem; }
+.making-nav ol { list-style: none; margin: 0; padding: 0; counter-reset: makingnav; }
+.making-nav li { counter-increment: makingnav; margin: 0 0 .1rem; }
+.making-nav a {
+  display: block; padding: .3rem .5rem; border-left: 2px solid var(--border);
+  color: var(--muted); text-decoration: none;
+}
+.making-nav a::before { content: counter(makingnav) ". "; color: var(--disabled); }
+.making-nav a:hover { border-left-color: var(--accent); color: var(--accent); text-decoration: none; }
+/* Two columns, never more: `auto-fit` fitted four across a 96rem page and shrank a 640-wide chart
+   to 60%, which makes 11px axis text unreadable. A multi-series family takes the width back - its
+   bars are meant to be read against each other across the whole axis - and `dense` lets a later
+   narrow chart backfill the gap a wide one leaves, so the narrow pair ends up side by side. */
+.chartgrid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: row dense; gap: .4rem 1.2rem; align-items: end;
+}
+.chartcell { min-width: 0; }
+.chartcell.wide { grid-column: 1 / -1; }
+/* The cross-block page. One row per block, stacked, sharing a left gutter and one scale. */
+.stackbar { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.stacklabel { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+.stackmetrics { border-bottom: 1px solid var(--border); padding-bottom: .6rem; }
+.stackblocks { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .85rem; color: var(--muted); margin-bottom: .8rem; }
+.stackblocks label { display: flex; align-items: center; gap: .3rem; }
+.stackrow { border-top: 1px solid var(--border); padding: .5rem 0 .2rem; }
+.stackrow:first-child { border-top: 0; }
+/* The campaign panel: the recipe as a table beside the mesh it made. */
+.recipe { border-top: 1px solid var(--border); padding-top: .8rem; margin-top: .8rem; }
+.recipe:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+.recipename { font-size: .95rem; margin: 0 0 .2rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.recipebody { display: grid; grid-template-columns: minmax(0, 21rem) minmax(0, 1fr); gap: 1rem 1.4rem; align-items: start; }
+.recipebody > * { min-width: 0; }
+/* Its own rules rather than the glossary's: that table fixes a 10rem term column and a 13rem
+   denominator column, which together overflow this narrower track and run under the map. */
+.recipetable { table-layout: fixed; width: 100%; }
+.recipetable td {
+  font-size: .8rem; padding: .18rem .5rem; text-align: left; white-space: normal;
+  overflow-wrap: break-word; vertical-align: top;
+}
+.recipetable td:first-child { width: 8.5rem; color: var(--muted); }
+.campaignmap { min-width: 0; overflow: hidden; }
+.campaignmap svg { display: block; width: 100%; height: auto; }
+/* Three cells to a row, not `auto-fit`: a 96rem page fitted eight of them at 11rem and each pie
+   came out smaller than its own legend. Each cell holds a pair, so a row is six pies. */
+.piegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem 1.4rem; }
+.piecell { min-width: 0; }
+.piepair { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+@media (max-width: 1100px) { .piegrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .piegrid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .recipebody { grid-template-columns: minmax(0, 1fr); } }
+.swatch { display: inline-block; width: .62rem; height: .62rem; border-radius: 2px; margin-right: .3rem; vertical-align: baseline; }
+@media (max-width: 1100px) { .chartgrid { grid-template-columns: minmax(0, 1fr); } }
+/* This table holds prose, not numbers, so it has to undo the numeric defaults above: those set
+   `text-align: right` and `white-space: nowrap`, which between them right-align a sentence and
+   then refuse to wrap it. Fixed layout keeps the prose column taking the slack. */
+.glossary { table-layout: fixed; width: 100%; }
+.glossary th, .glossary td {
+  text-align: left; white-space: normal; overflow-wrap: break-word;
+  vertical-align: top; line-height: 1.45;
+}
+.glossary th:first-child, .glossary td:first-child { width: 10rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.glossary th:last-child, .glossary td:last-child { width: 13rem; color: var(--muted); }
+.glossary tr.head td { vertical-align: middle; }
+@media (max-width: 640px) {
+  .glossary th:first-child, .glossary td:first-child { width: 6.5rem; }
+  .glossary th:last-child, .glossary td:last-child { width: 7.5rem; }
+}
+.glossary tr.head td { font-weight: 600; color: var(--muted); background: var(--field-bg); }
+@media (max-width: 768px) {
+  .meta { gap: .35rem 1rem; }
+  .making { grid-template-columns: minmax(0, 1fr); }
+  .making-nav { position: static; }
+}
 """
 
 JS = """
@@ -581,28 +746,65 @@ JS = """
     const cells = Object.keys(entry.nodes || {});
     host.textContent = '';
     if (!cells.length) return;
-    const W = 640, LEFT = 132, RIGHT = 24, PLOT = W - LEFT - RIGHT;
+    // Two marks per node on a text row - one on the baseline, one half a row up - so the row is
+    // twice the height a single track of dots needs. Anything tighter and the lifted marks of one
+    // row sit on the dots of the row above.
+    const W = 640, LEFT = 132, RIGHT = 24, PLOT = W - LEFT - RIGHT, ROW = 32;
     const rows = [];
     cells.forEach((cell) => {
       const classes = entry.nodes[cell].classes;
-      Object.keys(classes).forEach((cls) => rows.push([cell, cls, classes[cls]]));
+      // A class either kept the bare on-air vector or, where a second delivery path exists, the
+      // two apart. Both shapes are in the archive, so both are read here.
+      Object.keys(classes).forEach((cls) => {
+        const v = classes[cls];
+        rows.push(Array.isArray(v)
+          ? [cell, cls, v, null]
+          : [cell, cls, v.on_air || [], v.overheard || null]);
+      });
     });
-    const H = 34 + rows.length * 16;
+    const H = 34 + rows.length * ROW;
     const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
                            style: 'max-width:100%;height:auto;font-size:10.5px'});
-    rows.forEach(([cell, cls, vector], i) => {
-      const y = 14 + i * 16;
+    rows.forEach(([cell, cls, vector, overheard], i) => {
+      const y = 14 + i * ROW;
       const label = el('text', {x: LEFT - 8, y: y + 4, 'text-anchor': 'end',
                                 style: 'fill:var(--muted)'});
       label.textContent = `${cell} · ${cls}`;
       svg.appendChild(label);
       svg.appendChild(el('line', {x1: LEFT, y1: y, x2: LEFT + PLOT, y2: y,
                                   style: 'stroke:var(--border)'}));
+      const at = (v) => LEFT + Math.max(0, Math.min(1, v)) * PLOT;
+      // Half a row up, on a track of its own: drawn through the dots it crossed them, and a
+      // segment that starts inside a filled circle cannot show where it started.
+      const lift = y - ROW / 2;
       vector.forEach((share, node) => {
-        const dot = el('circle', {cx: LEFT + Math.max(0, Math.min(1, share)) * PLOT, cy: y, r: 2.1,
+        const extra = overheard ? (overheard[node] || 0) : 0;
+        if (extra > 0) {
+          // Joins this node's two points: the dot where the broadcast left it, and the mark half a
+          // row up where the archive's replays left it. The line is the measurement - one node
+          // going from what it heard to what it holds - and the lift is only so it clears the dots.
+          // Faint: with twenty nodes to a row the connectors are the densest thing on the chart,
+          // and they are there to say which two points belong together, not to be read off.
+          const reachLine = el('line', {x1: at(share), y1: y, x2: at(share + extra), y2: lift,
+                                        style: 'stroke:var(--warn);stroke-width:1;opacity:.32'});
+          const reachTitle = el('title', {});
+          reachTitle.textContent =
+            `node ${node}: ${share.toFixed(3)} on air -> ${(share + extra).toFixed(3)} held ` +
+            `(+${extra.toFixed(3)} overheard)`;
+          reachLine.appendChild(reachTitle);
+          svg.appendChild(reachLine);
+          const held = el('circle', {cx: at(share + extra), cy: lift, r: 2.1,
+                                     style: 'fill:var(--warn);fill-opacity:.85'});
+          held.appendChild(el('title', {})).textContent =
+            `node ${node}: ${(share + extra).toFixed(3)} held`;
+          svg.appendChild(held);
+        }
+        const dot = el('circle', {cx: at(share), cy: y, r: 2.1,
                                   style: 'fill:var(--accent);fill-opacity:.55'});
         const title = el('title', {});
-        title.textContent = `node ${node}: ${share.toFixed(3)}`;
+        title.textContent = extra > 0
+          ? `node ${node}: ${share.toFixed(3)} on air, ${(share + extra).toFixed(3)} held`
+          : `node ${node}: ${share.toFixed(3)}`;
         dot.appendChild(title);
         svg.appendChild(dot);
       });
@@ -614,6 +816,53 @@ JS = """
       svg.appendChild(tick);
     });
     host.appendChild(svg);
+  }
+
+  // Text delivery per cell as two stacked layers: what the broadcast carried, and what an
+  // archive replayed on top of it. Stacked because they sum to the reach the run reports, and
+  // separated because only the first says the mesh itself got better.
+  function drawDelivery(host, entry) {
+    const cells = Object.keys(entry.cells);
+    const onAir = latestOf(entry, 'text_on_air');
+    const total = latestOf(entry, 'text');
+    const live = cells.filter((c) => onAir[c] != null || total[c] != null);
+    host.textContent = '';
+    if (!live.length) return 0;
+    const W = 640, LEFT = 132, RIGHT = 24, PLOT = W - LEFT - RIGHT;
+    const H = 30 + live.length * 26;
+    const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
+                           style: 'max-width:100%;height:auto;font-size:10.5px'});
+    const top = Math.max(1e-9, Math.max.apply(null, live.map(
+      (c) => Math.max(total[c] == null ? 0 : total[c], onAir[c] == null ? 0 : onAir[c]))) * 1.1);
+    live.forEach((cell, i) => {
+      const y = 12 + i * 26;
+      const label = el('text', {x: LEFT - 8, y: y + 12, 'text-anchor': 'end',
+                                style: 'fill:var(--muted)'});
+      label.textContent = cell;
+      svg.appendChild(label);
+      const air = onAir[cell] == null ? total[cell] : onAir[cell];
+      const held = total[cell] == null ? air : total[cell];
+      const extra = Math.max(0, held - air);
+      const wAir = (air / top) * PLOT, wExtra = (extra / top) * PLOT;
+      const first = el('rect', {x: LEFT, y: y + 2, width: Math.max(0, wAir), height: 15,
+                                style: 'fill:var(--accent);fill-opacity:.75'});
+      first.appendChild(el('title', {})).textContent = `${cell}: ${air.toFixed(3)} on air`;
+      svg.appendChild(first);
+      if (extra > 0) {
+        const second = el('rect', {x: LEFT + wAir, y: y + 2, width: wExtra, height: 15,
+                                   style: 'fill:var(--warn);fill-opacity:.85'});
+        second.appendChild(el('title', {})).textContent =
+          `${cell}: +${extra.toFixed(3)} overheard replay, ${held.toFixed(3)} held`;
+        svg.appendChild(second);
+      }
+      const value = el('text', {x: LEFT + wAir + wExtra + 6, y: y + 13,
+                                style: 'fill:var(--muted)'});
+      value.textContent = extra > 0
+        ? `${air.toFixed(3)} + ${extra.toFixed(3)}` : air.toFixed(3);
+      svg.appendChild(value);
+    });
+    host.appendChild(svg);
+    return 1;
   }
 
   function latestOf(entry, metric) {
@@ -697,10 +946,23 @@ JS = """
         const title = el('title', {});
         const run = entry.cells[c][m] || [];
         const seen = run.filter((n) => n !== null);
+        const sd = ((entry.sd || {})[c] || {})[m];
         title.textContent = `${c} · ${meta.labels[m] || m} = ${fmt(v, meta.places[m])}` +
+          (sd ? ` ± ${fmt(sd, meta.places[m])} across seeds` : '') +
           (seen.length > 1 ? ` (${entry.runs.length} runs: ${seen.join(', ')})` : '');
         bar.appendChild(title);
         svg.appendChild(bar);
+        // One standard deviation across the seeds of this cell. A bar without it invites reading
+        // a gap the draw could have produced as a result the arm produced.
+        if (sd) {
+          const cx = base + k * barW + barW / 2;
+          const hiY = yOf(v + sd), loY = yOf(v - sd);
+          const cap = Math.max(2, Math.min(4, barW / 3));
+          const stroke = 'stroke:var(--text);stroke-width:1;opacity:.55';
+          svg.appendChild(el('line', {x1: cx, y1: hiY, x2: cx, y2: loY, style: stroke}));
+          [hiY, loY].forEach((yy) => svg.appendChild(
+            el('line', {x1: cx - cap, y1: yy, x2: cx + cap, y2: yy, style: stroke})));
+        }
         if (naming) {
           const num = el('text', {x: base + k * barW + barW / 2, y: Math.min(top, zero) - 4,
                                   'text-anchor': 'middle', style: 'fill:var(--text)'});
@@ -868,13 +1130,328 @@ JS = """
     });
   }
 
+  // One metric, every block that has it, on ONE scale. The per-block panels each scale to their
+  // own numbers, which is right when reading a block and wrong when comparing two: a 0.09 bar and
+  // a 0.87 bar both reach the top of their own chart. Here they cannot.
+  // One or more measures, every block that has them, one scale per unit. Ticking several puts
+  // their bars beside each other within a cell, which is the comparison a single-choice picker
+  // could not make: two measures on two charts have two scales and no shared row.
+  function drawAcross(host, metrics, wanted) {
+    host.textContent = '';
+    // The compositions come first and are drawn per block rather than as bars: a pie has no scale
+    // to share, so it is stacked down the page the way the bar families are.
+    const pies = metrics.filter((m) => m === '__pies' || m === '__srpies');
+    metrics = metrics.filter((m) => m.indexOf('__') !== 0 || m === '__delivery');
+    if (pies.length) {
+      const names = Object.keys(data).filter(
+        (n) => !wanted.length || wanted.indexOf(n) >= 0).sort();
+      pies.forEach((which) => {
+        const cap = document.createElement('p');
+        cap.className = 'axislabel';
+        cap.textContent = which === '__pies'
+          ? 'all traffic by message type · packets against bytes on the air'
+          : "the archive's own messages by type · count against bytes";
+        host.appendChild(cap);
+        names.forEach((name) => {
+          const row = document.createElement('div');
+          row.className = 'stackrow';
+          const head = document.createElement('p');
+          head.className = 'axislabel';
+          head.textContent = name;
+          row.appendChild(head);
+          const box = document.createElement('div');
+          row.appendChild(box);
+          host.appendChild(row);
+          drawPies(box, data[name],
+                   which === '__pies' ? meta.trafficTypes : meta.messageTypes);
+        });
+      });
+    }
+    if (!metrics.length) {
+      if (!pies.length) {
+        host.appendChild(document.createTextNode('tick a measure to draw it'));
+      }
+      return pies.length;
+    }
+    const names = Object.keys(data).filter(
+      (n) => !wanted.length || wanted.indexOf(n) >= 0).sort();
+    // `__delivery` is a composition rather than a measure: its bar is the two halves of text
+    // reach stacked, and it lives on the share axis with everything else measured 0-1.
+    const partsOf = (m) => (m === '__delivery' ? ['text_on_air', 'text_overheard'] : [m]);
+    const unitOf = (m) => (m === '__delivery' ? 'share' : (meta.units[m] || 'other'));
+    const labelOf = (m) => (m === '__delivery' ? 'on air + overheard' : (meta.labels[m] || m));
+    const placesOf = (m) => (m === '__delivery' ? meta.places.text : meta.places[m]);
+
+    // Split by unit for the same reason the per-block charts do: a share and a percentage on one
+    // axis rank collapse instead of measuring it.
+    const families = [];
+    metrics.forEach((m) => {
+      const unit = unitOf(m);
+      let fam = families.filter((f) => f.unit === unit)[0];
+      if (!fam) { fam = {unit: unit, metrics: []}; families.push(fam); }
+      fam.metrics.push(m);
+    });
+
+    let drew = 0;
+    families.forEach((fam) => {
+      const rows = [];
+      let hi = 0, lo = 0;
+      names.forEach((name) => {
+        const entry = data[name];
+        const values = {};
+        fam.metrics.forEach((m) => partsOf(m).forEach((part) => {
+          if (!values[part]) values[part] = latestOf(entry, part);
+        }));
+        const totals = {};
+        const cells = Object.keys(entry.cells);
+        const live = [];
+        cells.forEach((c) => {
+          const per = {};
+          let any = false;
+          fam.metrics.forEach((m) => {
+            const sum = partsOf(m).reduce((acc, part) => {
+              const v = values[part][c];
+              return v === undefined || v === null ? acc : acc + v;
+            }, null);
+            if (sum !== null) { per[m] = sum; any = true; hi = Math.max(hi, sum); lo = Math.min(lo, sum); }
+          });
+          if (any) { totals[c] = per; live.push(c); }
+        });
+        if (live.length) {
+          rows.push({name: name, arm: entry.arm, cells: live, parts: values,
+                     totals: totals, sd: entry.sd || {}});
+        }
+      });
+      if (!rows.length) return;
+      if (fam.unit === 'share') hi = Math.max(hi, 1);
+      if (hi === lo) hi = lo + 1;
+
+      const cap = document.createElement('p');
+      cap.className = 'axislabel';
+      cap.textContent = (meta.axis[fam.unit] || fam.unit) + ' · ' + rows.length
+        + ' block(s), one scale to ' + fmt(hi, placesOf(fam.metrics[0]));
+      host.appendChild(cap);
+      const key = document.createElement('p');
+      key.className = 'sub';
+      key.style.margin = '0 0 .4rem';
+      key.innerHTML = fam.metrics.map((m) => partsOf(m).map((part) =>
+        `<span class="swatch" style="background:${meta.colours[part] || 'var(--accent)'}"></span>` +
+        (m === '__delivery' ? (meta.labels[part] || part) : labelOf(m))).join(' ')).join(' &nbsp; ');
+      host.appendChild(key);
+
+      rows.forEach((row) => {
+        const W = 640, LEFT = 150, RIGHT = 46, PLOT = W - LEFT - RIGHT;
+        const BAR = 11, GAP = 2, PAD = 5;
+        const group = fam.metrics.length * (BAR + GAP) + PAD;
+        const H = 22 + row.cells.length * group + 6;
+        const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
+                               style: 'max-width:100%;height:auto;font-size:10.5px'});
+        const head = el('text', {x: 0, y: 10, style: 'fill:var(--text);font-weight:600'});
+        head.textContent = row.name;
+        svg.appendChild(head);
+        const arm = el('text', {x: W, y: 10, 'text-anchor': 'end', style: 'fill:var(--muted)'});
+        arm.textContent = row.arm;
+        svg.appendChild(arm);
+        const at = (v) => LEFT + ((v - lo) / (hi - lo)) * PLOT;
+        const zero = at(Math.max(lo, 0));
+        row.cells.forEach((c, i) => {
+          const top = 22 + i * group;
+          const label = el('text', {x: LEFT - 8, y: top + BAR - 1, 'text-anchor': 'end',
+                                    style: 'fill:var(--muted)'});
+          label.textContent = c.length > 20 ? c.slice(0, 19) + '…' : c;
+          svg.appendChild(label);
+          fam.metrics.forEach((m, k) => {
+            const total = row.totals[c][m];
+            if (total === undefined) return;
+            const y = top + k * (BAR + GAP);
+            let cursor = Math.max(lo, 0);
+            partsOf(m).forEach((part) => {
+              const seg = row.parts[part][c];
+              if (seg === undefined || seg === null) return;
+              const from = at(cursor), to = at(cursor + seg);
+              const bar = el('rect', {x: Math.min(from, to), y: y, rx: 1.5,
+                                      width: Math.max(1, Math.abs(to - from)), height: BAR,
+                                      style: 'fill:' + (meta.colours[part] || 'var(--accent)')
+                                             + ';fill-opacity:.85'});
+              const segSd = (row.sd[c] || {})[part];
+              bar.appendChild(el('title', {})).textContent =
+                `${row.name} · ${c} · ${meta.labels[part] || part} = ${fmt(seg, placesOf(m))}` +
+                (segSd ? ` ± ${fmt(segSd, placesOf(m))} across seeds` : '') +
+                (partsOf(m).length > 1 ? `, ${fmt(total, placesOf(m))} together` : '');
+              svg.appendChild(bar);
+              cursor += seg;
+            });
+            const sd = (row.sd[c] || {})[m === '__delivery' ? 'text' : m];
+            if (sd) {
+              const mid = y + BAR / 2;
+              const stroke = 'stroke:var(--text);stroke-width:1;opacity:.5';
+              svg.appendChild(el('line', {x1: at(total - sd), y1: mid, x2: at(total + sd), y2: mid,
+                                          style: stroke}));
+              [at(total - sd), at(total + sd)].forEach((x) => svg.appendChild(
+                el('line', {x1: x, y1: mid - 2.5, x2: x, y2: mid + 2.5, style: stroke})));
+            }
+            const num = el('text', {x: Math.max(at(total), zero) + 5, y: y + BAR - 1,
+                                    style: 'fill:var(--text)'});
+            num.textContent = fmt(total, placesOf(m));
+            svg.appendChild(num);
+          });
+        });
+        svg.appendChild(el('line', {x1: zero, y1: 18, x2: zero, y2: H - 4,
+                                    style: 'stroke:var(--border)'}));
+        const box = document.createElement('div');
+        box.className = 'stackrow';
+        box.appendChild(svg);
+        host.appendChild(box);
+      });
+      drew += rows.length;
+    });
+    if (!drew) {
+      host.appendChild(document.createTextNode('no block on this page records that measure'));
+    }
+    return drew;
+  }
+
+
+  // The protocol's traffic by message type, as two pies per cell: how many messages, and how many
+  // bytes. Counts and bytes rank the types differently, which is the reason both are drawn.
+  function drawPies(host, entry, types) {
+    const cells = Object.keys(entry.cells);
+    host.textContent = '';
+    let drew = 0;
+    const grid = document.createElement('div');
+    grid.className = 'piegrid';
+    cells.forEach((cell) => {
+      const counts = types.map((t) => (latestOf(entry, t.count) || {})[cell] || 0);
+      const bytes = types.map((t) => (latestOf(entry, t.bytes) || {})[cell] || 0);
+      const totalCount = counts.reduce((a, b) => a + b, 0);
+      const totalBytes = bytes.reduce((a, b) => a + b, 0);
+      if (!totalCount && !totalBytes) return;
+      drew++;
+      const box = document.createElement('div');
+      box.className = 'piecell';
+      const title = document.createElement('p');
+      title.className = 'axislabel';
+      title.textContent = cell;
+      box.appendChild(title);
+      const pair = document.createElement('div');
+      pair.className = 'piepair';
+      [[counts, totalCount, 'messages', 0], [bytes, totalBytes, 'bytes', 0]].forEach(
+        ([values, total, what]) => {
+          const R = 46, W = 150, H = 128;
+          const svg = el('svg', {viewBox: `0 0 ${W} ${H}`, width: '100%', height: H,
+                                 style: 'max-width:100%;height:auto;font-size:9.5px'});
+          const cx = W / 2, cy = 56;
+          if (!total) {
+            svg.appendChild(el('circle', {cx: cx, cy: cy, r: R,
+                                          style: 'fill:none;stroke:var(--border)'}));
+          } else {
+            let from = -Math.PI / 2;
+            values.forEach((v, i) => {
+              if (!v) return;
+              const sweep = (v / total) * Math.PI * 2;
+              const to = from + sweep;
+              // A full circle cannot be an arc - its two endpoints are the same point, and the
+              // path degenerates to nothing. One type accounting for everything is not rare here.
+              const node = sweep >= Math.PI * 2 - 1e-9
+                ? el('circle', {cx: cx, cy: cy, r: R, style: `fill:${types[i].colour}`})
+                : el('path', {d: `M ${cx} ${cy} L ${cx + R * Math.cos(from)} `
+                                 + `${cy + R * Math.sin(from)} A ${R} ${R} 0 `
+                                 + `${sweep > Math.PI ? 1 : 0} 1 `
+                                 + `${cx + R * Math.cos(to)} ${cy + R * Math.sin(to)} Z`,
+                              style: `fill:${types[i].colour};stroke:var(--panel-bg);stroke-width:.8`});
+              node.appendChild(el('title', {})).textContent =
+                `${cell} · ${types[i].label} ${what}: ${fmt(v, 0)} (${(100 * v / total).toFixed(1)}%)`;
+              svg.appendChild(node);
+              from = to;
+            });
+          }
+          const cap = el('text', {x: cx, y: H - 8, 'text-anchor': 'middle',
+                                  style: 'fill:var(--muted)'});
+          cap.textContent = `${what} · ${fmt(total, 0)}`;
+          svg.appendChild(cap);
+          pair.appendChild(svg);
+        });
+      box.appendChild(pair);
+      grid.appendChild(box);
+    });
+    if (!drew) {
+      host.appendChild(document.createTextNode('this block records no protocol messages'));
+      return 0;
+    }
+    const key = document.createElement('p');
+    key.className = 'sub';
+    key.style.margin = '0 0 .5rem';
+    key.innerHTML = types.map((t) =>
+      `<span class="swatch" style="background:${t.colour}"></span>${t.label}`).join(' &nbsp; ');
+    host.appendChild(key);
+    host.appendChild(grid);
+    return drew;
+  }
+
+  // The campaign panel's maps: one per recipe, drawn from the geometry a cell of it carried.
+  (function () {
+    const hosts = Array.from(document.querySelectorAll('.campaignmap'));
+    if (!hosts.length) return;
+    hosts.forEach((host) => {
+      const ref = (meta.recipeMaps || {})[host.dataset.recipe];
+      if (!ref) {
+        host.appendChild(document.createTextNode(
+          'no mesh map in this digest - collate with --maps to draw one'));
+        return;
+      }
+      // drawMap takes an entry keyed by cell name; the campaign has one picture per recipe, so
+      // the key is the recipe's own label rather than a cell's.
+      drawMap(host, {maps: {'the mesh': ref}});
+    });
+  })();
+
+  // The cross-block page: any number of measures, over any number of blocks.
+  (function () {
+    const host = document.getElementById('stackchart');
+    if (!host) return;
+    const metricPicks = Array.from(document.querySelectorAll('input.stackmetric'));
+    const blockPicks = Array.from(document.querySelectorAll('input.stackblock'));
+    if (!metricPicks.length) return;
+    const render = () => {
+      // DOM order, not tick order, so the bars within a cell keep one order however they were
+      // chosen - and that order is the one the tables use.
+      const metrics = metricPicks.filter((b) => b.checked).map((b) => b.value);
+      const wanted = blockPicks.filter((b) => b.checked).map((b) => b.value);
+      drawAcross(host, metrics, wanted);
+      try {
+        localStorage.setItem('sfpp-stack', JSON.stringify(metrics));
+      } catch (e) { /* a page in a sandbox may refuse storage; the chart does not depend on it */ }
+    };
+    try {
+      const last = JSON.parse(localStorage.getItem('sfpp-stack') || 'null');
+      if (Array.isArray(last) && last.length) {
+        metricPicks.forEach((b) => { b.checked = last.indexOf(b.value) >= 0; });
+      }
+    } catch (e) { /* as above */ }
+    metricPicks.forEach((b) => b.addEventListener('change', render));
+    blockPicks.forEach((b) => b.addEventListener('change', render));
+    const toggle = (picks, button) => {
+      if (!button) return;
+      button.addEventListener('click', () => {
+        const turnOn = picks.some((b) => !b.checked);
+        picks.forEach((b) => { b.checked = turnOn; });
+        render();
+      });
+    };
+    toggle(blockPicks, document.getElementById('stackall'));
+    toggle(metricPicks, document.getElementById('stackallmetrics'));
+    render();
+  })();
+
   function draw(host, block, selected) {
     const entry = data[block];
     host.textContent = '';
     if (!entry) return;
     const nodes = selected.indexOf('__nodes') >= 0;
     const wantMap = selected.indexOf('__map') >= 0;
-    const bars = selected.filter((m) => m !== '__nodes' && m !== '__map');
+    const wantDelivery = selected.indexOf('__delivery') >= 0;
+    const wantPies = selected.indexOf('__pies') >= 0;
+    const bars = selected.filter((m) => m.indexOf('__') !== 0);
     // Split by unit, in the order the fields are offered: a selection mixing a share with a
     // percentage draws two charts rather than one chart nobody can read a height off.
     const families = [];
@@ -885,19 +1462,55 @@ JS = """
       fam.metrics.push(m);
     });
     let drew = 0;
+    // A one-metric family is a single column of bars and does not need the width of a page. They
+    // share a row where two will fit; a family carrying several series keeps the full width,
+    // because its bars have to be comparable by eye across the whole axis.
+    const grid = document.createElement('div');
+    grid.className = 'chartgrid';
     families.forEach((fam) => {
       const got = drawFamily(entry, fam.metrics, fam.unit);
       if (!got) return;
+      const box = document.createElement('div');
+      box.className = got.live.length > 1 ? 'chartcell wide' : 'chartcell';
       const cap = document.createElement('p');
       cap.className = 'axislabel';
       // Named from what was drawn, not what was ticked, so a metric this block has no numbers
       // for does not appear in the caption of a chart it is absent from.
       cap.textContent = (meta.axis[fam.unit] || fam.unit)
         + (got.live.length === 1 ? ' · ' + (meta.labels[got.live[0]] || got.live[0]) : '');
-      host.appendChild(cap);
-      host.appendChild(got.svg);
+      box.appendChild(cap);
+      box.appendChild(got.svg);
+      grid.appendChild(box);
       drew++;
     });
+    if (grid.childNodes.length) host.appendChild(grid);
+    if (wantDelivery) {
+      const box = document.createElement('div');
+      const cap = document.createElement('p');
+      cap.className = 'axislabel';
+      cap.textContent = 'text delivery · first chance on air, then overheard replay';
+      host.appendChild(cap);
+      host.appendChild(box);
+      drew += drawDelivery(box, entry);
+    }
+    if (wantPies) {
+      const box = document.createElement('div');
+      const cap = document.createElement('p');
+      cap.className = 'axislabel';
+      cap.textContent = 'all traffic by message type · packets against bytes on the air';
+      host.appendChild(cap);
+      host.appendChild(box);
+      drew += drawPies(box, entry, meta.trafficTypes);
+    }
+    if (selected.indexOf('__srpies') >= 0) {
+      const box = document.createElement('div');
+      const cap = document.createElement('p');
+      cap.className = 'axislabel';
+      cap.textContent = 'the archive\'s own messages by type · count against bytes';
+      host.appendChild(cap);
+      host.appendChild(box);
+      drew += drawPies(box, entry, meta.messageTypes);
+    }
     if (nodes) {
       const box = document.createElement('div');
       host.appendChild(box);
@@ -928,7 +1541,8 @@ JS = """
     box.addEventListener('toggle', () => {
       if (!box.open || drawn) return;
       if (sticky) {
-        // Only fields this panel offers: `__nodes` exists where the digest carried the vectors.
+        // Only fields this panel offers: `__nodes` and `__delivery` exist where the digest
+        // carried the vectors and the split respectively.
         const offered = picks.map((b) => b.value);
         const want = sticky.filter((v) => offered.indexOf(v) >= 0);
         if (want.length) picks.forEach((b) => { b.checked = want.indexOf(b.value) >= 0; });
@@ -1042,6 +1656,177 @@ def render_distributions(run):
     return out
 
 
+# What every column on this page counts, and against what. Four columns rather than two, because
+# the denominator is the half that gets misread: `text` and `dm` are both "did it arrive" and they
+# divide by different things, so a reader comparing the two numbers is comparing nothing.
+GLOSSARY = [
+    (
+        "delivery - what arrived, and by which route",
+        [
+            (
+                "text",
+                "share of broadcast texts a node <b>holds</b>, however it got there - the "
+                "on-air and overheard columns below sum to this",
+                "every node, every broadcast text",
+            ),
+            (
+                "on air",
+                "of those, what the <b>broadcast itself</b> delivered. First chance. This is the "
+                "one to quote when asking whether the mesh got better, and it is what an arm is "
+                "priced against",
+                "every node, every broadcast text",
+            ),
+            (
+                "overheard",
+                "of those, what was filed from an <b>overheard replay</b> - a bystander keeping an "
+                "archived object it was never sent, because the replay header sits outside the "
+                "encryption wrapper. Zero for a protocol that puts no replay on the air",
+                "every node, every broadcast text",
+            ),
+            (
+                "worst node",
+                "the least-served node's text reach. <b>Prefer it to the mean</b>: the mean is "
+                "carried by the middle of a mesh, and the archive argument is about the edge",
+                "one node, every broadcast text",
+            ),
+            (
+                "DM",
+                "did the direct message reach <b>the one node it was addressed to</b>? A bystander "
+                "hearing it relayed it; that is not delivery",
+                "DMs that reached the air",
+            ),
+            (
+                "admin",
+                "did the operator's change take, within the attempts they made? Both legs - the "
+                "request and the reply - must land inside the firmware's 300 s window",
+                "sessions the operator wanted",
+            ),
+        ],
+    ),
+    (
+        "inventory - what an archive has",
+        [
+            (
+                "held",
+                "what one archive <b>holds</b>, averaged over the archives. <b>Not a delivery "
+                "measure</b>: there is no client hydration path, so nothing here models a user "
+                "asking a server for what they missed",
+                "objects originated",
+            ),
+            (
+                "union",
+                "what <b>all archives together</b> hold - the ceiling reconciliation is working "
+                "towards. A high union beside a low held means the copies have diverged",
+                "objects originated",
+            ),
+        ],
+    ),
+    (
+        "cost - what it spent to get there",
+        [
+            (
+                "demand",
+                "every node's transmit time summed over elapsed time - <b>aggregate demand, not a "
+                "busy fraction</b>. Unbounded: above 1.0 is normal, because spatial reuse means "
+                "most transmissions never overlap at any one receiver",
+                "elapsed time (1.0 = one channel-second asked for per second)",
+            ),
+            (
+                "chutil p90/max",
+                "<code>AirTime::channelUtilizationPercent</code> per node - what a real device "
+                "reports and what sizes its contention window. <b>Quote this one when asking "
+                "whether a mesh is busy</b>",
+                "wall-clock, per node (0-100%)",
+            ),
+            (
+                "airutil max",
+                "<code>node_air_util_tx_percent</code>: what the busiest node would have to "
+                "declare as its own transmit duty",
+                "wall-clock, per node (0-100%)",
+            ),
+            (
+                "SR air",
+                "reconciliation's share of all channel airtime - the archive's bill, separated "
+                "from the traffic it is carried alongside",
+                "total airtime on the mesh",
+            ),
+            (
+                "price",
+                "on the ranking table: how much more of something an arm spent across its cells, "
+                "as a ratio - bytes on air, advert bytes or SR bytes, whichever moved furthest",
+                "the arm's own lowest cell",
+            ),
+        ],
+    ),
+    (
+        "the run itself",
+        [
+            (
+                "placed",
+                "archives actually sited against the number asked for. A role-bounded placement "
+                "quietly returning fewer is how &ldquo;6 servers&rdquo; and &ldquo;4 servers&rdquo; "
+                "become one row",
+                "archives requested",
+            ),
+            (
+                "moved",
+                "on the ranking table: which delivery measure this block travels in. The four have "
+                "four denominators and <b>are not comparable to each other</b>",
+                "-",
+            ),
+            (
+                "spread",
+                "the distance between the arm's lowest and highest cell on whichever measure it "
+                "moved - how much the variable is worth at all",
+                "-",
+            ),
+            (
+                "cells",
+                "how many values of the arm this block ran. A block with two cells states a "
+                "difference; one with six states a shape",
+                "-",
+            ),
+        ],
+    ),
+]
+
+
+def render_glossary():
+    """Every column on this page, what it counts and what it counts against.
+
+    The denominator column is the point: `text` and `dm` are both shares and neither divides by
+    what the other does, so the commonest misreading of this tool is treating one as a proxy for
+    the other. README §7.3 is the same statement at length.
+    """
+    out = [
+        '<div class="panel" id="making-terms">',
+        '<div class="blockhead"><h3>What each term means</h3>'
+        '<span class="arm">every column on this page</span>'
+        '<span class="pill">four denominators</span></div>',
+        "<p>Four questions, four denominators, and <b>they are not comparable to each other</b>. A "
+        "DM figure higher than a text figure does not mean DMs work better - a DM needs to reach one "
+        "node and gets retries, while text reach is the share of <i>all</i> nodes that heard it.</p>",
+        # No `scroll` wrapper: this is prose in a table, and prose wraps. A horizontal scrollbar
+        # on a glossary hides the half of every row that says what the term is counted against.
+        '<table class="glossary"><thead><tr>'
+        "<th>column</th><th>what it counts</th><th>out of</th></tr></thead><tbody>",
+    ]
+    for heading, rows in GLOSSARY:
+        out.append(f'<tr class="head"><td colspan="3">{_esc(heading)}</td></tr>')
+        for term, meaning, denominator in rows:
+            out.append(
+                f"<tr><td>{_esc(term)}</td><td>{meaning}</td><td>{denominator}</td></tr>"
+            )
+    out += [
+        "</tbody></table>",
+        '<p class="sub" style="margin:.8rem 0 0">Every per-node quantity on this page is reported as '
+        "min / p10 / median / mean / p90 / max. The mean alone cannot say whether a mesh serves its "
+        "worst node, which is the question the archive exists to answer.</p>",
+        "</div>",
+    ]
+    return out
+
+
 def render_making():
     """What produced the runs on this page: two styles of question, three workflows asking them.
 
@@ -1049,14 +1834,14 @@ def render_making():
     block list holds both `<DD>-subject` and `batumi-...` cells - and nothing else on the page says
     why, or which of the two a row came from.
     """
-    return [
-        '<section class="tab-panel" data-tab="making" hidden>',
-        "<h2>How these runs are made</h2>",
-        '<p class="sub">Everything here is written by scheduled workflows into one archive branch, '
-        "and this page is rebuilt from that archive. They ask <b>two different kinds of question</b>, "
-        "which is why one block list holds two naming conventions: a synthetic mesh moving one flag "
-        "at a time, and a real mesh over real ground.</p>",
-        '<div class="panel">',
+    # (anchor, nav label, panel html). The index below is built from this list rather than written
+    # beside it, so a section cannot be added without appearing in the index or renamed out of it.
+    sections = [
+        (
+            "making-sweep",
+            "The mechanism sweep",
+            [
+                '<div class="panel" id="making-sweep">',
         "<div class=\"blockhead\"><h3>1. The mechanism sweep</h3>"
         '<span class="arm">synthetic mesh</span><span class="pill">nightly 02:10 UTC</span>'
         '<span class="pill">runs/blocks-&lt;date&gt;-&lt;seed&gt;</span></div>',
@@ -1070,8 +1855,14 @@ def render_making():
         "kebab tail, <code>RF-preset-turbo</code>, <code>SF-capacity</code>, <code>DG-outage</code>. "
         "The archive is switched <b>on in every cell</b>, so this style can say what a variable does "
         "and can never say what the archive itself is worth.</p>",
-        "</div>",
-        '<div class="panel">',
+                "</div>",
+            ],
+        ),
+        (
+            "making-ground",
+            "Real ground",
+            [
+                '<div class="panel" id="making-ground">',
         "<div class=\"blockhead\"><h3>2. Real ground</h3>"
         '<span class="arm">Batumi, real geometry and terrain</span>'
         '<span class="pill">two workflows</span>'
@@ -1092,8 +1883,14 @@ def render_making():
         "three-axis cross: what the archive is configured as, against what could be deployed instead "
         "of it, on each mesh in the round. This is the one that <b>can</b> answer what the archive is "
         "worth, because the archive sits on an axis rather than being on everywhere.</p>",
-        "</div>",
-        '<div class="panel">',
+                "</div>",
+            ],
+        ),
+        (
+            "making-joins",
+            "What joins them up",
+            [
+                '<div class="panel" id="making-joins">',
         "<div class=\"blockhead\"><h3>What joins them up</h3></div>",
         "<p><b>Sim Collate</b> is called by all three rather than scheduled. It reduces a run to the "
         "two files this page reads - <code>summary.json</code> and <code>trend.md</code> - and applies "
@@ -1103,9 +1900,227 @@ def render_making():
         "raw runs without the page losing its history - and a figure that lives beside a dropped JSON "
         "can never be shown here at all, which is why the charts are drawn in the browser from numbers "
         "embedded in the page.</p>",
+                "</div>",
+            ],
+        ),
+        ("making-terms", "What each term means", render_glossary()),
+    ]
+
+    index = ["<nav class=\"making-nav\" aria-label=\"sections\"><ol>"]
+    for anchor, label, _ in sections:
+        index.append(f'<li><a href="#{anchor}">{_esc(label)}</a></li>')
+    index.append("</ol></nav>")
+
+    body = []
+    for _, _, parts in sections:
+        body += parts
+
+    return (
+        [
+            '<section class="tab-panel" data-tab="making" hidden>',
+            "<h2>How these runs are made</h2>",
+            '<p class="sub">Everything here is written by scheduled workflows into one archive branch, '
+            "and this page is rebuilt from that archive. They ask <b>two different kinds of question</b>, "
+            "which is why one block list holds two naming conventions: a synthetic mesh moving one flag "
+            "at a time, and a real mesh over real ground. The last section is the glossary: what every "
+            "column on this page actually counts, and what it is counted against.</p>",
+            '<div class="making">',
+        ]
+        + index
+        + ["<div>"]
+        + body
+        + ["</div>", "</div>", "</section>"]
+    )
+
+
+# The protocol's own traffic split by message type: one pie of counts, one of bytes. The pair is
+# the point - an advert is tiny and frequent, a provide is large and rare, so the two pictures of
+# the same run look nothing alike and a reader who has seen only one has the wrong idea of where
+# the airtime went.
+# All traffic by type, with everything the archive sends folded into one slice. This is the pie
+# that answers "what share of the channel is the archive" - the SF++ internal split below answers
+# a different question and the two are not substitutes.
+TRAFFIC_TYPES = (
+    ("mix_position_count", "mix_position_bytes", "position", "#7FB0CB"),
+    ("mix_telemetry_count", "mix_telemetry_bytes", "telemetry", "#7A8C3F"),
+    ("mix_nodeinfo_count", "mix_nodeinfo_bytes", "nodeinfo", "#C08A2E"),
+    ("mix_text_count", "mix_text_bytes", "text", "#2E5E7E"),
+    ("mix_dm_count", "mix_dm_bytes", "DM", "#B4472A"),
+    ("mix_sfpp_count", "mix_sfpp_bytes", "SF++", "#8A5A9E"),
+)
+
+MESSAGE_TYPES = (
+    ("adverts", "advert_bytes", "advert", "#A57BB8"),
+    ("item_requests", "item_request_bytes", "item request", "#C08A2E"),
+    ("provides", "provide_bytes", "provide", "#3F8A7A"),
+    ("enum_requests", "enum_request_bytes", "enum request", "#B4472A"),
+    ("enum_provides", "enum_provide_bytes", "enum provide", "#4E86A8"),
+)
+
+
+# Which recipe fields make the sentence, and how each reads. Anything not named here still shows in
+# the table below the sentence, so a field added to collate is never silently dropped.
+RECIPE_PROSE = (
+    ("topology", "{} topology"),
+    ("nodes", "{} nodes"),
+    ("scenario", "over {}"),
+    ("preset", "{}"),
+    ("hop_limit", "hop limit {}"),
+    ("servers", "{} archives"),
+    ("place", "placed {}"),
+    ("hours", "{} h per run"),
+)
+
+
+def _ordinal(n):
+    """3 -> 3rd. English, because the sentence it lands in is English."""
+    n = int(n)
+    if 10 <= n % 100 <= 20:
+        return f"{n}th"
+    return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
+
+
+def recipe_sentence(recipe):
+    """One line naming how a mesh was made, from the fields that decided it."""
+    parts = []
+    for key, shape in RECIPE_PROSE:
+        value = recipe.get(key)
+        if value is None:
+            continue
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        if key == "place":
+            # The strided placement carries its step, and "placed every-nth" says nothing without it.
+            stride = recipe.get("place_stride")
+            parts.append(
+                f"on every {_ordinal(stride)} node" if value == "every-nth" and stride
+                else shape.format(value)
+            )
+            continue
+        parts.append(shape.format(value))
+    if recipe.get("no_link_shadowing"):
+        parts.append("links by distance alone")
+    if recipe.get("hop_spread"):
+        parts.append("per-node hop limits 3-7")
+    return " · ".join(str(p) for p in parts)
+
+
+def render_campaign(runs, blocks):
+    """What every block on this page was run on: the mesh, and the method that made it.
+
+    First on the page because it is the thing every other number is conditional on. A digest that
+    carries a hundred cells and no statement of the mesh underneath them is a hundred numbers
+    nobody can place.
+    """
+    recipes, seen = {}, {}
+    for run in runs:
+        for key, recipe in (run.get("recipes") or {}).items():
+            recipes.setdefault(key, recipe)
+    if not recipes:
+        return []
+    # A representative cell per recipe, for the map and for naming who uses it.
+    for run in runs:
+        for block in run.get("blocks") or []:
+            for cell in block.get("cells") or []:
+                key = cell.get("recipe")
+                if key is None:
+                    continue
+                entry = seen.setdefault(key, {"blocks": set(), "map": None})
+                entry["blocks"].add(block.get("block"))
+                if entry["map"] is None and cell.get("map"):
+                    entry["map"] = cell["map"]
+
+    out = [
+        '<div class="panel" id="campaign">',
+        '<div class="blockhead"><h3>Campaign</h3>'
+        f'<span class="arm">{len(recipes)} mesh recipe(s)</span>'
+        f'<span class="pill">{sum(len(v["blocks"]) for v in seen.values())} block(s)</span></div>',
+        '<p class="sub">The mesh every block below was run on, and how it was made. Every number '
+        "on this page is conditional on this: a reach figure is a statement about <i>this</i> mesh "
+        "at <i>this</i> hop limit, and two recipes are two experiments rather than two cells.</p>",
+    ]
+    for key, recipe in sorted(recipes.items()):
+        used = sorted(b for b in (seen.get(key) or {}).get("blocks", set()) if b)
+        out += [
+            '<div class="recipe">',
+            f'<h4 class="recipename">{_esc(recipe_sentence(recipe)) or "mesh " + key[:6]}</h4>',
+            '<p class="sub">'
+            + (f"used by {', '.join(f'<code>{_esc(b)}</code>' for b in used)}" if used
+               else "carried by this digest")
+            + "</p>",
+            '<div class="recipebody">',
+            '<table class="recipetable"><tbody>',
+        ]
+        for field, value in sorted(recipe.items()):
+            shown = int(value) if isinstance(value, float) and value.is_integer() else value
+            out.append(
+                f"<tr><td>{_esc(field.replace('_', ' '))}</td>"
+                f"<td>{_esc(shown)}</td></tr>"
+            )
+        out += [
+            "</tbody></table>",
+            f'<div class="campaignmap" data-recipe="{_esc(key)}" role="img"></div>',
+            "</div>",
+            "</div>",
+        ]
+    out.append("</div>")
+    return out
+
+
+def render_stack(blocks):
+    """The cross-block page: one measure, every block, one scale.
+
+    The per-block charts answer "what did this arm do"; this one answers "which arm did the most",
+    which no amount of switching between panels can, because each of those scales to itself.
+    """
+    if not blocks:
+        return []
+    out = [
+        '<section class="tab-panel" data-tab="charts" hidden>',
+        "<h2>Chart explorer</h2>",
+        '<p class="sub">Any number of measures, drawn for every block that records them, <b>on a single '
+        "scale</b>. The per-block charts each scale to their own numbers - right for reading one "
+        "block, wrong for comparing two, since a 0.09 bar and a 0.87 bar both reach the top of "
+        "their own chart. Whiskers are one standard deviation across the seeds of that cell: where "
+        "two of them overlap, the arm has not moved the measure by more than the draw did.</p>",
+        '<div class="panel">',
+        '<div class="stackbar"><span class="stacklabel">measures</span>'
+        '<button class="action-btn" id="stackallmetrics" type="button">all / none</button></div>',
+        '<div class="stackblocks stackmetrics">',
+        # First and ticked: the composition, which is the one comparison the per-block panels
+        # cannot make across blocks.
+        '<label><input type="checkbox" class="stackmetric" checked value="__delivery"> '
+        "text delivery: on air + overheard</label>",
+        '<label><input type="checkbox" class="stackmetric" value="__pies"> '
+        "all traffic by type: packets and bytes</label>",
+        '<label><input type="checkbox" class="stackmetric" value="__srpies"> '
+        "the archive's own messages by type</label>",
+    ]
+    for key, label, _ in SHOWN:
+        out.append(
+            '<label><input type="checkbox" class="stackmetric" '
+            f'value="{key}"> {_esc(label)}</label>'
+        )
+    out += [
+        "</div>",
+        '<div class="stackbar"><span class="stacklabel">blocks</span>'
+        '<button class="action-btn" id="stackall" type="button">all / none</button></div>',
+        '<div class="stackblocks">',
+    ]
+    for name in sorted(blocks):
+        out.append(
+            '<label><input type="checkbox" class="stackblock" checked '
+            f'value="{_esc(name)}"> {_esc(name)}</label>'
+        )
+    out += [
+        "</div>",
+        '<div id="stackchart" class="chart" role="img"></div>',
+        '<p class="sub nojs" style="font-size:.8rem">This page draws from the same digest numbers '
+        "as the tables; it needs JavaScript.</p>",
         "</div>",
         "</section>",
     ]
+    return out
 
 
 def render_schedule(sched):
@@ -1346,14 +2361,30 @@ def chart_data(blocks, runs):
         for run in entry["runs"]:
             for value in run["cells"]:
                 cells.setdefault(str(value), {})
+        # SHOWN is what the picker offers; the pies need the per-type counters too, and those are
+        # deliberately not in the picker - ten more checkboxes for a split that is only readable as
+        # a composition. Carried here or `latestOf` finds nothing and every byte slice reads zero.
+        carried = list(
+            dict.fromkeys(
+                [k for k, _, _ in SHOWN]
+                + [t[0] for t in MESSAGE_TYPES + TRAFFIC_TYPES]
+                + [t[1] for t in MESSAGE_TYPES + TRAFFIC_TYPES]
+            )
+        )
         for value, metrics in cells.items():
-            for key, label, _ in SHOWN:
+            for key in carried:
                 metrics[key] = [
                     (by_run.get(rid, {}).get("cells", {}).get(value) or {}).get(key)
                     for rid in run_ids
                 ]
         # Per-node vectors, when the digest carried them: the latest run that has one for a cell,
         # since node order belongs to a single run and cannot be pooled across them.
+        # The latest run that recorded a spread for a cell, for the same reason the metrics take
+        # the latest value: an older run's seed count is not this one's.
+        spread = {}
+        for run in entry["runs"]:
+            for value, per_metric in (run.get("sd") or {}).items():
+                spread[str(value)] = per_metric
         nodes = {}
         for run in entry["runs"]:
             for value, vectors in (run.get("per_node") or {}).items():
@@ -1367,6 +2398,7 @@ def chart_data(blocks, runs):
         out[name] = {
             "arm": entry["arm"],
             "measure": entry.get("moved") or "held",
+            "sd": spread,
             "runs": run_ids,
             "cells": cells,
         }
@@ -1374,6 +2406,22 @@ def chart_data(blocks, runs):
             out[name]["nodes"] = nodes
         if maps:
             out[name]["maps"] = maps
+    return out
+
+
+def recipe_maps(runs):
+    """{recipe key: one cell's map reference}, for the campaign panel's picture.
+
+    First cell wins: every cell sharing a recipe was run on the same geometry, and where a run
+    carried no map the recipe simply has no picture rather than the wrong one.
+    """
+    out = {}
+    for run in runs:
+        for block in run.get("blocks") or []:
+            for cell in block.get("cells") or []:
+                key, reference = cell.get("recipe"), cell.get("map")
+                if key and reference and key not in out:
+                    out[key] = reference
     return out
 
 
@@ -1452,6 +2500,12 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
         "</div>",
     ]
     out = [
+        # A page that has to survive being copied to a laptop and opened from disk. Without the
+        # doctype a browser renders it in quirks mode; without the charset one opened over file://
+        # has no header to read and guesses, which turns every `·`, `±` and `→` into mojibake.
+        "<!doctype html>",
+        '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>SF++ sweep explorer</title>",
         f"<style>{CSS}</style>",
         "<main>",
@@ -1485,6 +2539,13 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
         '<nav class="tabs" role="tablist">',
         '<button data-tab="trend" role="tab" aria-selected="true">Trend</button>',
         '<button data-tab="blocks" role="tab" aria-selected="false">Every block</button>',
+        # Only where there is something to draw: render_stack emits nothing for an empty archive,
+        # and a button pointing at a panel that does not exist shows a blank page.
+        *(
+            ['<button data-tab="charts" role="tab" aria-selected="false">Chart explorer</button>']
+            if blocks
+            else []
+        ),
         f'<button data-tab="schedule" role="tab" aria-selected="false">Schedule'
         + (f' <span class="count">{pending} to do</span>' if pending else "")
         + "</button>",
@@ -1507,6 +2568,7 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
 
     out += [
         '<section class="tab-panel" data-tab="trend">',
+        *render_campaign(runs, blocks),
         "<h2>What moves a delivery measure</h2>",
         '<p class="sub">Mean spread of the measure each block moves most, averaged over the runs that '
         "carry it. The four measures have four denominators and are <b>not comparable to each other</b> - "
@@ -1599,6 +2661,28 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
                 '<label class="wide"><input type="checkbox" class="metric" value="__nodes">'
                 " every node, by class</label>"
             )
+        if any(
+            (r.get("cells") or {}).get(value, {}).get("text_on_air") is not None
+            for r in entry["runs"]
+            for value in (r.get("cells") or {})
+        ):
+            picks.append(
+                '<label class="wide"><input type="checkbox" class="metric" value="__delivery" '
+                "checked> text delivery: on air vs overheard</label>"
+            )
+        if any(
+            (r.get("cells") or {}).get(value, {}).get("adverts") is not None
+            for r in entry["runs"]
+            for value in (r.get("cells") or {})
+        ):
+            picks.append(
+                '<label class="wide"><input type="checkbox" class="metric" value="__pies" '
+                "checked> all traffic by type: packets and bytes</label>"
+            )
+            picks.append(
+                '<label class="wide"><input type="checkbox" class="metric" value="__srpies" '
+                "checked> the archive's own messages by type</label>"
+            )
         if any(r.get("maps") for r in entry["runs"]):
             picks.append(
                 '<label class="wide"><input type="checkbox" class="metric" value="__map">'
@@ -1639,11 +2723,21 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
             )
         out.append("</tbody></table></div>")
         out += render_distributions(latest)
-        for f in {f for r in entry["runs"] for f in r["flags"]}:
-            out.append(f'<p class="flag">{_esc(f)}</p>')
+        # Folded away: a block with a dozen queue-drop and decode-failure lines buries its own
+        # tables under them, and the counts they report are on the charts now. The summary still
+        # states how many there are, so a folded warning is not a hidden one.
+        flags = sorted({f for r in entry["runs"] for f in r["flags"]})
+        if flags:
+            out.append(
+                '<details class="flags"><summary>'
+                f'{len(flags)} warning{"" if len(flags) == 1 else "s"}</summary>'
+            )
+            out += [f'<p class="flag">{_esc(f)}</p>' for f in flags]
+            out.append("</details>")
         out.append("</div>")
 
     out += ["</section>"]
+    out += render_stack(blocks)
     out += render_schedule(sched)
     out += render_health(health)
     out += render_making()
@@ -1694,6 +2788,18 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
                 # Shared by every cell that has this geometry, which is why it travels here and
                 # not inside a block: one Batumi topology served 102 of 123 cells.
                 "maps": map_registry(runs),
+                # One map reference per recipe, so the campaign panel draws the mesh a recipe
+                # made without having to know which cell happened to carry the geometry.
+                "recipeMaps": recipe_maps(runs),
+                # The message-type split the pies draw, as (count, bytes, label, colour).
+                "messageTypes": [
+                    {"count": c, "bytes": b, "label": label, "colour": colour}
+                    for c, b, label, colour in MESSAGE_TYPES
+                ],
+                "trafficTypes": [
+                    {"count": c, "bytes": b, "label": label, "colour": colour}
+                    for c, b, label, colour in TRAFFIC_TYPES
+                ],
                 "rolemarks": MAP_MARKS,
                 "mapcolours": {"fragile": MAP_FRAGILE, "link": MAP_LINK},
             },

@@ -13,6 +13,8 @@ import os
 import pathlib
 import sys
 import random
+
+from sfpp.version import SIM_VERSION as SIM_VERSION_FOR_TEST
 import unittest
 
 from . import mesh as M
@@ -3042,6 +3044,462 @@ class Siting(unittest.TestCase):
     def test_an_unknown_mix_is_refused(self):
         with self.assertRaises(ValueError):
             M.assign_sitings(4, "penthouse", random.Random(1))
+
+
+class TextDeliveryPaths(unittest.TestCase):
+    """Reach split by how the text arrived: what the flood carried, what a replay filed."""
+
+    def _report(self, protocol="sr", hours=6, seed=4242):
+        from .campaign import build_parser, run_once
+
+        opts = build_parser().parse_args(
+            [
+                "--nodes", "20", "--topology", "line", "--no-link-shadowing",
+                "--no-hop-spread", "--hop-limit", "3", "--servers", "7",
+                "--place", "every-nth", "--place-stride", "3",
+                "--protocol", protocol, "--hours", str(hours), "--no-charts",
+            ]
+        )
+        return run_once(opts, seed)
+
+    def test_the_two_paths_sum_to_the_reported_reach(self):
+        report = self._report()
+        base = report["baseline"]
+        self.assertAlmostEqual(
+            base["text_on_air_mean"] + base["text_overheard_mean"],
+            base["text_reception_mean"],
+            places=3,
+        )
+
+    def test_the_per_node_vector_is_the_on_air_half(self):
+        """The mismatch this split exists for: the vectors count receptions, the mean counts holds."""
+        report = self._report()
+        vector = report["by_class"]["text"]["per_node"]
+        self.assertAlmostEqual(
+            sum(vector) / len(vector), report["baseline"]["text_on_air_mean"], places=3
+        )
+        overheard = report["by_class"]["text"]["per_node_overheard"]
+        self.assertEqual(len(overheard), len(vector))
+        self.assertAlmostEqual(
+            sum(overheard) / len(overheard),
+            report["baseline"]["text_overheard_mean"],
+            places=3,
+        )
+
+    def test_a_protocol_with_no_replay_path_has_nothing_overheard(self):
+        """`none` and `chain` file no bystander pickup, so both readings have to agree."""
+        report = self._report(protocol="none")
+        base = report["baseline"]
+        self.assertEqual(base["text_overheard_mean"], 0)
+        self.assertEqual(base["text_on_air_mean"], base["text_reception_mean"])
+
+    def test_the_pickup_counter_and_the_vector_agree(self):
+        report = self._report()
+        texts = report["traffic"]["text_objects"]
+        counted = report["sfpp"]["bystander_pickups"] / (texts * report["mesh"]["nodes"])
+        self.assertAlmostEqual(
+            counted, report["baseline"]["text_overheard_mean"], places=3
+        )
+
+    def test_a_walked_link_is_overheard_like_a_replay(self):
+        """chain.py puts the replay header on a link_provide on purpose; the receive path dropped it.
+
+        The chain arm read exactly zero pickups - not because a walk cannot be overheard, but
+        because nothing filed one. It puts far more provides on the air than the sketch does.
+        """
+        report = self._report(protocol="chain")
+        self.assertGreater(report["sfpp"]["bystander_pickups"], 0)
+        base = report["baseline"]
+        self.assertGreater(base["text_overheard_mean"], 0)
+        self.assertAlmostEqual(
+            base["text_on_air_mean"] + base["text_overheard_mean"],
+            base["text_reception_mean"],
+            places=3,
+        )
+
+    def test_a_bystander_files_a_walked_link_only_once(self):
+        """The same object walks past a node repeatedly; filing it twice would inflate reach."""
+        report = self._report(protocol="chain")
+        texts = report["traffic"]["text_objects"]
+        nodes = report["mesh"]["nodes"]
+        self.assertLessEqual(report["sfpp"]["bystander_pickups"], texts * nodes)
+        self.assertLessEqual(report["baseline"]["text_reception_max"], 1.0)
+
+    def test_the_price_axis_is_first_chance(self):
+        """Charging an arm against the total lets a second delivery path pay its own bill."""
+        from .collate import COST, METRICS
+
+        self.assertEqual(COST, "text_on_air")
+        self.assertEqual(METRICS["text_on_air"], ("baseline", "text_on_air_mean"))
+
+    def test_the_digest_carries_the_split_per_node(self):
+        from .collate import per_node_of
+
+        report = self._report()
+        vectors = per_node_of(report)
+        self.assertIn("text", vectors)
+        self.assertEqual(sorted(vectors["text"]), ["on_air", "overheard"])
+        # Every other class has one delivery path, so it stays the bare vector older pages read.
+        self.assertIsInstance(vectors["position"], list)
+
+
+class SeedSpread(unittest.TestCase):
+    """Three seeds reported as one number is a difference nobody can size against the draw."""
+
+    def _cells(self, seeds=(1, 2, 3)):
+        from .collate import cells_of
+
+        reports = []
+        for i, seed in enumerate(seeds):
+            for value, base in (("off", 0.30), ("on", 0.50)):
+                reports.append(
+                    {
+                        "value": value,
+                        "seed": seed,
+                        "baseline": {
+                            "text_reception_mean": base + i * 0.01,
+                            "text_on_air_mean": base + i * 0.01,
+                            "text_overheard_mean": 0.0,
+                            "text_reception_min": 0.1,
+                            "reach_ceiling_mean": 1.0,
+                            "missed_beyond_hop_limit": 0.0,
+                            "missed_within_reach": 0.0,
+                        },
+                        "traffic": {},
+                        "sfpp": {},
+                    }
+                )
+        return cells_of(reports)
+
+    def test_a_cell_run_more_than_once_records_its_spread(self):
+        for cell in self._cells():
+            self.assertIn("text", cell["sd"])
+            self.assertGreater(cell["sd"]["text"], 0)
+
+    def test_one_seed_records_no_spread(self):
+        """Writing 0.0 there would let a single draw claim the precision of several."""
+        for cell in self._cells(seeds=(1,)):
+            self.assertEqual(cell["sd"], {})
+
+    def test_the_report_prints_the_spread_beside_the_mean(self):
+        import json
+        import tempfile
+
+        from .collate import collate, markdown
+
+        reports = []
+        for i, seed in enumerate((1, 2, 3)):
+            for value in ("off", "on"):
+                reports.append(
+                    {
+                        "block": "T", "arm": "arm", "value": value, "seed": seed,
+                        "baseline": {
+                            "text_reception_mean": 0.3 + i * 0.02,
+                            "text_on_air_mean": 0.3 + i * 0.02,
+                            "text_overheard_mean": 0.0,
+                            "text_reception_min": 0.1,
+                            "reach_ceiling_mean": 1.0,
+                            "missed_beyond_hop_limit": 0.0,
+                            "missed_within_reach": 0.0,
+                        },
+                        "traffic": {}, "sfpp": {},
+                    }
+                )
+        with tempfile.TemporaryDirectory() as runs:
+            with open(os.path.join(runs, "T.json"), "w") as f:
+                json.dump(reports, f)
+            text = markdown(collate(runs, run_id="t"))
+        self.assertIn("±", text, "the cell table states no spread")
+        self.assertIn("| seeds |", text.replace("  ", " "), "the cell table states no seed count")
+
+
+class ChartExplorer(unittest.TestCase):
+    """The cross-block page: one measure, every block, one scale."""
+
+    def _blocks(self):
+        return {
+            "A-block": {"arm": "protocol", "runs": [], "moved": "held"},
+            "B-block": {"arm": "resolve", "runs": [], "moved": "held"},
+        }
+
+    def test_it_offers_every_metric_the_panels_offer(self):
+        from .explorer import SHOWN, render_stack
+
+        html = "".join(render_stack(self._blocks()))
+        for key, _, _ in SHOWN:
+            self.assertIn(f'class="stackmetric" value="{key}"', html, f"{key} cannot be picked")
+        # Several at once, or the page cannot put two measures beside each other.
+        self.assertNotIn("<select", html)
+
+    def test_the_stacked_composition_is_offered_and_is_the_default(self):
+        """The one comparison the per-block panels cannot make across blocks."""
+        from .explorer import render_stack
+
+        html = "".join(render_stack(self._blocks()))
+        self.assertIn('class="stackmetric" checked value="__delivery"', html)
+
+    def test_it_offers_every_block_on_the_page(self):
+        from .explorer import render_stack
+
+        html = "".join(render_stack(self._blocks()))
+        for name in self._blocks():
+            self.assertIn(f'value="{name}"', html)
+
+    def test_it_is_absent_when_there_are_no_blocks(self):
+        """An empty archive gets no tab rather than a tab that draws nothing."""
+        from .explorer import render_stack
+
+        self.assertEqual(render_stack({}), [])
+
+    def test_the_tab_and_the_panel_agree(self):
+        """A button pointing at a panel that is not emitted is a tab that shows a blank page."""
+        import re
+
+        from .explorer import render_html
+
+        html = render_html(
+            [{"run_id": "r", "scenario_requested": "flat", "seed_base": 1, "seeds": [1],
+              "sim_version": SIM_VERSION_FOR_TEST, "transport": "abc", "wall_seconds": 1,
+              "gate": {"ok": [], "warnings": [], "failures": [], "blocks_run": 0,
+                       "blocks_missing": 0},
+              "missing_blocks": [], "blocks": [], "_href": "runs/r"}],
+            {}, [],
+        )
+        tabs = set(re.findall(r'<button data-tab="([^"]+)"', html))
+        panels = set(re.findall(r'<section class="tab-panel" data-tab="([^"]+)"', html))
+        self.assertEqual(tabs - panels, set(), "a tab button with no panel")
+
+
+class PagePortability(unittest.TestCase):
+    """The page is copied to laptops and opened from disk, so it has to stand on its own."""
+
+    def _page(self):
+        from .explorer import index_by_block, leaderboard, render_html
+
+        run = {
+            "run_id": "r", "scenario_requested": "flat", "seed_base": 1, "seeds": [1],
+            "sim_version": SIM_VERSION_FOR_TEST, "transport": "abc", "wall_seconds": 1,
+            "_href": "runs/r", "missing_blocks": [],
+            "gate": {"ok": [], "warnings": [], "failures": [], "blocks_run": 1,
+                     "blocks_missing": 0},
+            "blocks": [{
+                "block": "T", "arm": "arm", "grid": [], "flags": [], "flag_kinds": {},
+                "fatal": [], "fatal_kinds": {}, "moved": "held", "cost": None, "thin": [],
+                "sim_version": SIM_VERSION_FOR_TEST, "scenario": "flat", "nodes": 20,
+                "cells": [{"value": "on", "seeds": [1], "metrics": {"held": 0.5}, "sd": {},
+                           "dist": {}}],
+            }],
+        }
+        blocks = index_by_block([run])
+        return render_html([run], blocks, leaderboard(blocks))
+
+    def test_it_declares_a_doctype_and_a_charset(self):
+        """Quirks mode and a guessed encoding are both silent, and both only bite off-server."""
+        html = self._page()
+        self.assertTrue(html.lstrip().startswith("<!doctype html>"))
+        self.assertIn('<meta charset="utf-8">', html)
+
+    def test_it_loads_nothing_from_the_network(self):
+        """Everything the page draws is embedded; a link out is navigation, not a dependency."""
+        import re
+
+        html = self._page()
+        self.assertEqual(re.findall(r"<script[^>]+src=", html), [])
+        self.assertEqual(re.findall(r"<link[^>]+href=", html), [])
+        self.assertEqual(re.findall(r"<img[^>]+src=", html), [])
+        self.assertEqual(re.findall(r"url\((?!data:)[^)]*\)", html), [])
+        self.assertEqual(re.findall(r"\bfetch\(|XMLHttpRequest", html), [])
+
+
+class FoldedWarnings(unittest.TestCase):
+    """A block's warnings are folded, and the fold says how many - a folded warning is not hidden."""
+
+    def _page(self, flags):
+        from .explorer import render_html
+
+        run = {
+            "run_id": "r", "scenario_requested": "flat", "seed_base": 1, "seeds": [1],
+            "sim_version": SIM_VERSION_FOR_TEST, "transport": "abc", "wall_seconds": 1,
+            "_href": "runs/r", "missing_blocks": [],
+            "gate": {"ok": [], "warnings": [], "failures": [], "blocks_run": 1,
+                     "blocks_missing": 0},
+            "blocks": [{
+                "block": "T", "arm": "arm", "grid": [], "flags": flags, "flag_kinds": {},
+                "fatal": [], "fatal_kinds": {}, "moved": "held", "cost": None, "thin": [],
+                "sim_version": SIM_VERSION_FOR_TEST, "scenario": "flat", "nodes": 20,
+                "cells": [{"value": "on", "seeds": [1], "metrics": {"held": 0.5}, "sd": {},
+                           "dist": {}}],
+            }],
+        }
+        from .explorer import index_by_block, leaderboard
+
+        blocks = index_by_block([run])
+        return render_html([run], blocks, leaderboard(blocks))
+
+    def test_warnings_are_folded_and_counted(self):
+        html = self._page(["T: queue drops 13%", "T: decode_failures 40"])
+        self.assertIn('<details class="flags">', html)
+        self.assertIn("2 warnings", html)
+        self.assertIn("queue drops 13%", html)
+
+    def test_one_warning_reads_as_one(self):
+        self.assertIn("1 warning</summary>", self._page(["T: decode_failures 40"]))
+
+    def test_a_block_with_none_gets_no_fold(self):
+        self.assertNotIn('<details class="flags">', self._page([]))
+
+
+class MakingPage(unittest.TestCase):
+    """The manual page: an index that cannot drift from its sections, and a glossary of columns."""
+
+    def _html(self):
+        from .explorer import render_making
+
+        return "".join(render_making())
+
+    def test_every_section_is_in_the_index(self):
+        import re
+
+        from .explorer import render_making
+
+        html = self._html()
+        anchors = set(re.findall(r'<div class="panel" id="([^"]+)"', html))
+        linked = set(re.findall(r'<li><a href="#([^"]+)"', html))
+        self.assertEqual(anchors, linked, "a section the index does not name, or the reverse")
+        self.assertTrue(anchors, "the making page has no sections")
+        del render_making
+
+    def test_every_column_the_digest_shows_is_defined(self):
+        """A column nobody defines is a column somebody guesses at."""
+        from .explorer import GLOSSARY
+
+        defined = {term for _, rows in GLOSSARY for term, _, _ in rows}
+        for column in ("text", "on air", "overheard", "held", "union", "worst node", "demand"):
+            self.assertIn(column, defined)
+
+    def test_every_term_states_what_it_is_counted_against(self):
+        """The denominator is the half that gets misread - README SS7.3."""
+        from .explorer import GLOSSARY
+
+        for _, rows in GLOSSARY:
+            for term, meaning, denominator in rows:
+                self.assertTrue(meaning.strip(), term)
+                self.assertTrue(denominator.strip(), f"{term} states no denominator")
+
+    def test_the_two_delivery_paths_are_named_apart(self):
+        from .explorer import GLOSSARY
+
+        text = {term: meaning for _, rows in GLOSSARY for term, meaning, _ in rows}
+        self.assertIn("broadcast itself", text["on air"])
+        self.assertIn("overheard replay", text["overheard"])
+
+
+class LineTopology(unittest.TestCase):
+    """A manufactured mesh: twenty nodes on one axis, each hearing its neighbours and nobody else."""
+
+    def _line(self, nodes=20, shadowing=False, **kwargs):
+        conf = M.make_config(shadowing=shadowing)
+        return M.build(
+            conf,
+            nodes,
+            8000.0,
+            random.Random(4242),
+            hop_limit=3,
+            topology="line",
+            hop_spread=False,
+            **kwargs,
+        )
+
+    def test_the_link_graph_is_exactly_a_path(self):
+        mesh = self._line()
+        for i in range(len(mesh.nodes)):
+            self.assertEqual(
+                sorted(mesh.neighbours[i]),
+                [j for j in (i - 1, i + 1) if 0 <= j < len(mesh.nodes)],
+                f"node {i} hears something other than its neighbours",
+            )
+        self.assertEqual(mesh.diameter(), len(mesh.nodes) - 1)
+        self.assertTrue(mesh.link_stats()["connected"])
+
+    def test_the_two_margins_are_equal_and_opposite(self):
+        """The spacing is a distance in dB: half an octave either side of sensitivity."""
+        mesh = self._line()
+        sensitivity = _phy_sensitivity(mesh.conf)
+        neighbour = mesh.rssi[0][1] - sensitivity
+        second = mesh.rssi[0][2] - sensitivity
+        self.assertGreater(neighbour, 0.0)
+        self.assertAlmostEqual(neighbour, -second, places=6)
+
+    def test_shadowing_takes_the_shape_away(self):
+        """6 dB of shadowing is half the octave the whole spacing is cut from - README SS5.1."""
+        mesh = self._line(shadowing=True)
+        degrees = [len(mesh.neighbours[i]) for i in range(len(mesh.nodes))]
+        self.assertNotEqual(sorted(set(degrees)), [1, 2])
+
+    def test_the_spacing_follows_the_preset(self):
+        """A slower preset hears further, so the same shape is built from longer legs."""
+        near = M.line_spacing(M.make_config(preset="SHORT_FAST"))
+        far = M.line_spacing(M.make_config(preset="LONG_SLOW"))
+        self.assertGreater(far, near)
+
+    def test_mixed_never_draws_it(self):
+        """`mixed` indexes a sorted list, so a new shape would rename every earlier mixed run."""
+        self.assertNotIn("line", M.MIXED_TOPOLOGIES)
+        self.assertEqual(sorted(M.MIXED_TOPOLOGIES), list(M.MIXED_TOPOLOGIES))
+
+
+class EveryNthPlacement(unittest.TestCase):
+    """Servers strided along the mesh's principal axis, which is what a line asks for."""
+
+    def _line(self, nodes=20):
+        conf = M.make_config(shadowing=False)
+        return M.build(
+            conf,
+            nodes,
+            8000.0,
+            random.Random(4242),
+            hop_limit=3,
+            topology="line",
+            hop_spread=False,
+        )
+
+    def test_every_third_node_of_a_line(self):
+        from .campaign import Placement
+
+        mesh = self._line()
+        chosen = Placement.BY_NAME["every-nth"](
+            mesh, 7, random.Random(1), None, stride=3
+        )
+        self.assertEqual(sorted(chosen), [0, 3, 6, 9, 12, 15, 18])
+
+    def test_the_count_caps_the_stride(self):
+        from .campaign import Placement
+
+        mesh = self._line()
+        chosen = Placement.BY_NAME["every-nth"](
+            mesh, 3, random.Random(1), None, stride=3
+        )
+        self.assertEqual(sorted(chosen), [0, 3, 6])
+
+    def test_the_order_is_along_the_mesh_not_across_it(self):
+        """A corridor is long in x and short in y; the walk has to follow the long side."""
+        from .campaign import Placement
+
+        conf = M.make_config(shadowing=False)
+        mesh = M.build(
+            conf, 24, 6000.0, random.Random(9), hop_limit=3, topology="corridor"
+        )
+        chosen = Placement.BY_NAME["every-nth"](
+            mesh, 6, random.Random(1), None, stride=4
+        )
+        xs = [mesh.nodes[i].x for i in chosen]
+        self.assertEqual(xs, sorted(xs))
+
+
+def _phy_sensitivity(conf):
+    import lib.phy as phy
+
+    return phy.effective_sensitivity(conf)
 
 
 class AdaptiveCongestion(unittest.TestCase):

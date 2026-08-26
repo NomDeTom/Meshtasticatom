@@ -89,6 +89,45 @@ HISTORY = [
         "7, on the sensitivity correction alone; any run with a noise profile moves again, because "
         "an excursion can now remove a link and not merely dim it.",
     ),
+    (
+        "1.5.0",
+        "Text reach is split by how the text arrived. `baseline.text_reception_mean` counts a text "
+        "a node holds by any route, and `_on_overheard_replay` files an archive's replay into the "
+        "same set - so a protocol that puts replays on the air raised the headline reach without "
+        "the broadcast reaching one node more, while the per-node vectors beside it, taken from "
+        "`heard_by_class`, counted only what the radio delivered. The two disagreed by exactly the "
+        "bystander pickup rate (measured on a 20-node line: `sr` reads 0.4111 against the per-node "
+        "0.3229 at 3 hops, and `none` and `chain` agree to four decimals because neither produces "
+        "a pickup). `text_on_air_*` and `text_overheard_*` now report the two paths apart, the "
+        "digest carries both beside `text`, and `collate.COST` is `text_on_air`, so an arm can no "
+        "longer be credited with a flood improvement for adding a second delivery path.",
+        "INVALIDATES no measurement - every number a stored run reported is unchanged - but the "
+        "ranking prose and the `price` column in any digest collated before this read the total "
+        "where they now read first chance, so a block ranked on `text` is not comparable with one "
+        "ranked after.",
+    ),
+    (
+        "1.6.0",
+        "A chain walk's replays are overheard like the sketch's. `chain:link_provide` carries the "
+        "same replay header as `sr:item_provide` - `chain.on_link_request` puts it there and says "
+        "so - but `_on_receive` routed a chain payload to `_on_sr` for servers and to nothing at "
+        "all for anyone else, so the chain arm reported exactly zero bystander pickups. Not a "
+        "property of the protocol: it puts far more provides on the air than the sketch does, and "
+        "on a 20-node line at 3 hops it files 2411 pickups where the sketch files 1004, taking its "
+        "text reach from 0.3072 to 0.4910 against the sketch's 0.3974. On-air reach is untouched "
+        "in both arms; only what a bystander ends up holding moves.",
+        "INVALIDATES every `--protocol chain` reach figure measured before this: the chain arm's "
+        "`text` and its comparison against `sr` were both understated. `text_on_air` is unchanged.",
+    ),
+    (
+        "1.6.1",
+        "Packets and bytes on the air recorded per kind, beside the airtime that was already "
+        "there - `traffic.packets_by_kind` and `traffic.bytes_by_kind`. Three different questions: "
+        "airtime is what the channel was occupied for, bytes are what was carried, packets are how "
+        "often the mesh had to contend at all, and an archive's share of one is not its share of "
+        "another. Output only; no behaviour changes and no measurement moves.",
+        None,
+    ),
 ]
 
 SIM_VERSION = HISTORY[-1][0]
