@@ -1506,7 +1506,7 @@ JS = """
       const box = document.createElement('div');
       const cap = document.createElement('p');
       cap.className = 'axislabel';
-      cap.textContent = 'the archive\'s own messages by type · count against bytes';
+      cap.textContent = "the archive's own messages by type · count against bytes";
       host.appendChild(cap);
       host.appendChild(box);
       drew += drawPies(box, entry, meta.messageTypes);

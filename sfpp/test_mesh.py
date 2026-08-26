@@ -3299,6 +3299,36 @@ class PagePortability(unittest.TestCase):
         self.assertTrue(html.lstrip().startswith("<!doctype html>"))
         self.assertIn('<meta charset="utf-8">', html)
 
+    def test_the_page_javascript_parses(self):
+        """A Python escaping slip once emitted `'the archive's own ...'` - one unterminated string,
+        and every script after it never ran: no tabs, no maps, no charts, and no error visible on
+        the page. Checked with node where there is one, skipped where there is not, as the oracle
+        test does with a compiler.
+        """
+        import re
+        import shutil
+        import subprocess
+        import tempfile
+
+        node = shutil.which("node") or shutil.which("nodejs")
+        if not node:
+            self.skipTest("no node to parse with")
+        blocks = re.findall(r"<script>(.*?)</script>", self._page(), re.S)
+        self.assertTrue(blocks, "the page carries no script at all")
+        for index, block in enumerate(blocks):
+            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+                f.write(block)
+                path = f.name
+            try:
+                done = subprocess.run(
+                    [node, "--check", path], capture_output=True, text=True
+                )
+            finally:
+                os.unlink(path)
+            self.assertEqual(
+                done.returncode, 0, f"script {index} does not parse:\n{done.stderr}"
+            )
+
     def test_it_loads_nothing_from_the_network(self):
         """Everything the page draws is embedded; a link out is navigation, not a dependency."""
         import re
