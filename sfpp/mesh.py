@@ -19,6 +19,7 @@ import math
 import os
 import random
 import sys
+from collections import OrderedDict
 
 from .vendor import ensure_on_path
 
@@ -1299,9 +1300,9 @@ class Node:
         self.node_num = node_num if node_num is not None else (index + 1)
         self.rebroadcast_mode = REBROADCAST_ALL
         self.favourites = set()  # node indices this operator marked favourite
-        self.history = (
-            {}
-        )  # packet id -> SeenRecord (PacketHistory), bounded, oldest evicted
+        # packet id -> SeenRecord (PacketHistory), bounded, oldest evicted. Ordered so the eviction
+        # is a popitem rather than a scan for the minimum rx_time - see remember().
+        self.history = OrderedDict()
         self.queue = []  # QueueEntry, MeshPacketQueue order
         self.tx_token = (
             None  # the single pending transmit timer, overwritten like the firmware's
@@ -1512,12 +1513,21 @@ class Node:
     # ---- PacketHistory ----------------------------------------------------------------
 
     def remember(self, packet_id, record):
-        """Insert a history record, evicting the oldest when the ring is full."""
+        """Insert a history record, evicting the oldest when the ring is full.
+
+        Insertion order is rx_time order - `now` only moves forward - so the oldest is the front of
+        the ring and eviction needs no search. It was a min() over every entry on every insertion,
+        which on a full 300-entry ring was a fifth of a large run's whole CPU time.
+
+        move_to_end is what makes that hold: re-remembering an id already present (the same packet
+        heard again, mesh.py's _receive) updates its rx_time, and a plain assignment would leave it
+        at its original position and evict it as though it were still the oldest.
+        """
         self.history[packet_id] = record
+        self.history.move_to_end(packet_id)
         self.seen[packet_id] = record.rx_time
         while len(self.history) > self.history_max:
-            oldest = min(self.history, key=lambda pid: self.history[pid].rx_time)
-            del self.history[oldest]
+            oldest, _ = self.history.popitem(last=False)
             # `seen` is the campaign-facing view of the same ring; letting it outlive the record
             # would restore the suppression the eviction just gave up.
             self.seen.pop(oldest, None)
