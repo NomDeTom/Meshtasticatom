@@ -3262,12 +3262,13 @@ def run_once(opts, seed):
 
 def main(argv=None):
     opts = build_parser().parse_args(argv)
-    # Opt-in, off by default, and loud when it is on: the C++ decoder is a claim about speed only,
-    # and a run that took it has to say so or two runs become incomparable without anyone noticing.
+    # Native decoding where this tree can build it, the transcription where it cannot. Which one ran
+    # is printed and recorded rather than inferred: the two produce identical numbers, so the only
+    # symptom of a lost compiler would be runs that quietly got slower.
     from . import native_sketch
 
-    if native_sketch.enabled_by_environment():
-        print("sketch decoding: native (SFPP_NATIVE_SKETCH)")
+    decoder = native_sketch.activate()
+    print(f"sketch decoding: {decoder}")
     reports = []
     for repeat in range(opts.repeats):
         seed = (
@@ -3279,6 +3280,11 @@ def main(argv=None):
             seed = opts.seed + repeat
         report = run_once(opts, seed)
         report["label"] = opts.label
+        # Which decoder produced this, so a digest can be asked rather than a log hunted for. It is
+        # an environment fact and not a simulation decision, so test_series.fingerprint drops it -
+        # a run that decoded natively and one that did not must hash identically, which is the same
+        # claim test_native_sketch makes case by case.
+        report["decoder"] = decoder
         reports.append(report)
         summarise(report)
     if opts.out:

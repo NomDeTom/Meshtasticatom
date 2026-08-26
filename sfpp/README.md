@@ -1508,25 +1508,36 @@ routes those 199 calls to the vendored C++ over a pipe. 199 is what makes a pipe
 boundary is `decode` and not the arithmetic under it.
 
 ```bash
-SFPP_NATIVE_SKETCH=1 python3 -m sfpp.campaign ...   # opt in; the run prints that it did
+python3 -m sfpp.campaign ...                        # native wherever it can be built
+SFPP_NATIVE_SKETCH=0 python3 -m sfpp.campaign ...   # force the transcription
 python3 -m sfpp.native_sketch --scale 1.0           # diff both decoders, exit 1 on disagreement
 ```
 
 The C++ is not free either, and the gap widens with capacity - 12x at capacity 2, 89x at capacity
 32, 276x on a capacity-32 sketch held past its capacity, which takes Python 21.6 s to fail to
-decode. `BASE` runs capacity 32.
+decode. `BASE` runs capacity 32, and a 150-node 12-hour cell measured **2.45x end to end on a
+runner**, fingerprint-identical.
 
-**It is off unless asked for, and the Python stays the reference.** The transcription is what §9.2
-holds to the firmware and what runs where no compiler is reachable, so enabling this is a claim
-about speed only - never about results. It never falls back quietly: a decoder that failed to build
-raises rather than leaving "the run was slow" as the only symptom. `verify()` weights its cases by
-what they cost in Python rather than evenly, and includes over-capacity sketches on purpose: those
-misdecode to a wrong set at about 1/c!, and both sides have to reach the *same* wrong answer,
-because a misdecode the firmware makes is one the simulator has to make too.
+**On by default, falling back to the transcription where no compiler or source is reachable.** That
+is defensible only because the two are the same decoder rather than believed to be:
+`test_native_sketch` diffs them on every suite run, and §9.2 holds the transcription itself to the
+firmware. A fallback therefore costs speed and nothing else.
 
-Adopting it by default is not a free change: `seconds_per_sim_hour` is the number `collate --history`
-compares each block against its own past, and a run that decodes 89x faster is not comparable with
-one that did not. That is a `sim_version` bump, which resets trend depth to nothing.
+**Neither path is silent about which it took.** The run prints it and `decoder` goes into the
+report, because a tree that quietly lost its compiler would otherwise show it only as runs that got
+slower - and `test_series.fingerprint` drops `decoder`, so a native run and a Python one hash
+identically. That is the same claim `test_native_sketch` makes case by case, at whole-run scale.
+
+`verify()` weights its cases by what they cost in Python rather than evenly, and includes
+over-capacity sketches on purpose: those misdecode to a wrong set at about 1/c!, and both sides have
+to reach the *same* wrong answer, because a misdecode the firmware makes is one the simulator has to
+make too. The suite runs a cheap plan that stops at capacity 8; the deep end belongs to
+`--scale 1.0` and the `Native sketch decoder (manual)` job, since one capacity-32 over-capacity case
+is 21.6 s of Python by itself.
+
+Note what this does to runtime history: `seconds_per_sim_hour` is what `collate --history` compares
+each block against its own past, and a run decoding 89x faster is not comparable with one that did
+not. Blocks will read as a large speed-up once and settle.
 
 ## 10. What is simplified, assumed, or not there at all
 

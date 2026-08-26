@@ -27,7 +27,10 @@ def fingerprint(report):
     # `mesh_map` joined these once --mesh-map started recording points and links without --out:
     # it is the observer's picture of the mesh, so asking for it must not move a single number, and
     # dropping only `opts.mesh_map` below would no longer prove that.
-    for key in ("wall_seconds", "transport", "series", "mesh_map"):
+    # `decoder` joins these for the same reason wall_seconds is here: which implementation of
+    # Sketch.decode was reachable is a fact about the machine, and the whole claim of the native one
+    # is that it cannot move a number. A run that used it and one that did not must hash the same.
+    for key in ("wall_seconds", "transport", "series", "mesh_map", "decoder"):
         r.pop(key, None)
     for key in ("out", "reception_bin_s", "mesh_map"):
         (r.get("opts") or {}).pop(key, None)

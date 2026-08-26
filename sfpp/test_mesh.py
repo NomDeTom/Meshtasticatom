@@ -2918,6 +2918,8 @@ print(",".join(failed))
                 "--telemetry-gateway-fraction",
                 # check_oracle.py's, turning "no firmware reachable" into a failure - see §9.2.
                 "--require",
+                # native_sketch.py's, scaling its per-capacity case counts - see §9.3.
+                "--scale",
             }
         )
         self.assertEqual(

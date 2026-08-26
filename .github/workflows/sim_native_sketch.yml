@@ -76,10 +76,12 @@ jobs:
                   "--bucket-mode local --resolve hybrid --hop-spread --scale-area").split()
           nodes, hours = os.environ["NODES"], os.environ["HOURS"]
           results = {}
-          for label, native in (("python", None), ("native", "1")):
+          # Native is the default now, so the Python arm is the one that has to ask: popping the
+          # variable would run both arms natively and report a 1.00x that meant nothing.
+          for label, forced in (("python", "0"), ("native", None)):
               env = dict(os.environ)
-              if native:
-                  env["SFPP_NATIVE_SKETCH"] = native
+              if forced:
+                  env["SFPP_NATIVE_SKETCH"] = forced
               else:
                   env.pop("SFPP_NATIVE_SKETCH", None)
               out = f"/tmp/{label}.json"

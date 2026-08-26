@@ -9,12 +9,17 @@ microseconds in the C++ this module compiles.
 whole run's IPC is a rounding error against 75.5 s; wrapping `mul` instead - 10.1M calls - would
 have spent more on the pipe than it saved.
 
-This is off unless asked for. The Python stays the reference and the fallback, because it is what
-check_oracle holds to the firmware and what runs where no compiler is reachable. Enabling it is
-therefore a claim about speed only, never about results, and `verify()` is what makes that claim
-checkable rather than assumed.
+On by default, falling back to the transcription where no compiler or source is reachable. That is
+only defensible because the two are the same decoder rather than believed to be: `test_native_sketch`
+diffs them on every suite run, and `check_oracle` holds the transcription itself to the firmware. So
+a fallback costs speed and nothing else.
 
-    SFPP_NATIVE_SKETCH=1 python3 -m sfpp.campaign ...
+The Python stays the reference for both of those checks, and is what a tree without a compiler runs.
+Neither path is silent about which it took - the run prints it and `decoder` goes into the report,
+because a tree that quietly lost its compiler would otherwise show it only as runs that got slower.
+
+    python3 -m sfpp.campaign ...                   # native where it can be built
+    SFPP_NATIVE_SKETCH=0 python3 -m sfpp.campaign  # force the transcription
     python3 -m sfpp.native_sketch --scale 1.0      # diff both decoders, exit 1 on any disagreement
 """
 
@@ -62,12 +67,20 @@ def start():
 def stop():
     global _proc
     if _proc is not None:
+        proc, _proc = _proc, None
         try:
-            _proc.stdin.close()
-            _proc.wait(timeout=5)
+            proc.stdin.close()
+            proc.wait(timeout=5)
         except Exception:
-            _proc.kill()
-        _proc = None
+            proc.kill()
+        finally:
+            # Closed explicitly rather than left to the collector: the suite creates and drops this
+            # process, and an unclosed pipe there is a ResourceWarning in somebody else's test.
+            for pipe in (proc.stdin, proc.stdout):
+                try:
+                    pipe.close()
+                except Exception:
+                    pass
 
 
 def decode(syndromes):
@@ -109,12 +122,35 @@ def disable():
         _python_decode = None
 
 
-def enabled_by_environment():
-    """Honour SFPP_NATIVE_SKETCH, and say so. Anything unset or "0" leaves the Python in place."""
-    if os.environ.get("SFPP_NATIVE_SKETCH", "").strip() not in ("", "0"):
-        enable()
-        return True
-    return False
+def activate():
+    """Use the C++ decoder if this tree can build one. Returns the sentence a run should print.
+
+    On by default, because the decoders are the same decoder: 628 differential cases and whole-run
+    fingerprints say so, and `test_native_sketch` keeps saying so. Falling back therefore costs
+    speed and nothing else, which is what makes falling back acceptable here at all - it was not
+    acceptable while the two were merely believed to agree.
+
+    Never silent, though. A tree that quietly lost its compiler would show it only as runs that got
+    slower, which is the shape of thing this repository has been caught by before, so the reason is
+    printed and `decoder` goes into the report.
+
+    SFPP_NATIVE_SKETCH=0 forces the transcription - the only way to run it once a compiler exists,
+    and what the paired job uses for its Python arm.
+    """
+    asked = os.environ.get("SFPP_NATIVE_SKETCH", "").strip()
+    if asked == "0":
+        return "python (SFPP_NATIVE_SKETCH=0)"
+    try:
+        start()
+    # SystemExit as well as Exception, and deliberately: check_oracle.build_oracle reports a failed
+    # compile with sys.exit, which does not inherit from Exception. Catching only Exception meant a
+    # tree without a compiler exited here instead of falling back - the one outcome this whole
+    # function exists to prevent, and invisible until a machine without g++ ran it.
+    except (Exception, SystemExit) as exc:
+        first = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
+        return f"python (no native decoder: {first})"
+    enable()
+    return "native"
 
 
 # Cases per capacity, weighted by what a case costs on the Python side rather than evenly. A
@@ -124,7 +160,7 @@ def enabled_by_environment():
 PLAN = ((2, 300), (3, 200), (4, 100), (8, 20), (16, 6), (32, 2))
 
 
-def verify(scale=1.0, seed=20260826):
+def verify(scale=1.0, seed=20260826, plan=PLAN, report=print):
     """Decode the same sketches both ways and diff, including over-capacity ones.
 
     Over-capacity is deliberate: a sketch holding more than its capacity usually fails to decode but
@@ -136,7 +172,8 @@ def verify(scale=1.0, seed=20260826):
     py = _python_decode or pinsketch.Sketch.decode
     bad = total = 0
     py_time = native_time = 0.0
-    for capacity, count in PLAN:
+    disagreed = []
+    for capacity, count in plan:
         count = max(1, int(count * scale))
         for i in range(count):
             members = rng.randrange(0, capacity * 2 + 1)  # sometimes past capacity, on purpose
@@ -156,17 +193,18 @@ def verify(scale=1.0, seed=20260826):
             total += 1
             if mine != theirs:
                 bad += 1
+                disagreed.append((capacity, members, mine, theirs))
                 if bad <= 5:
-                    print(f"  capacity {capacity}, {members} members, case {i}")
-                    print(f"    python {mine}")
-                    print(f"    native {theirs}")
-        print(f"  capacity {capacity:>2}: {count} cases")
-    print(f"\n{total - bad}/{total} decodes agree")
-    print(
+                    report(f"  capacity {capacity}, {members} members, case {i}")
+                    report(f"    python {mine}")
+                    report(f"    native {theirs}")
+        report(f"  capacity {capacity:>2}: {count} cases")
+    report(f"\n{total - bad}/{total} decodes agree")
+    report(
         f"decode time over those cases: python {py_time:.1f}s, native {native_time:.1f}s"
         + (f"  ({py_time / native_time:.0f}x)" if native_time else "")
     )
-    return bad == 0
+    return disagreed
 
 
 def main(argv=None):
@@ -177,7 +215,7 @@ def main(argv=None):
         if i + 1 < len(argv):
             scale = float(argv[i + 1])
     try:
-        ok = verify(scale)
+        ok = not verify(scale)
     finally:
         stop()
     return 0 if ok else 1
