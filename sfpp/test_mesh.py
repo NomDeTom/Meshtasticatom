@@ -3379,6 +3379,41 @@ class FoldedWarnings(unittest.TestCase):
         self.assertNotIn('<details class="flags">', self._page([]))
 
 
+class ProtocolPage(unittest.TestCase):
+    """The explainer: both forms of the archive protocol, and its index cannot drift."""
+
+    def _html(self):
+        from .explorer import render_protocol
+
+        return "".join(render_protocol())
+
+    def test_every_section_is_in_the_index(self):
+        import re
+
+        html = self._html()
+        anchors = set(re.findall(r'<div class="panel" id="([^"]+)"', html))
+        linked = set(re.findall(r'<li><a href="#([^"]+)"', html))
+        self.assertEqual(anchors, linked, "a section the index does not name, or the reverse")
+
+    def test_it_describes_both_protocols_by_their_flags(self):
+        html = self._html()
+        self.assertIn("--protocol chain", html)
+        self.assertIn("--protocol sr", html)
+
+    def test_the_wire_sizes_match_the_ones_charged(self):
+        """Prose quoting a size the simulator does not charge is prose nobody can check."""
+        from . import chain as CH
+        from .campaign import SR_CHECKSUM, SR_ENVELOPE, sketch_bytes
+
+        html = self._html()
+        self.assertIn(f"{CH.ANNOUNCE_BYTES} B", html)
+        self.assertIn(f"{CH.LINK_REQUEST_BYTES} B", html)
+        self.assertIn(f"{CH.LINK_OVERHEAD} B + object", html)
+        self.assertIn(f"{sketch_bytes(32, 32)} bytes", html)
+        self.assertIn(f"{SR_ENVELOPE}-byte envelope", html)
+        self.assertIn(f"{SR_CHECKSUM}-byte checksum", html)
+
+
 class MakingPage(unittest.TestCase):
     """The manual page: an index that cannot drift from its sections, and a glossary of columns."""
 

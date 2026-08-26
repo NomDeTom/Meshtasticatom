@@ -2076,6 +2076,146 @@ def render_campaign(runs, blocks):
     return out
 
 
+def render_protocol():
+    """What the archive protocol is, in both forms this campaign measures.
+
+    Static prose, like the making page: it describes the transport under study rather than any
+    run's numbers. Sourced from `chain.py`, `campaign.py`'s SR handlers and TRANSPORT.md, and the
+    wire sizes are the ones the simulator actually charges.
+    """
+    return [
+        '<section class="tab-panel" data-tab="protocol" hidden>',
+        "<h2>How SF++ works</h2>",
+        '<p class="sub">Store &amp; Forward++ gives some nodes an <b>archive</b>: a store of the '
+        "broadcast text objects that crossed the mesh, so a node that was off, asleep or out of "
+        "range can be caught up afterwards. Two archives that have seen different traffic hold "
+        "different sets, and <b>the whole protocol is the problem of finding the difference "
+        "between two sets over a radio that carries a few hundred bytes at a time</b>. What "
+        "follows is how it does that today, and what is proposed instead.</p>",
+        '<div class="making">',
+        '<nav class="making-nav" aria-label="sections"><ol>'
+        '<li><a href="#proto-shape">The shape of the problem</a></li>'
+        '<li><a href="#proto-chain">Today: the chain walk</a></li>'
+        '<li><a href="#proto-sr">Proposed: set reconciliation</a></li>'
+        '<li><a href="#proto-modes">The knobs, and what each decides</a></li>'
+        '<li><a href="#proto-replay">Replays, and who else hears them</a></li>'
+        "</ol></nav>",
+        "<div>",
+
+        '<div class="panel" id="proto-shape">',
+        '<div class="blockhead"><h3>1. The shape of the problem</h3>'
+        '<span class="arm">why it is not just "send me what I missed"</span></div>',
+        "<p>An archive cannot ask for what it missed, because <b>it does not know what it missed</b>. "
+        "It knows what it holds. So does its peer. Neither can send its whole list - a mesh packet "
+        "carries a couple of hundred bytes and a store holds thousands of objects - and neither can "
+        "ask a question whose answer is the list either.</p>",
+        "<p>Both forms below start from the same two primitives. An object is identified by a "
+        "<b>message hash</b>, and a set of them by a <b>checksum</b> that is order-independent, so "
+        "two archives holding the same objects agree on it whatever order they arrived in. The "
+        "checksum settles <i>whether</i> two archives differ in one small message. Everything "
+        "expensive is the second question: <b>which objects</b>.</p>",
+        "</div>",
+
+        '<div class="panel" id="proto-chain">',
+        '<div class="blockhead"><h3>2. Today: the chain walk</h3>'
+        '<span class="arm">--protocol chain</span>'
+        '<span class="pill">shipped</span></div>',
+        "<p>Each archive keeps its objects as a <b>chain</b>: every object commits to the one "
+        "before it, so the store is an ordered list ending in a <b>tip</b>. Three messages:</p>",
+        '<table class="glossary"><thead><tr><th>message</th><th>what it carries</th>'
+        "<th>size</th></tr></thead><tbody>",
+        "<tr><td>CANON_ANNOUNCE</td><td>broadcast: this archive's tip - a commit hash and a "
+        "counter. Cheap, and it does not grow with how far behind anyone is</td><td>28 B</td></tr>",
+        "<tr><td>LINK_REQUEST</td><td>addressed: name one commit I want</td><td>24 B</td></tr>",
+        "<tr><td>LINK_PROVIDE</td><td>the object, plus <b>the hash of its parent</b></td>"
+        "<td>44 B + object</td></tr>",
+        "</tbody></table>",
+        "<p>A node hearing a tip it does not hold asks for it. The answer carries the object "
+        "<i>and</i> the parent's hash - which is the only way it learns what to ask for next. So it "
+        "asks again, and again, walking backwards one object per round trip until it reaches "
+        "something it already has.</p>",
+        "<p><b>A difference of <i>d</i> objects costs <i>d</i> round trips, and they cannot be "
+        "pipelined</b>, because each request is only knowable once the previous answer has arrived. "
+        "That serialisation is the cost, and on a mesh whose diameter is nineteen hops every one of "
+        "those round trips crosses the whole line. Measured here: chain spends about "
+        "<b>70% of its bytes on negotiation</b> rather than on objects.</p>",
+        "</div>",
+
+        '<div class="panel" id="proto-sr">',
+        '<div class="blockhead"><h3>3. Proposed: set reconciliation</h3>'
+        '<span class="arm">--protocol sr</span>'
+        '<span class="pill">under study</span></div>',
+        "<p>Replace the walk with one exchange. Objects are grouped into <b>buckets</b>, and for "
+        "each bucket an archive computes a <b>sketch</b> - a fixed-size structure, sized by "
+        "<code>--capacity</code>, over the short IDs of the objects it holds. The advert is a "
+        "broadcast carrying the bucket, its checksum, and that sketch.</p>",
+        "<p>A peer hearing it does three things in order:</p>",
+        "<ol><li><b>Compare checksums.</b> Equal means the sets are identical and the exchange is "
+        "over - one message, no round trip.</li>"
+        "<li><b>Subtract the sketches.</b> The sketch is built so that combining two of them "
+        "cancels everything the two archives share and leaves only the symmetric difference, which "
+        "decodes directly to <b>the short IDs neither side has in common</b> - without either side "
+        "ever sending its list.</li>"
+        "<li><b>Answer both halves at once.</b> IDs it holds and the peer lacks it sends; IDs it "
+        "lacks it asks for in a single request. <b>One exchange, whatever <i>d</i> is</b> - up to "
+        "the sketch's capacity.</li></ol>",
+        "<p><b>The capacity is the catch.</b> A sketch of capacity <i>c</i> can only decode a "
+        "difference of at most <i>c</i>; beyond that it fails - detectably - and the exchange "
+        "<b>escalates</b> to enumeration, which is a round trip longer but always works. That is "
+        "what <code>--resolve hybrid</code> is: sketch first, enumerate when it fails. Measured "
+        "here, the decode failure rate is not small at slow cadence - a third of exchanges at "
+        "bucket-close, because rare adverts mean big differences.</p>",
+        "<p>Sketch bytes are <code>capacity x short-ID bits / 8</code>: at the defaults, 32 "
+        "members of 32 bits is 128 bytes on top of an 18-byte envelope and a 9-byte checksum. "
+        "<b>The trade is bytes per advert against round trips per object</b>, and that is the whole "
+        "comparison this campaign exists to measure.</p>",
+        "</div>",
+
+        '<div class="panel" id="proto-modes">',
+        '<div class="blockhead"><h3>4. The knobs, and what each decides</h3></div>',
+        '<table class="glossary"><thead><tr><th>knob</th><th>decides</th><th>values</th>'
+        "</tr></thead><tbody>",
+        "<tr><td>--resolve</td><td>how the difference is found once two archives know they "
+        "differ</td><td><b>sketch</b> only, <b>enum</b> only (never sends a sketch; a round trip "
+        "longer by design), <b>hybrid</b> - sketch, escalating on failure</td></tr>",
+        "<tr><td>--trigger</td><td>when an archive speaks at all</td><td><b>bucket</b> on a seal, "
+        "<b>interval</b> on a timer, <b>aimd</b> backing off when a probe finds nothing</td></tr>",
+        "<tr><td>--capacity</td><td>the largest difference one sketch can decode, and most of the "
+        "advert's size</td><td>32 by default</td></tr>",
+        "<tr><td>--bucket-mode</td><td>how objects are grouped so two archives can talk about the "
+        "same subset</td><td><b>local</b> is what the firmware does; the others need agreement no "
+        "mesh can produce</td></tr>",
+        "<tr><td>--short-id-bits</td><td>how wide a member of the sketch is - narrower is cheaper "
+        "and collides more</td><td>32 by default</td></tr>",
+        "</tbody></table>",
+        "<p>Cadence is the one that moves everything: advertise rarely and differences grow past "
+        "the sketch capacity, advertise often and the archive's own traffic is most of what the "
+        "channel carries. Both ends of that are measured in the cadence blocks.</p>",
+        "</div>",
+
+        '<div class="panel" id="proto-replay">',
+        '<div class="blockhead"><h3>5. Replays, and who else hears them</h3></div>',
+        "<p>When an archive sends an object it has that a peer lacks, that is a <b>replay</b>. It "
+        "carries a small header - how long ago the object was first heard, in 64-second ticks - "
+        "and <b>that header sits outside the encryption wrapper</b>. Its presence is the flag: "
+        "fresh traffic carries none.</p>",
+        "<p>So any node in earshot, archive or not, can tell that what it is hearing is a replay "
+        "and roughly how old it is, and can <b>file it as a message it missed</b>. That is a "
+        "<b>bystander pickup</b>, and it is the only end-user gain this campaign measures: nothing "
+        "here models a client asking a server for what it missed, so <code>held</code> is what an "
+        "archive <i>has</i>, not what a user <i>gets</i>.</p>",
+        "<p>It is also why every reach figure on this page is split into <b>on air</b> and "
+        "<b>overheard</b>. A protocol that puts more replays on the air is overheard more, "
+        "regardless of whether it reconciles well - the chain walk is overheard about twice as "
+        "much as the sketch, and it is the worse reconciler.</p>",
+        "</div>",
+
+        "</div>",
+        "</div>",
+        "</section>",
+    ]
+
+
 def render_stack(blocks):
     """The cross-block page: one measure, every block, one scale.
 
@@ -2563,6 +2703,7 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
         + "</button>",
         '<button data-tab="runs" role="tab" aria-selected="false">Runs</button>',
         '<button data-tab="making" role="tab" aria-selected="false">How runs are made</button>',
+        '<button data-tab="protocol" role="tab" aria-selected="false">How SF++ works</button>',
         "</nav>",
     ]
 
@@ -2750,6 +2891,7 @@ def render_html(runs, blocks, board, for_pages=False, superseded=(), figures_dir
     out += render_schedule(sched)
     out += render_health(health)
     out += render_making()
+    out += render_protocol()
     out += [
         '<section class="tab-panel" data-tab="runs" hidden>',
         "<h2>Runs</h2>",
