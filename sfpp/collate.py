@@ -37,6 +37,19 @@ import json
 import os
 import statistics
 
+# The message types a mix pie is cut into. The archive's traffic is two groups, not one: the
+# messages that carry an object across the mesh, and everything said to arrange it. A protocol
+# spending most of its bytes on payload and one spending them on negotiation are the same slice
+# otherwise, and on a line those are exactly the two protocols being compared.
+TRAFFIC_GROUPS = (
+    "position", "telemetry", "nodeinfo", "text", "dm", "sfpp_replay", "sfpp_overhead",
+)
+
+# Which archive kinds carry an object. Everything else the archive sends - adverts, announces,
+# requests of either kind - is what it costs to decide what to send.
+REPLAY_KINDS = ("sr:item_provide", "sr:enum_provide", "chain:link_provide")
+
+
 # Everything the digest carries per cell, by path into a campaign report. An absent metric
 # becomes None rather than raising, so mixed vintages still collate.
 METRICS = {
@@ -77,7 +90,7 @@ METRICS = {
     # The offered load by type: what the archive's traffic is a share *of*.
     **{
         f"mix_{group}_{suffix}": ("_derived", f"mix_{group}_{suffix}")
-        for group in ("position", "telemetry", "nodeinfo", "text", "dm", "sfpp")
+        for group in TRAFFIC_GROUPS
         for suffix in ("count", "bytes")
     },
     "sr_messages": ("_derived", "sr_messages"),
@@ -323,7 +336,10 @@ def derived(report):
     mix = {}
     for field, suffix in (("packets_by_kind", "count"), ("bytes_by_kind", "bytes")):
         for kind, value in (traffic.get(field) or {}).items():
-            group = "sfpp" if kind.startswith(("sr:", "chain:")) else kind
+            if kind.startswith(("sr:", "chain:")):
+                group = "sfpp_replay" if kind in REPLAY_KINDS else "sfpp_overhead"
+            else:
+                group = kind
             if group not in TRAFFIC_GROUPS:
                 continue
             key = f"mix_{group}_{suffix}"
@@ -399,11 +415,6 @@ def per_node_of(report):
 # What decided the mesh, as opposed to what was being varied on it. Kept apart from the arm: two
 # blocks sweeping different flags over the same manufactured mesh should say so in one place rather
 # than leave a reader to infer it from the cell names.
-# The message types a mix pie is cut into. Everything the archive sends is one group: its share
-# against ordinary traffic is the question, and its internal split has its own picture.
-TRAFFIC_GROUPS = ("position", "telemetry", "nodeinfo", "text", "dm", "sfpp")
-
-
 RECIPE_FIELDS = (
     "topology", "nodes", "area", "stretch", "scenario", "mirror",
     "preset", "tx_power", "path_loss_model", "noise_model", "no_link_shadowing", "no_phy_loss",

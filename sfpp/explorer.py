@@ -694,8 +694,14 @@ footer { color: var(--muted); font-size: .8rem; margin-top: 3rem; }
 .campaignmap svg { display: block; width: 100%; height: auto; }
 /* Three cells to a row, not `auto-fit`: a 96rem page fitted eight of them at 11rem and each pie
    came out smaller than its own legend. Each cell holds a pair, so a row is six pies. */
-.piegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem 1.4rem; }
-.piecell { min-width: 0; }
+.piegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .9rem; }
+/* A boxed pair reads as one cell's two views of itself. Without the border the six pies in a row
+   are one undifferentiated field and it is not obvious which count belongs to which byte total. */
+.piecell {
+  min-width: 0; border: 1px solid var(--border); border-radius: 8px;
+  padding: .5rem .6rem .3rem; background: var(--field-bg);
+}
+.piecell > .axislabel { margin: 0 0 .2rem; font-weight: 600; color: var(--text); }
 .piepair { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
 @media (max-width: 1100px) { .piegrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .piegrid { grid-template-columns: minmax(0, 1fr); } }
@@ -1946,7 +1952,10 @@ TRAFFIC_TYPES = (
     ("mix_nodeinfo_count", "mix_nodeinfo_bytes", "nodeinfo", "#C08A2E"),
     ("mix_text_count", "mix_text_bytes", "text", "#2E5E7E"),
     ("mix_dm_count", "mix_dm_bytes", "DM", "#B4472A"),
-    ("mix_sfpp_count", "mix_sfpp_bytes", "SF++", "#8A5A9E"),
+    # Two slices, adjacent and in the same hue family, so the archive still reads as one block
+    # of the pie while saying how much of it was payload.
+    ("mix_sfpp_replay_count", "mix_sfpp_replay_bytes", "SF++ replay", "#8A5A9E"),
+    ("mix_sfpp_overhead_count", "mix_sfpp_overhead_bytes", "SF++ overhead", "#C6A9D6"),
 )
 
 MESSAGE_TYPES = (
