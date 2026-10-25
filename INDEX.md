@@ -1,6 +1,6 @@
 # SF++ sweep explorer
 
-176 scheduled run(s) rolled up, 158 block(s). Open `index.html` for the filterable page; this file is the same data in a diff-readable form.
+178 scheduled run(s) rolled up, 158 block(s). Open `index.html` for the filterable page; this file is the same data in a diff-readable form.
 
 - **latest** `matrix-2026-10-24-0822` on batumi ground, seed base `None`
 - **transport** `4195f52`
@@ -59,115 +59,115 @@
 | `batumi-short-fast-hop-scaling-80` | archive | **held** | 0.975 | 0.006 | 0.007 | 1.1x bytes_on_air | 12 |
 | `batumi-legacy-25-congestion-60` | archive | **held** | 0.969 | 0.007 | 0.104 | 1.2x bytes_on_air | 12 |
 | `batumi-congestion-60` | archive | **held** | 0.963 | 0.008 | 0.118 | 1.2x bytes_on_air | 11 |
-| `PR-protocol` | protocol | **held** | 0.934 | 0.059 | 0.015 | 1.2x bytes_on_air | 59 |
-| `BL-control` | protocol | **held** | 0.916 | 0.091 | 0.006 | 1.1x bytes_on_air | 59 |
+| `PR-protocol` | protocol | **held** | 0.932 | 0.061 | 0.015 | 1.2x bytes_on_air | 60 |
+| `BL-control` | protocol | **held** | 0.916 | 0.090 | 0.006 | 1x bytes_on_air | 60 |
 | `batumi-legacy-50-congestion-80` | archive | **held** | 0.851 | 0.024 | 0.151 | 1.1x bytes_on_air | 12 |
 | `batumi-legacy-25-congestion-80` | archive | **held** | 0.814 | 0.022 | 0.142 | 1.1x bytes_on_air | 12 |
-| `RF-preset-turbo` | preset | **held** | 0.812 | 0.090 | 0.748 | 15x sr_airtime | 59 |
 | `batumi-congestion-80` | archive | **held** | 0.782 | 0.030 | 0.136 | 1.1x bytes_on_air | 11 |
-| `RF-txpower` | tx-power | **held** | 0.780 | 0.095 | 0.722 | 19x sr_airtime | 59 |
-| `RF-pulse` | noise-pulse-interval-ms | **held** | 0.767 | 0.049 | 0.650 | 2.9e+02x sr_airtime | 59 |
-| `MS-siting` | siting-mix | **text** | 0.736 | 0.136 | 0.740 | 3.2x advert_bytes | 58 |
-| `AD-siting` | siting-mix | **held** | 0.735 | 0.090 | 0.695 | 14x sr_bytes | 59 |
-| `MS-stretch` | stretch | **held** | 0.690 | 0.114 | 0.678 | 13x sr_airtime | 59 |
-| `RF-bw500` | preset | **held** | 0.572 | 0.138 | 0.551 | 11x advert_bytes | 59 |
-| `MS-hopscale` | nodes | **text** | 0.522 | 0.067 | 0.515 | 9.2x sr_bytes | 59 |
-| `RF-eu-presets` | preset | **held** | 0.470 | 0.189 | 0.509 | 3.8x advert_bytes | 59 |
-| `RF-preset` | preset | **held** | 0.470 | 0.191 | 0.516 | 4.8x sr_airtime | 59 |
-| `batumi-x4-m4-early-flood` | archive | **held** | 0.441 | 0.007 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-congestion-40` | archive | **held** | 0.441 | 0.006 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-hop-scaling-40` | archive | **held** | 0.441 | 0.006 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-none` | archive | **held** | 0.441 | 0.006 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-extra-repeats` | archive | **held** | 0.441 | 0.007 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-hop-limit-15` | archive | **held** | 0.440 | 0.006 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-hop-limit-7` | archive | **held** | 0.440 | 0.006 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-coding-rate-ladder` | archive | **held** | 0.439 | 0.007 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-favourite-routers` | archive | **held** | 0.439 | 0.007 | 0.032 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-hop-scaling-60` | archive | **held** | 0.429 | 0.006 | 0.030 | 1.2x bytes_on_air | 11 |
-| `batumi-x4-hop-scaling-80` | archive | **held** | 0.426 | 0.006 | 0.028 | 1.2x bytes_on_air | 11 |
-| `MS-oversubscribed` | nodes | **text** | 0.420 | 0.064 | 0.413 | 4.4x sr_bytes | 59 |
-| `batumi-x4-congestion-60` | archive | **held** | 0.415 | 0.006 | 0.026 | 1.2x bytes_on_air | 11 |
-| `MS-topology` | topology | **text** | 0.386 | 0.087 | 0.397 | 2.4x sr_bytes | 59 |
-| `batumi-x4-congestion-80` | archive | **held** | 0.372 | 0.007 | 0.016 | 1.1x bytes_on_air | 11 |
-| `LD-chatty-hops` | broadcast-interval-s | **text** | 0.336 | 0.025 | 0.345 | 8x sr_airtime | 59 |
-| `RF-stretch-duct` | duct-per-hour | **text** | 0.323 | 0.066 | 0.315 | 2.7x sr_airtime | 59 |
-| `MS-density` | nodes | **text** | 0.300 | 0.098 | 0.312 | 5.7x advert_bytes | 59 |
-| `DG-burst` | burst-loss | **text** | 0.299 | 0.019 | 0.320 | 1.5x sr_bytes | 59 |
-| `LD-chatty` | broadcast-interval-s | **held** | 0.273 | 0.067 | 0.327 | 8.9x sr_airtime | 59 |
-| `DG-outage` | burst-loss | **held** | 0.266 | 0.066 | 0.333 | 2x advert_bytes | 59 |
-| `DB-hotstore-stress` | max-num-nodes | **held** | 0.256 | 0.069 | 0.184 | 3.8x sr_airtime | 59 |
-| `RT-hoplimit` | hop-limit | **text** | 0.242 | 0.060 | 0.271 | 3.2x sr_bytes | 59 |
+| `RF-txpower` | tx-power | **held** | 0.778 | 0.095 | 0.721 | 6x advert_bytes | 60 |
+| `RF-pulse` | noise-pulse-interval-ms | **held** | 0.765 | 0.051 | 0.648 | 1.3e+02x sr_airtime | 60 |
+| `RF-preset-turbo` | preset | **text** | 0.756 | 0.082 | 0.746 | 5x advert_bytes | 60 |
+| `MS-siting` | siting-mix | **text** | 0.735 | 0.135 | 0.739 | 4.5x sr_airtime | 59 |
+| `AD-siting` | siting-mix | **text** | 0.705 | 0.101 | 0.694 | 3.6x advert_bytes | 60 |
+| `MS-stretch` | stretch | **held** | 0.688 | 0.113 | 0.676 | 6.3x sr_airtime | 60 |
+| `RF-bw500` | preset | **text** | 0.557 | 0.089 | 0.550 | 3.4x sr_airtime | 60 |
+| `MS-hopscale` | nodes | **held** | 0.504 | 0.084 | 0.513 | 19x sr_bytes | 60 |
+| `RF-eu-presets` | preset | **held** | 0.471 | 0.188 | 0.508 | 4.5x sr_airtime | 60 |
+| `RF-preset` | preset | **held** | 0.471 | 0.190 | 0.515 | 6.2x sr_airtime | 60 |
+| `MS-oversubscribed` | nodes | **held** | 0.451 | 0.094 | 0.412 | 5.2x bytes_on_air | 60 |
+| `batumi-x4-extra-repeats` | archive | **held** | 0.441 | 0.007 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-m4-early-flood` | archive | **held** | 0.441 | 0.006 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-congestion-40` | archive | **held** | 0.441 | 0.006 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-hop-scaling-40` | archive | **held** | 0.441 | 0.006 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-none` | archive | **held** | 0.441 | 0.006 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-hop-limit-15` | archive | **held** | 0.440 | 0.006 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-hop-limit-7` | archive | **held** | 0.440 | 0.006 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-coding-rate-ladder` | archive | **held** | 0.439 | 0.007 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-favourite-routers` | archive | **held** | 0.439 | 0.006 | 0.032 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-hop-scaling-60` | archive | **held** | 0.429 | 0.006 | 0.030 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-hop-scaling-80` | archive | **held** | 0.426 | 0.006 | 0.028 | 1.2x bytes_on_air | 12 |
+| `batumi-x4-congestion-60` | archive | **held** | 0.415 | 0.006 | 0.026 | 1.1x bytes_on_air | 12 |
+| `MS-topology` | topology | **text** | 0.384 | 0.086 | 0.396 | 2.5x sr_bytes | 60 |
+| `batumi-x4-congestion-80` | archive | **held** | 0.372 | 0.007 | 0.016 | 1.1x bytes_on_air | 12 |
+| `RF-stretch-duct` | duct-per-hour | **text** | 0.323 | 0.065 | 0.315 | 3.2x sr_airtime | 60 |
+| `DG-outage` | burst-loss | **text** | 0.321 | 0.022 | 0.333 | 2.6x sr_bytes | 60 |
+| `MS-density` | nodes | **text** | 0.302 | 0.098 | 0.314 | 4.9x advert_bytes | 60 |
+| `DG-burst` | burst-loss | **text** | 0.298 | 0.019 | 0.319 | 2.6x sr_bytes | 60 |
+| `LD-chatty` | broadcast-interval-s | **held** | 0.274 | 0.068 | 0.326 | 9.8x sr_airtime | 60 |
+| `LD-chatty-hops` | broadcast-interval-s | **held** | 0.273 | 0.065 | 0.345 | 12x sr_airtime | 60 |
+| `DB-hotstore-stress` | max-num-nodes | **held** | 0.256 | 0.069 | 0.184 | 5.8x sr_airtime | 60 |
+| `RT-hoplimit` | hop-limit | **text** | 0.242 | 0.060 | 0.271 | 2.3x sr_bytes | 60 |
 | `batumi-x4-LONG_FAST` | placement | **held** | 0.216 | 0.024 | 0.021 | 1.2x bytes_on_air | 20 |
-| `TH-congestion` | no-congestion-scaling | **text** | 0.215 | 0.019 | 0.223 | 3.1x sr_airtime | 59 |
+| `TH-congestion` | no-congestion-scaling | **text** | 0.216 | 0.019 | 0.224 | 3.4x sr_airtime | 60 |
 | `batumi-x4-SHORT_FAST` | placement | **held** | 0.215 | 0.001 | 0.002 | 1.1x bytes_on_air | 20 |
-| `RT-hopspread` | hop-limit | **text** | 0.214 | 0.043 | 0.241 | 2.5x sr_bytes | 59 |
-| `SF-place-flat` | place | **held** | 0.202 | 0.172 | 0.013 | 1.7x advert_bytes | 59 |
-| `SF-place-spread` | place | **held** | 0.202 | 0.172 | 0.013 | 1.7x advert_bytes | 59 |
+| `RT-hopspread` | hop-limit | **text** | 0.214 | 0.043 | 0.240 | 1.9x sr_bytes | 60 |
+| `SF-place-flat` | place | **held** | 0.206 | 0.174 | 0.013 | 3.2x sr_bytes | 60 |
+| `SF-place-spread` | place | **held** | 0.206 | 0.174 | 0.013 | 3.2x sr_bytes | 60 |
 | `batumi-x4-LITE_FAST` | placement | **held** | 0.191 | 0.024 | 0.011 | 1.1x bytes_on_air | 19 |
-| `RF-noise` | noise-profile | **held** | 0.179 | 0.034 | 0.165 | 1.6x sr_bytes | 59 |
-| `RT-spread` | hop-spread | **text** | 0.159 | 0.031 | 0.181 | 1.7x sr_bytes | 59 |
-| `MS-size` | nodes | **held** | 0.145 | 0.107 | 0.185 | 9.2x sr_bytes | 59 |
-| `DG-loss` | extra-loss | **text** | 0.133 | 0.027 | 0.139 | 1.2x advert_bytes | 59 |
-| `SC-signing` | signature-policy | **held** | 0.127 | 0.031 | 0.118 | 1.3x sr_airtime | 59 |
-| `AD-amplifiers` | amplifier-mix | **text** | 0.125 | 0.067 | 0.132 | 2.2x sr_bytes | 59 |
-| `SF-hops-spread` | hops-apart | **held** | 0.123 | 0.098 | 0.011 | 3.5x sr_bytes | 59 |
-| `AD-amplify-worst` | amplify-worst | **text** | 0.116 | 0.070 | 0.119 | 1.3x sr_airtime | 59 |
+| `RF-noise` | noise-profile | **held** | 0.179 | 0.034 | 0.165 | 1.3x sr_airtime | 60 |
+| `RT-spread` | hop-spread | **text** | 0.159 | 0.031 | 0.180 | 1.9x sr_bytes | 60 |
+| `MS-size` | nodes | **held** | 0.146 | 0.106 | 0.184 | 6.6x sr_bytes | 60 |
+| `DG-loss` | extra-loss | **text** | 0.133 | 0.027 | 0.139 | 1.2x sr_bytes | 60 |
+| `SC-signing` | signature-policy | **text** | 0.128 | 0.026 | 0.118 | 1.2x sr_airtime | 60 |
+| `AD-amplifiers` | amplifier-mix | **text** | 0.126 | 0.067 | 0.133 | 2x sr_bytes | 60 |
+| `SF-hops-spread` | hops-apart | **held** | 0.124 | 0.098 | 0.011 | 6.1x sr_bytes | 60 |
 | `batumi-x1-SHORT_FAST` | placement | **held** | 0.114 | 0.000 | 0.004 | 1.1x bytes_on_air | 19 |
-| `AD-nomute` | role-mix | **text** | 0.111 | 0.056 | 0.118 | 1.9x bytes_on_air | 59 |
-| `AD-flooding` | role-mix | **text** | 0.110 | 0.056 | 0.117 | 1.9x bytes_on_air | 59 |
-| `DB-hotstore` | max-num-nodes | **text** | 0.101 | 0.019 | 0.106 | 2.1x sr_airtime | 59 |
-| `DB-platform` | platform-mix | **text** | 0.100 | 0.019 | 0.106 | 2x sr_airtime | 59 |
-| `LD-interval` | broadcast-interval-s | **text** | 0.094 | 0.026 | 0.103 | 5.7x sr_airtime | 59 |
-| `RF-duct` | duct-per-hour | **text** | 0.093 | 0.051 | 0.094 | 1.4x bytes_on_air | 59 |
-| `SF-hops-flat` | hops-apart | **held** | 0.091 | 0.079 | 0.009 | 3.5x sr_bytes | 59 |
-| `RT-rebroadcast` | rebroadcast-mode | **held** | 0.084 | 0.046 | 0.006 | 29x sr_airtime | 59 |
-| `LD-traceroute-small` | traceroute-per-hour | **held** | 0.067 | 0.018 | 0.069 | 1.3x sr_airtime | 59 |
-| `AD-badrouters` | role-placement | **held** | 0.063 | 0.059 | 0.067 | 1.5x sr_airtime | 59 |
-| `SF-cadence` | trigger | **held** | 0.062 | 0.031 | 0.032 | 14x advert_bytes | 59 |
-| `MS-roles` | role-mix | **text** | 0.057 | 0.040 | 0.060 | 1.2x sr_bytes | 59 |
-| `FW-mixed-26` | legacy-fraction | **held** | 0.053 | 0.046 | 0.064 | 2.2x bytes_on_air | 59 |
-| `FW-mixed` | legacy-fraction | **held** | 0.053 | 0.043 | 0.064 | 2.2x bytes_on_air | 59 |
+| `AD-nomute` | role-mix | **text** | 0.111 | 0.055 | 0.117 | 2.4x bytes_on_air | 60 |
+| `AD-flooding` | role-mix | **text** | 0.110 | 0.056 | 0.116 | 2.4x bytes_on_air | 60 |
+| `RF-duct` | duct-per-hour | **text** | 0.093 | 0.051 | 0.094 | 1.2x bytes_on_air | 60 |
+| `SF-hops-flat` | hops-apart | **held** | 0.091 | 0.079 | 0.009 | 4.3x sr_bytes | 60 |
+| `RT-rebroadcast` | rebroadcast-mode | **held** | 0.083 | 0.046 | 0.006 | 25x sr_airtime | 60 |
+| `AD-amplify-worst` | amplify-worst | **held** | 0.076 | 0.070 | 0.119 | 2.1x sr_bytes | 60 |
+| `DB-hotstore` | max-num-nodes | **held** | 0.075 | 0.035 | 0.106 | 2.2x sr_airtime | 60 |
+| `DB-platform` | platform-mix | **held** | 0.073 | 0.035 | 0.106 | 2x sr_airtime | 60 |
+| `LD-traceroute-small` | traceroute-per-hour | **held** | 0.068 | 0.018 | 0.068 | 1.4x sr_airtime | 60 |
+| `AD-badrouters` | role-placement | **text** | 0.063 | 0.048 | 0.068 | 1.6x sr_bytes | 60 |
+| `LD-interval` | broadcast-interval-s | **held** | 0.063 | 0.039 | 0.103 | 5.7x sr_airtime | 60 |
+| `SF-cadence` | trigger | **held** | 0.062 | 0.031 | 0.032 | 26x sr_bytes | 60 |
+| `FW-mixed` | legacy-fraction | **held** | 0.054 | 0.043 | 0.064 | 2.3x bytes_on_air | 60 |
+| `FW-mixed-26` | legacy-fraction | **held** | 0.054 | 0.046 | 0.064 | 2.4x bytes_on_air | 60 |
 | `batumi-x1-LITE_FAST` | placement | **held** | 0.050 | 0.000 | 0.007 | 1.1x bytes_on_air | 20 |
-| `MS-roles-fav` | role-mix | **held** | 0.046 | 0.039 | 0.048 | 1.1x sr_bytes | 59 |
-| `LD-traceroute` | traceroute-per-hour | **text** | 0.045 | 0.012 | 0.049 | 1.4x sr_airtime | 59 |
-| `FW-versions` | profile | **held** | 0.044 | 0.043 | 0.061 | 3.5x bytes_on_air | 59 |
-| `SF-capacity-window` | capacity | **held** | 0.043 | 0.049 | 0.008 | 2.1x sr_bytes | 59 |
-| `SF-servers-flat` | servers | **held** | 0.042 | 0.045 | 0.013 | 5.6x sr_bytes | 59 |
-| `SF-servers-spread` | servers | **held** | 0.042 | 0.045 | 0.013 | 5.6x sr_bytes | 59 |
-| `FW-signing-cost` | profile-flag | **text** | 0.040 | 0.014 | 0.044 | 3.3x bytes_on_air | 59 |
-| `FW-firmware` | profile | **held** | 0.040 | 0.042 | 0.048 | 3.4x bytes_on_air | 59 |
-| `TH-congestion-input` | congestion-input | **held** | 0.038 | 0.015 | 0.033 | 2.1x sr_airtime | 59 |
-| `SF-provide-transport` | provide-transport | **text** | 0.025 | 0.016 | 0.008 | 3.6x sr_airtime | 59 |
-| `RT-hopassign` | hop-assign | **text** | 0.024 | 0.020 | 0.026 | 1.2x sr_airtime | 59 |
-| `AD-worst` | role-placement | **text** | 0.023 | 0.012 | 0.029 | 1.1x sr_airtime | 59 |
-| `SF-catchup` | catch-up-hours | **text** | 0.022 | 0.010 | 0.030 | 9.5x advert_bytes | 59 |
-| `MS-router-late` | router-late-fraction | **text** | 0.022 | 0.014 | 0.024 | 1.2x bytes_on_air | 59 |
-| `RT-favourites` | favourite-routers | **text** | 0.022 | 0.011 | 0.024 | 1.1x sr_bytes | 59 |
+| `FW-versions` | profile | **held** | 0.046 | 0.044 | 0.062 | 3.4x bytes_on_air | 60 |
+| `MS-roles-fav` | role-mix | **held** | 0.045 | 0.039 | 0.047 | 1.2x sr_bytes | 60 |
+| `MS-roles` | role-mix | **held** | 0.043 | 0.041 | 0.059 | 1.2x bytes_on_air | 60 |
+| `SF-capacity-window` | capacity | **held** | 0.043 | 0.049 | 0.008 | 2.6x advert_bytes | 60 |
+| `SF-servers-flat` | servers | **held** | 0.042 | 0.044 | 0.013 | 9.6x sr_bytes | 60 |
+| `SF-servers-spread` | servers | **held** | 0.042 | 0.044 | 0.013 | 9.6x sr_bytes | 60 |
+| `FW-firmware` | profile | **held** | 0.041 | 0.044 | 0.049 | 3.2x bytes_on_air | 60 |
+| `TH-congestion-input` | congestion-input | **held** | 0.038 | 0.015 | 0.032 | 1.5x sr_airtime | 60 |
+| `LD-traceroute` | traceroute-per-hour | **held** | 0.032 | 0.019 | 0.050 | 1.5x sr_airtime | 60 |
+| `SF-catchup` | catch-up-hours | **held** | 0.029 | 0.023 | 0.031 | 17x sr_bytes | 60 |
+| `RT-hopassign` | hop-assign | **held** | 0.025 | 0.026 | 0.026 | 1.2x sr_airtime | 60 |
+| `FW-signing-cost` | profile-flag | **held** | 0.024 | 0.017 | 0.043 | 3.3x bytes_on_air | 60 |
+| `AD-worst` | role-placement | **text** | 0.023 | 0.012 | 0.029 | 1x sr_bytes | 60 |
+| `RT-favourites` | favourite-routers | **text** | 0.022 | 0.011 | 0.023 | 1.1x sr_bytes | 60 |
 | `batumi-x1-LONG_FAST` | placement | **held** | 0.021 | 0.000 | 0.010 | 1.2x bytes_on_air | 20 |
-| `SF-sr-retries` | sr-retries | **held** | 0.020 | 0.020 | 0.011 | 1.2x sr_bytes | 59 |
-| `LD-diurnal` | diurnal | **text** | 0.019 | 0.008 | 0.021 | 1.2x sr_bytes | 59 |
-| `SF-capacity` | capacity | **held** | 0.018 | 0.011 | 0.010 | 5.3x advert_bytes | 59 |
-| `SF-capacity-local` | capacity | **held** | 0.018 | 0.011 | 0.010 | 5.3x advert_bytes | 59 |
-| `DM-mode` | dm-mode | **held** | 0.017 | 0.013 | 0.016 | 1.4x sr_airtime | 59 |
-| `SF-bucket-mode` | bucket-mode | **held** | 0.015 | 0.015 | 0.009 | 2.8x advert_bytes | 59 |
-| `SF-window-size` | window-size | **held** | 0.014 | 0.014 | 0.010 | 5.3x advert_bytes | 59 |
-| `SF-jitter-global` | advert-jitter-s | **held** | 0.012 | 0.008 | 0.010 | 1.1x sr_airtime | 59 |
-| `SF-jitter-local` | advert-jitter-s | **held** | 0.012 | 0.008 | 0.010 | 1.1x sr_airtime | 59 |
-| `SF-advert-transport` | advert-transport | **held** | 0.010 | 0.016 | 0.005 | 2.6x sr_airtime | 59 |
-| `SF-bucket-time` | time-bucket-s | **held** | 0.010 | 0.007 | 0.011 | 5.4x advert_bytes | 59 |
-| `SF-width` | short-id-bits | **text** | 0.009 | 0.004 | 0.009 | 3.1x advert_bytes | 59 |
-| `PR-dmmode-cr` | dm-mode | **held** | 0.009 | 0.008 | 0.005 | 1.1x sr_bytes | 59 |
-| `PR-crladder` | coding-rate-ladder | **held** | 0.008 | 0.008 | 0.006 | 1.1x sr_airtime | 59 |
-| `PR-repeats` | extra-repeats | **text** | 0.008 | 0.006 | 0.008 | 1.1x sr_airtime | 59 |
-| `RT-adopt` | no-adopt-hop-recommendation | **text** | 0.008 | 0.004 | 0.008 | 1.1x sr_airtime | 59 |
-| `SF-servers-allrouters` | servers | **text** | 0.007 | 0.011 | 0.006 | 2.3x sr_bytes | 59 |
-| `SF-replay-order-broadcast` | replay-ordering | **held** | 0.007 | 0.005 | 0.005 | 1x advert_bytes | 59 |
-| `SF-resolve` | resolve | **text** | 0.005 | 0.005 | 0.006 | 5.8x advert_bytes | 59 |
-| `SF-replay-order` | replay-ordering | **text** | 0.005 | 0.003 | 0.005 | 1x sr_bytes | 59 |
-| `TH-congestion-mode` | congestion-mode | **text** | 0.003 | 0.003 | 0.004 | 1x sr_airtime | 59 |
-| `PR-repeats-busy` | extra-repeats | **text** | 0.002 | 0.002 | 0.002 | 1x sr_bytes | 59 |
-| `DB-warm` | warm-num-nodes | **held** | 0.000 | 0.000 | 0.000 | · | 59 |
-| `SF-signed` | signed | **held** | 0.000 | 0.000 | 0.000 | 1.4x advert_bytes | 59 |
+| `MS-router-late` | router-late-fraction | **held** | 0.021 | 0.018 | 0.024 | 1.3x bytes_on_air | 60 |
+| `SF-sr-retries` | sr-retries | **held** | 0.020 | 0.020 | 0.011 | 1.1x sr_bytes | 60 |
+| `SF-capacity` | capacity | **held** | 0.018 | 0.011 | 0.010 | 5.1x advert_bytes | 60 |
+| `SF-capacity-local` | capacity | **held** | 0.018 | 0.011 | 0.010 | 5.1x advert_bytes | 60 |
+| `DM-mode` | dm-mode | **held** | 0.017 | 0.013 | 0.016 | 1.1x sr_bytes | 60 |
+| `SF-resolve` | resolve | **held** | 0.016 | 0.022 | 0.006 | 5.9x advert_bytes | 60 |
+| `LD-diurnal` | diurnal | **held** | 0.015 | 0.009 | 0.021 | 1.3x sr_bytes | 60 |
+| `SF-bucket-mode` | bucket-mode | **held** | 0.015 | 0.015 | 0.009 | 3.2x advert_bytes | 60 |
+| `SF-provide-transport` | provide-transport | **held** | 0.015 | 0.016 | 0.008 | 1.8x sr_airtime | 60 |
+| `SF-window-size` | window-size | **held** | 0.014 | 0.014 | 0.010 | 5.2x advert_bytes | 60 |
+| `SF-jitter-global` | advert-jitter-s | **held** | 0.012 | 0.008 | 0.010 | 1x sr_bytes | 60 |
+| `SF-jitter-local` | advert-jitter-s | **held** | 0.012 | 0.008 | 0.010 | 1x sr_bytes | 60 |
+| `SF-advert-transport` | advert-transport | **held** | 0.010 | 0.016 | 0.005 | 3.3x sr_airtime | 60 |
+| `SF-bucket-time` | time-bucket-s | **held** | 0.010 | 0.007 | 0.011 | 5.3x advert_bytes | 60 |
+| `SF-width` | short-id-bits | **text** | 0.009 | 0.004 | 0.009 | 3.1x advert_bytes | 60 |
+| `RT-adopt` | no-adopt-hop-recommendation | **text** | 0.008 | 0.004 | 0.009 | 1.2x sr_airtime | 60 |
+| `PR-repeats` | extra-repeats | **text** | 0.008 | 0.006 | 0.008 | 1x bytes_on_air | 60 |
+| `SF-servers-allrouters` | servers | **text** | 0.007 | 0.010 | 0.006 | 3.2x sr_bytes | 60 |
+| `SF-replay-order` | replay-ordering | **held** | 0.006 | 0.006 | 0.005 | 1.4x sr_bytes | 60 |
+| `PR-crladder` | coding-rate-ladder | **text** | 0.006 | 0.004 | 0.006 | 1.1x sr_airtime | 60 |
+| `PR-dmmode-cr` | dm-mode | **text** | 0.005 | 0.004 | 0.005 | 1x sr_bytes | 60 |
+| `SF-replay-order-broadcast` | replay-ordering | **text** | 0.005 | 0.004 | 0.005 | 1.1x sr_bytes | 60 |
+| `PR-repeats-busy` | extra-repeats | **text** | 0.002 | 0.002 | 0.002 | 1x sr_airtime | 60 |
+| `TH-congestion-mode` | congestion-mode | **held** | 0.001 | 0.001 | 0.004 | 1.1x bytes_on_air | 60 |
+| `DB-warm` | warm-num-nodes | **held** | 0.000 | 0.000 | 0.000 | · | 60 |
+| `SF-signed` | signed | **held** | 0.000 | 0.000 | 0.000 | 1.4x advert_bytes | 60 |
 
 ## Runs
 
@@ -232,6 +232,7 @@
 | [`matrix-2026-08-29-1024`](runs/matrix-2026-08-29-1024/trend.md) | batumi | `None` | 2 | 0 | 145 |
 | [`matrix-2026-08-28-1538`](runs/matrix-2026-08-28-1538/trend.md) | batumi | `None` | 2 | 0 | 161 |
 | [`matrix-2026-08-27-1436`](runs/matrix-2026-08-27-1436/trend.md) | batumi | `None` | 2 | 0 | 148 |
+| [`design-2026-10-24-6959811`](runs/design-2026-10-24-6959811/trend.md) | batumi | `6959811` | 13 | 0 | 677 |
 | [`design-2026-10-23-8920928`](runs/design-2026-10-23-8920928/trend.md) | batumi | `8920928` | 13 | 0 | 638 |
 | [`design-2026-10-22-3265036`](runs/design-2026-10-22-3265036/trend.md) | batumi | `3265036` | 13 | 0 | 615 |
 | [`design-2026-10-21-9037219`](runs/design-2026-10-21-9037219/trend.md) | batumi | `9037219` | 13 | 0 | 620 |
@@ -290,6 +291,7 @@
 | [`design-2026-08-29-3736328`](runs/design-2026-08-29-3736328/trend.md) | batumi | `3736328` | 13 | 0 | 649 |
 | [`design-2026-08-28-7079084`](runs/design-2026-08-28-7079084/trend.md) | batumi | `7079084` | 13 | 0 | 652 |
 | [`design-2026-08-27-3750778`](runs/design-2026-08-27-3750778/trend.md) | batumi | `3750778` | 13 | 0 | 637 |
+| [`blocks-2026-10-25-2480178`](runs/blocks-2026-10-25-2480178/trend.md) | alpine | `2480178` | 87 | 0 | 76 |
 | [`blocks-2026-10-24-1019153`](runs/blocks-2026-10-24-1019153/trend.md) | flat | `1019153` | 87 | 0 | 118 |
 | [`blocks-2026-10-23-7473054`](runs/blocks-2026-10-23-7473054/trend.md) | ridge | `7473054` | 87 | 0 | 90 |
 | [`blocks-2026-10-22-5470031`](runs/blocks-2026-10-22-5470031/trend.md) | rolling | `5470031` | 87 | 0 | 85 |
